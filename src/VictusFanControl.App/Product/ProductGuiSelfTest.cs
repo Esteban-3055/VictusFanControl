@@ -16,9 +16,13 @@ internal static partial class ProductGuiSelfTest
         try
         {
             static void Require(bool ok,string message){if(!ok)throw new InvalidOperationException(message);}
+            Require(RunHyperXChecks()==0,"HyperX isolated UI regression failed.");
+            ProductSchedulingSelfTest.Run(Require);
+            TestStabilityHardening(Require);
             ProductSensorPolicySelfTest.Run(Require);
             ProductUpdatesSelfTest.Run(Require);
             ProductAutomaticAdmissionSelfTest.Run(Require);
+            ProductStartupCoordinationSelfTest.Run(Require);
             ProductWindowLayoutSelfTest.Run(Require);
             TestDisplayChanges(Require);
             TestSelectedCurveInsertion(Require);
@@ -27,6 +31,10 @@ internal static partial class ProductGuiSelfTest
             TestHomeAnimationCadence(Require);
             VictusFanControl.Recovery.ProductRecoveryClientSelfTest.Run(Require);
             TestGuidedRecovery(Require);
+            TestWindowsSessionEnd(Require);
+            TestStartupFailurePaths(Require);
+            TestExitFailureRegressions(Require);
+            TestForcedSessionRecovery(Require);
             ProductAutomaticRecoverySelfTest.Run(Require);
             TestBackgroundRecovery(Require);
             TestUpdatePage(Require);
@@ -40,7 +48,9 @@ internal static partial class ProductGuiSelfTest
             TestAdvancedSettings(Require);
             TestStartupAutomatic(Require);
             TestSourceTheme(Require);
+            TestCpuPowerEditor(Require);
             TestLivePerformanceApply(Require);
+            TestIndependentPerformanceControls(Require);
             TestSessionLogs(Require);
             TestSessionRestart(Require);
             PerformanceRecoveryPreviewSelfTest.Run(Require);
@@ -65,7 +75,7 @@ internal static partial class ProductGuiSelfTest
             form.ClientSize=new(1672,941);form.Show();Application.DoEvents();var canvas=form.Canvas;canvas.Dock=DockStyle.None;canvas.Size=new(1672,941);
             Require(runtime.Commands==0,"Startup acquired authority.");
             form.HandleCommand("profile-battery");form.EditValue("pl1",30);form.EditValue("pl2",15);
-            Require(form.Draft.Battery.CpuPl1Watts==30&&form.Draft.Battery.CpuPl2Watts==30&&form.Draft.Ac.CpuPl1Watts==35,"PL1/PL2 or independent AC failed.");
+            Require(form.Draft.Battery.CpuPl1Watts==15&&form.Draft.Battery.CpuPl2Watts==15&&form.Draft.Ac.CpuPl1Watts==35,"PL1 exceeded PL2, changed PL2 or leaked into AC.");
             form.HandleCommand("profile-ac");canvas.ShowCurvePoints=true;form.EditNode(3,70,31);
             Require(form.Draft.Ac.Fan.UnifiedDemand!.Curve[3].Level==31&&form.Draft.Battery.Fan.UnifiedDemand!.Curve[3].Level==ProductProfiles.DefaultProfile(ProductPowerProfile.Battery).Fan.UnifiedDemand!.Curve[3].Level,"Curve edit leaked across profiles.");
             for(int i=0;i<7;i++)form.HandleCommand("page-"+i);
@@ -74,21 +84,32 @@ internal static partial class ProductGuiSelfTest
             form.EditValue("manual",10);
             Require(runtime.Commands==0,"Editing/navigation wrote hardware.");
             form.HandleCommand("fan-mode-2");Require(runtime.Commands==0,"Closed Automatic gate dispatched.");
-            form.EditValue("gpu",99999);Require(form.Draft.Ac.GpuMaximumMHz==2500,"GPU slider escaped upper bound.");
+            form.EditValue("gpu",99999);Require(form.Draft.Ac.GpuMaximumMHz==3105,"GPU slider escaped upper bound.");
+            form.EditValue("gpu",3105);Require(form.Draft.Ac.GpuMaximumMHz==3105,"Exact GPU endpoint was not editable.");
+            form.EditValue("gpu",2500);Require(form.Draft.Ac.GpuMaximumMHz==2500,"Existing GPU setting was not preserved.");
             form.EditValue("gpu",0);Require(form.Draft.Ac.GpuMaximumMHz==210,"GPU slider escaped lower bound.");
             Require(form.TryEditNumericValue("pl1","30",out _)&&form.TryEditNumericValue("pl2","35",out _)&&form.TryEditNumericValue("gpu","1800",out _),"Exact numeric values rejected.");
             Require(form.Draft.Ac.CpuPl1Watts==30&&form.Draft.Ac.CpuPl2Watts==35&&form.Draft.Ac.GpuMaximumMHz==1800&&form.Draft.Battery.GpuMaximumMHz==1200,"Exact numeric edits rounded, clamped or leaked across sources.");
             var typedDraft=ProductProfilesStore.Serialize(form.Draft);
-            foreach(var entry in new[]{("pl1","45"),("pl2","29"),("pl2","115"),("gpu","209"),("gpu","2501"),("gpu","1800.5"),("gpu",""),("gpu","NaN"),("gpu","99999999999")})
+            foreach(var entry in new[]{("pl1","45"),("pl1","36"),("pl2","7"),("pl2","115"),("gpu","209"),("gpu","3106"),("gpu","1800.5"),("gpu",""),("gpu","NaN"),("gpu","99999999999")})
                 Require(!form.TryEditNumericValue(entry.Item1,entry.Item2,out var error)&&error.Length>0&&typedDraft==ProductProfilesStore.Serialize(form.Draft),"Invalid text silently changed a performance draft.");
             canvas.Busy=true;Require(!form.TryEditNumericValue("gpu","1700",out _)&&typedDraft==ProductProfilesStore.Serialize(form.Draft),"Busy numeric edit changed draft.");canvas.Busy=false;
-            using(var numeric=new ProductNumericDialog("GPU máximo (MHz) · AC",1800,210,2500,text=>form.TryEditNumericValue("gpu",text,out var error)?null:error))
+            foreach(var source in new[]{"ac","battery"})
+            {
+                form.HandleCommand("profile-"+source);
+                Require(form.TryEditNumericValue("gpu","3105",out _),"Exact 3105 MHz was rejected for "+source);
+                var accepted=ProductProfilesStore.Serialize(form.Draft);
+                Require(!form.TryEditNumericValue("gpu","3106",out _)&&accepted==ProductProfilesStore.Serialize(form.Draft),"Overflow edited "+source);
+                Require(form.TryEditNumericValue("gpu",source=="ac"?"1800":"1200",out _),"Restoring the prior draft failed.");
+            }
+            form.HandleCommand("profile-ac");
+            using(var numeric=new ProductNumericDialog("GPU máximo (MHz) · AC",1800,210,3105,text=>form.TryEditNumericValue("gpu",text,out var error)?null:error))
             {
                 numeric.Show(form);Application.DoEvents();numeric.Input.Text="1800.5";
                 Require(!numeric.TryCommit()&&numeric.DialogResult!=DialogResult.OK,"Dialog accepted fractional MHz.");
                 numeric.Input.Text="1750";Require(numeric.TryCommit()&&numeric.DialogResult==DialogResult.OK&&form.Draft.Ac.GpuMaximumMHz==1750,"Dialog lost exact MHz.");
             }
-            using(var cancelled=new ProductNumericDialog("CPU PL1 (W) · AC",30,8,44,text=>form.TryEditNumericValue("pl1",text,out var error)?null:error))
+            using(var cancelled=new ProductNumericDialog("CPU PL1 (W) · AC",30,8,35,text=>form.TryEditNumericValue("pl1",text,out var error)?null:error))
             {cancelled.Show(form);Application.DoEvents();cancelled.Input.Text="40";cancelled.DialogResult=DialogResult.Cancel;Require(form.Draft.Ac.CpuPl1Watts==30,"Cancelled dialog edited draft.");}
             Require(runtime.Commands==0,"Typed values wrote hardware.");
             var oldCaps=form.Draft.PerformanceConfiguration();
@@ -112,7 +133,7 @@ internal static partial class ProductGuiSelfTest
             AccessibleObject Child(string id)=>canvas.AccessibilityObject.GetChild(canvas.Hits.ToList().FindIndex(h=>h.Id==id))!;
             var pl1=Child("pl1");pl1.Select(AccessibleSelection.TakeFocus);var prior=form.Draft.Ac.CpuPl1Watts;canvas.HandleKey(Keys.Right);
             Require(form.Draft.Ac.CpuPl1Watts==prior+1&&pl1.Value==(prior+1).ToString(),"Focused slider arrows/accessibility value disagree.");
-            pl1.Value="999";Require(form.Draft.Ac.CpuPl1Watts==44&&form.Draft.Ac.CpuPl2Watts>=44,"Accessible slider escaped CPU bounds.");
+            pl1.Value="999";Require(form.Draft.Ac.CpuPl1Watts==35&&form.Draft.Ac.CpuPl2Watts==35,"Accessible slider exceeded PL2 or raised PL2.");
             bool invalidValueRejected=false;try{pl1.Value="bad";}catch(ArgumentException){invalidValueRejected=true;}Require(invalidValueRejected,"Accessible slider accepted non-numeric input.");
             canvas.Busy=true;var beforeBusy=ProductProfilesStore.Serialize(form.Draft);canvas.HandleKey(Keys.Left);
             bool busyRejected=false;try{pl1.Value="8";}catch(InvalidOperationException){busyRejected=true;}Require(busyRejected&&beforeBusy==ProductProfilesStore.Serialize(form.Draft),"Busy accessibility gesture changed a draft.");canvas.Busy=false;
@@ -169,7 +190,7 @@ internal static partial class ProductGuiSelfTest
             var beforeFanRecovery=canvas.State;
             canvas.State=canvas.State with{Runtime="RecoveryRequired",LifecycleBlocked=true,FanMode="RecoveryRequired",FanAuthority="Unknown",CpuState="Disabled",GpuState="Disabled",PerformanceActive=false,AppliedPerformance=null,CanApplyPerformance=false,
                 GuardianState="Recuperación pendiente",PerformanceRecovery=new(true,"Sesión de ventiladores pendiente",FanRecords:new[]{new VictusFanControl.Recovery.ProductRecoveryRecord("WmiFanGui/lease.json","FanGui",new string('a',64))})};
-            canvas.Size=new(1040,660);canvas.Page=ProductPage.Settings;Render("recovery-fan-only-settings-minimum");Require(canvas.Hits.Any(h=>h.Id=="recovery-run"&&h.Enabled),"Fan-only pending lacks recovery action.");
+            canvas.Size=new(1040,660);canvas.Page=ProductPage.Settings;Render("recovery-fan-only-settings-minimum");Require(canvas.Hits.Any(h=>h.Id=="session-force-recovery"&&h.Enabled),"Fan-only pending lacks definitive recovery action.");
             canvas.Page=ProductPage.Performance;canvas.PerformanceTab=3;Render("recovery-fan-only-guardian-minimum");canvas.State=beforeFanRecovery;canvas.Size=new(1672,941);
             canvas.Page=ProductPage.Fans;for(int i=1;i<=2;i++){canvas.FanTab=i;Render("fans-tab-"+i);}
             Require(canvas.Hits.All(h=>h.Id!="fan-tab-3")&&canvas.Hits.Count(h=>h.Id.StartsWith("fan-tab-"))==3,"Duplicate Curves tab remains in Fans.");
@@ -182,7 +203,7 @@ internal static partial class ProductGuiSelfTest
             canvas.Size=new(1672,941);canvas.State=canvas.State with{AppliedPerformance=canvas.Profiles.PerformanceConfiguration()};
             Render("performance-live-confirmed");Require(!canvas.CanApplyPerformance,"Confirmed live caps left Apply enabled in the rendered surface.");
             canvas.Profiles=baseline;canvas.State=confirmed;
-            using(var numeric=new ProductNumericDialog("GPU máximo (MHz) · AC",1800,210,2500,_=>null))
+            using(var numeric=new ProductNumericDialog("GPU máximo (MHz) · AC",1800,210,3105,_=>null))
             {numeric.Show(form);Application.DoEvents();using var bitmap=new Bitmap(numeric.Width,numeric.Height);numeric.DrawToBitmap(bitmap,new(0,0,bitmap.Width,bitmap.Height));bitmap.Save(Path.Combine(output,"performance-numeric-dialog.png"),ImageFormat.Png);numeric.DialogResult=DialogResult.Cancel;}
             canvas.Page=ProductPage.Performance;for(int i=1;i<=3;i++){canvas.PerformanceTab=i;Render("performance-tab-"+i);}
             canvas.Page=ProductPage.Monitoring;for(int i=1;i<=3;i++){canvas.MonitorTab=i;Render("monitor-tab-"+i);}
@@ -222,6 +243,21 @@ internal static partial class ProductGuiSelfTest
                 Snapshot=markerSample,AutomaticDecisionSnapshot=markerSample,AutomaticDecision=new(AdaptiveFanProductionMode.Automatic,AdaptiveFanProductionActionKind.HoldCustom,true,31,35,FanAuthority.Custom,"fixture")};
             var curveMarkers=canvas.CurrentDemandMarkers();
             Require(curveMarkers.Count==2&&curveMarkers.Single(m=>m.IsApplied).Level==31,"Accepted request marker was replaced by draft interpolation.");
+            var originalMarkerState=canvas.State;
+            foreach(var level in new[]{51,52,53,54}) {
+                canvas.State=originalMarkerState with{FanLevel=level,
+                    AutomaticDecision=originalMarkerState.AutomaticDecision! with{EqualFanLevel=level}};
+                Require(canvas.CurrentDemandMarkers().Any(m=>m.IsApplied&&m.Level==level),"Upper-range applied GUI marker disappeared");
+            }
+            canvas.State=originalMarkerState;
+            using(var markerImage=new Bitmap(64,64)) {
+                using var graphics=Graphics.FromImage(markerImage);graphics.Clear(ProductCanvas.Background);
+                ProductCanvas.DrawDemandMarker(graphics,new(32,32),false);
+                ProductCanvas.DrawDemandMarker(graphics,new(32,32),true);
+                var outer=markerImage.GetPixel(32,20);var center=markerImage.GetPixel(32,32);
+                Require(outer.R>200&&outer.G>150&&outer.B<100&&center.R<50&&center.G>180,
+                    "Coincident target/applied markers hid one another");
+            }
             canvas.Page=ProductPage.Fans;canvas.FanTab=0;Render("fans-live-demand-marker");
             var markerState=canvas.State;
             canvas.State=markerState with{AutomaticReview=true,AutomaticReviewMaximumSeconds=2700,AutomaticReviewRemainingSeconds=2633,
@@ -319,8 +355,8 @@ internal static partial class ProductGuiSelfTest
         Rejected(()=>review.EnsureDispatchAllowed(snapshot with{GpuTemperatureC=83}),"GPU thermal envelope escaped.");
         Rejected(()=>review.EnsureDispatchAllowed(snapshot with{CpuCoreTemperatures=[new(0,0,"Performance",91)]}),"Hottest-core envelope escaped.");
         Rejected(()=>review.EnsureDispatchAllowed(snapshot with{GpuPowerW=double.NaN}),"Nonfinite power admitted.");
-        require(ProductAutomaticReview.EnvelopeFailure(snapshot with{CpuPackagePowerW=61}).Contains("CPU potencia 61 W > 60 W") &&
-            !ProductAutomaticReview.EnvelopeFailure(snapshot with{CpuPackagePowerW=61}).Contains("GPU temperatura"),"Interruption reason did not identify the actual failed metric.");
+        require(ProductAutomaticReview.EnvelopeFailure(snapshot with{CpuPackagePowerW=61}, boundedReview:true).Contains("CPU potencia 61 W > 60 W") &&
+            !ProductAutomaticReview.EnvelopeFailure(snapshot with{CpuPackagePowerW=61}, boundedReview:true).Contains("GPU temperatura"),"Interruption reason did not identify the actual failed metric.");
         require(ProductAutomaticReview.EnvelopeFailure(snapshot with{GpuPowerW=double.NaN}).Contains("GPU potencia no disponible"),"Invalid telemetry lost its interruption cause.");
         clock+=299999;require(!review.Expired,"Review expired before deadline.");clock++;
         require(review.Expired&&review.RemainingSeconds==0,"Review deadline escaped.");
@@ -382,7 +418,7 @@ internal static partial class ProductGuiSelfTest
         require(epochReason.Contains("misma adquisición")&&!epochReason.Contains("control 100"),"Mismatched safety reported an unrelated thermal cause.");
         var staleReason=Failure(()=>review.Observe(badSafety,Safety(badSafety) with{SnapshotFresh=false,CustomControlPermitted=false,Reasons=["Telemetry is stale."]}));
         require(staleReason.Contains("Telemetry is stale."),"SafetyGate rejection discarded its underlying reasons.");
-        var gpuWhileCpuPending=ProductAutomaticReview.EnvelopeFailure(Sample(4400,96) with{GpuTemperatureC=83},cpuSpikeAdmitted:true);
+        var gpuWhileCpuPending=ProductAutomaticReview.EnvelopeFailure(Sample(4400,96) with{GpuTemperatureC=83},cpuSpikeAdmitted:true,boundedReview:true);
         require(gpuWhileCpuPending.Contains("GPU temperatura 83 °C > 82 °C")&&!gpuWhileCpuPending.Contains("CPU temperatura"),
             "Admitted CPU spike was falsely blamed for an independent GPU rejection.");
         // Explicit review still starts in Firmware, and editing/saving never dispatches a curve.
@@ -467,7 +503,10 @@ internal static partial class ProductGuiSelfTest
             form.HandlePowerEventAsync(18).GetAwaiter().GetResult();require(runtime.Resumes==0,"Maintenance resume reopened telemetry with display Off.");
             var on=form.HandlePowerEventAsync(0x8013,1);require(!on.IsCompleted&&runtime.Resumes==0,"Display On resumed before release.");
             runtime.ReleaseGate.SetResult();PumpUntil(()=>on.IsCompleted&&suspend.IsCompleted,"Lifecycle queue did not finish.");on.GetAwaiter().GetResult();off.GetAwaiter().GetResult();suspend.GetAwaiter().GetResult();
-            require(runtime.Releases==2&&runtime.Resumes==1,"Lifecycle boundaries were dropped or resumed more than once.");
+            require(runtime.Fences==2&&runtime.Releases==1&&runtime.Resumes==1,"Pending lifecycle release was not coalesced behind both admission fences.");
+            var nextOff=form.HandlePowerEventAsync(0x8013,0);
+            PumpUntil(()=>nextOff.IsCompleted&&runtime.Releases==2,"A new boundary after confirmed resume failed to release again.");
+            require(runtime.Fences==3&&runtime.Resumes==1,"A new display-Off boundary reopened telemetry.");
             var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Fixture shutdown did not complete.");require(runtime.Disposals==1,"Exit did not dispose its runtime exactly once.");
         }
         var busy=new RecordingRuntime{ManualGate=new(TaskCreationOptions.RunContinuationsAsynchronously)};
@@ -525,7 +564,7 @@ internal static partial class ProductGuiSelfTest
                 canvas.Page=ProductPage.Performance;canvas.PerformanceTab=0;canvas.Refresh();
                 Point ScreenPoint(float x,float y){var scale=Math.Min(canvas.Width/1672f,canvas.Height/941f);return new((int)((canvas.Width-1672*scale)/2+x*scale),(int)((canvas.Height-941*scale)/2+y*scale));}
                 var slider=canvas.Hits.Last(h=>h.Id=="pl1");var left=ScreenPoint(slider.Bounds.Left+2,slider.Bounds.Top+20);var right=ScreenPoint(slider.Bounds.Right-2,slider.Bounds.Top+20);var beyond=ScreenPoint(slider.Bounds.Right+50,slider.Bounds.Top+20);
-                canvas.PointerDown(left);require(canvas.Capture,"Pointer fixture did not acquire slider capture.");canvas.PointerMove(beyond);canvas.PointerUp(beyond);require(form.Draft.Ac.CpuPl1Watts==44,"Pointer slider failed its upper bound: "+form.Draft.Ac.CpuPl1Watts);
+                canvas.PointerDown(left);require(canvas.Capture,"Pointer fixture did not acquire slider capture.");canvas.PointerMove(beyond);canvas.PointerUp(beyond);require(form.Draft.Ac.CpuPl1Watts==60,"Pointer slider failed its PL2 upper bound: "+form.Draft.Ac.CpuPl1Watts);
                 canvas.Refresh();canvas.PointerDown(right);form.HandleCommand("profile-battery");canvas.Refresh();var priorBattery=form.Draft.Battery.CpuPl1Watts;canvas.PointerMove(left);canvas.PointerUp(left);
                 require(form.Draft.Battery.CpuPl1Watts==priorBattery,"A captured drag leaked into a newly selected profile.");
                 form.HandleCommand("profile-ac");canvas.Page=ProductPage.Curves;canvas.ShowCurvePoints=true;canvas.Refresh();
@@ -571,7 +610,7 @@ internal static partial class ProductGuiSelfTest
                     using var reader=new StreamReader(zip.GetEntry("gui-state.json")!.Open());using var state=System.Text.Json.JsonDocument.Parse(reader.ReadToEnd());
                     require(state.RootElement.GetProperty("sessionId").GetString()==AppLog.SessionId&&state.RootElement.GetProperty("sessionStartedUtc").GetDateTimeOffset()==AppLog.SessionStartedUtc,"Diagnostic session identity mismatch.");
                     require(state.RootElement.GetProperty("physicalQualification").GetString()=="not-established-by-this-export","Diagnostic fabricated physical qualification.");
-                    require(state.RootElement.GetProperty("automaticThermalContract").GetString()=="cpu-start90-active95-confirm2000ms-cpu99-immediate-raw-response",
+                    require(state.RootElement.GetProperty("automaticThermalContract").GetString()=="cpu-start90-active95-confirm2000ms-cpu99-immediate-gpu-strictly-over95",
                         "Diagnostic did not identify the thermal contract used by this build.");
                     require(state.RootElement.GetProperty("AutomaticInterruptionSnapshot").GetProperty("CpuPackagePowerW").GetDouble()==61 &&
                         state.RootElement.GetProperty("snapshot").GetProperty("CpuPackagePowerW").GetDouble()==10 &&
@@ -612,7 +651,8 @@ internal static partial class ProductGuiSelfTest
             var corrupt=Path.Combine(dir,"corrupt.json");File.WriteAllText(corrupt,"broken");
             using(var form=new ProductForm("fixture://modules",fixture:new RecordingRuntime(),profilesPath:corrupt))
             {
-                form.Show();Application.DoEvents();require(form.Dirty&&File.ReadAllText(corrupt)=="broken","Fallback preferences were presented as saved or overwritten.");
+                form.Show();PumpUntil(()=>form.StartupCompletion.IsCompleted,"Background preference read did not complete.");
+                require(form.Dirty&&File.ReadAllText(corrupt)=="broken","Fallback preferences were presented as saved or overwritten.");
                 form.EditValue("pl1",37);form.HandleCommand("discard");require(form.Dirty&&form.Draft.Ac.CpuPl1Watts==35,"Discard marked an unpersisted fallback as saved.");
                 form.HandleCommand("save");PumpUntil(()=>!form.Canvas.Busy,"Fallback save did not finish.");require(!form.Dirty&&ProductProfilesStore.Load(corrupt,out var warning).Ac.CpuPl1Watts==35&&warning is null,"Explicit save failed to replace corrupt preferences.");
                 var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Corrupt-preference fixture shutdown failed.");
@@ -710,7 +750,8 @@ internal static partial class ProductGuiSelfTest
     private static void TestLivePerformanceApply(Action<bool,string> require)
     {
         ProductPerformanceUpdate.EnsureWaitAllowed(100,4099,"Ac","Ac",84,77);
-        foreach(var input in new[]{(4100L,"Ac",84d,77d),(99L,"Ac",84d,77d),(101L,"Battery",84d,77d),(101L,"Ac",85d,77d),(101L,"Ac",84d,78d)})
+        ProductPerformanceUpdate.EnsureWaitAllowed(100,4099,"Ac","Ac",84,95);
+        foreach(var input in new[]{(4100L,"Ac",84d,77d),(99L,"Ac",84d,77d),(101L,"Battery",84d,77d),(101L,"Ac",85d,77d),(101L,"Ac",84d,95.001d)})
         {
             var refused=false;try{ProductPerformanceUpdate.EnsureWaitAllowed(100,input.Item1,input.Item2,"Ac",input.Item3,input.Item4);}catch(InvalidOperationException){refused=true;}
             require(refused,"Live performance wait renewed its deadline or admitted source/thermal urgency.");
@@ -721,14 +762,15 @@ internal static partial class ProductGuiSelfTest
             PerformanceSupported=true,CanApplyPerformance=true,PerformanceProcessPresent=true,PerformanceActive=true,CpuState="Active",GpuState="ActiveUnverified",
             AppliedPerformance=profiles.PerformanceConfiguration(),AppliedPerformanceSource="Ac",Snapshot=Snapshot(DateTimeOffset.UtcNow,45,40,10,5)};
         runtime.Publish(active);canvas.Refresh();require(!canvas.CanApplyPerformance,"Unchanged limits enabled Apply.");
-        form.EditValue("pl2",38);canvas.Refresh();
-        require(canvas.CanApplyPerformance&&canvas.Hits.Single(h=>h.Id=="performance-apply").Enabled&&canvas.AppliedCpu()=="35 / 60 W",
+        form.EditValue("pl2",80);form.EditValue("pl1",80);canvas.Refresh();
+        require(form.Draft.Ac.CpuPl1Watts==80&&canvas.CanApplyPerformance&&canvas.Hits.Single(h=>h.Id=="performance-apply").Enabled&&canvas.AppliedCpu()=="35 / 60 W",
             "Edited PL2 did not enable Apply or was presented as already applied.");
         form.HandleCommand("performance-apply");PumpUntil(()=>!canvas.Busy,"Performance Apply did not drain.");
         var expected=form.Draft.PerformanceConfiguration();
-        require(runtime.Commands==1&&runtime.LastPerformance==expected&&expected.AcPl2Watts==38,"Live Apply omitted exact presets.");
-        runtime.Publish(active with{AppliedPerformance=expected});require(!canvas.CanApplyPerformance&&canvas.AppliedCpu()=="35 / 38 W","Confirmed values left Apply enabled or displayed old limits.");
-        form.HandleCommand("cpu-toggle");require(form.Draft.CpuEnabled,"Active CPU domain checkbox silently changed ownership.");
+        require(runtime.Commands==1&&runtime.LastPerformance==expected&&expected.AcPl1Watts==80&&expected.AcPl2Watts==80,"Live Apply clipped the PL1/PL2 request above 44 W.");
+        runtime.Publish(active with{AppliedPerformance=expected});require(!canvas.CanApplyPerformance&&canvas.AppliedCpu()=="80 / 80 W","Confirmed values left Apply enabled or displayed old limits.");
+        form.HandleCommand("cpu-toggle");require(!form.Draft.CpuEnabled&&runtime.Commands==1&&canvas.State.FanMode=="Automatic","Active CPU selection was blocked or changed ownership before Apply.");
+        form.HandleCommand("cpu-toggle");
         form.EditValue("gpu",1801);require(canvas.CanApplyPerformance,"Exact GPU edit did not enable Apply.");
         foreach(var blocked in new[]{active with{AppliedPerformance=expected,PerformanceUpdating=true},active with{AppliedPerformance=expected,LifecycleBlocked=true},
             active with{AppliedPerformance=expected,AutomaticSourceTransition="Battery"},active with{AppliedPerformance=expected,AutomaticPreparing=true},
@@ -777,7 +819,7 @@ internal static partial class ProductGuiSelfTest
         {runtime.Publish(blocked);form.HandleCommand("tuning-apply");require(runtime.Commands==1,"Blocked tuning apply dispatched.");}
         var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Advanced fixture exit did not drain.");exit.GetAwaiter().GetResult();
     }
-    private sealed class RecordingRuntime:IProductRuntime
+    private sealed class RecordingRuntime:IProductRuntime,IProductRecoveryHandoff
     {
         internal ProductPowerProfile? LastCurveSource;
         internal UnifiedFanDemand? LastCurve;
@@ -785,21 +827,33 @@ internal static partial class ProductGuiSelfTest
         internal AdaptiveFanTuning? LastTuning;
         public Task ApplyFanTuningAsync(AdaptiveFanTuning tuning){Commands++;LastTuning=tuning;return Task.CompletedTask;}
         public event Action<ProductRuntimeState>? Changed;
-        public ProductRuntimeState State {get;}=new();
+        private readonly ProductRuntimeState _initialState=new();
+        internal ProductRuntimeState? StateOverride;
+        public ProductRuntimeState State=>StateOverride??_initialState;
         internal int Commands,Starts,Disposals,Fences,Releases,Resumes;
         internal int? LastManualLevel;
+        internal Func<int,Task>? ManualCommandFixture;
+        internal Func<Task>? DisposeFixture;
         internal PerformanceGuiSessionConfiguration? LastPerformance;
         internal TaskCompletionSource? ReleaseGate,ManualGate,PerformanceGate,DisposeGate;
-        internal string? CommandFailure,StartFailure,DisposeFailure,FenceFailure;
+        internal string? CommandFailure,StartFailure,DisposeFailure,FenceFailure,ReleaseFailure,AutomaticModeFailure;
+        public Guid? DrainedGpuSession { get; set; }
+        internal int CompletedRecoveries;
+        public void CompleteRecovery(Guid session)
+        {
+            if(DrainedGpuSession!=session)throw new IOException("Wrong fixture recovery session.");
+            CompletedRecoveries++;DrainedGpuSession=null;
+        }
         internal void Publish(ProductRuntimeState state)=>Changed?.Invoke(state);
         public void Start(){Starts++;if(StartFailure is not null)throw new InvalidOperationException(StartFailure);Changed?.Invoke(State);}
-        public Task SelectFanModeAsync(AdaptiveFanProductionMode mode,ProductProfiles p){Commands++;return mode==AdaptiveFanProductionMode.Manual?ManualGate?.Task??Task.CompletedTask:Task.CompletedTask;}
-        public Task ApplyManualAsync(int level){Commands++;LastManualLevel=level;return Task.CompletedTask;}
+        public void RequestAutomaticTelemetry() { }
+        public Task SelectFanModeAsync(AdaptiveFanProductionMode mode,ProductProfiles p){Commands++;return mode==AdaptiveFanProductionMode.Automatic&&AutomaticModeFailure is not null?Task.FromException(new IOException(AutomaticModeFailure)):mode==AdaptiveFanProductionMode.Manual?ManualGate?.Task??Task.CompletedTask:Task.CompletedTask;}
+        public Task ApplyManualAsync(int level){Commands++;LastManualLevel=level;return ManualCommandFixture?.Invoke(level)??Task.CompletedTask;}
         public Task ApplyPerformanceAsync(ProductProfiles p){Commands++;LastPerformance=p.PerformanceConfiguration();return CommandFailure is null?PerformanceGate?.Task??Task.CompletedTask:Task.FromException(new IOException(CommandFailure));}
         public Task ReleasePerformanceAsync(){Commands++;return CommandFailure is null?Task.CompletedTask:Task.FromException(new IOException(CommandFailure));}
         public void FenceLifecycle(string r){Interlocked.Increment(ref Fences);if(FenceFailure is not null)throw new IOException(FenceFailure);}
-        public Task ReleaseForLifecycleAsync(string r){Interlocked.Increment(ref Releases);return ReleaseGate?.Task??Task.CompletedTask;}
+        public Task ReleaseForLifecycleAsync(string r){Interlocked.Increment(ref Releases);return ReleaseGate?.Task??(ReleaseFailure is null?Task.CompletedTask:Task.FromException(new IOException(ReleaseFailure)));}
         public void ResumeTelemetry(string r){Resumes++;}
-        public async ValueTask DisposeAsync(){Interlocked.Increment(ref Disposals);if(DisposeGate is not null)await DisposeGate.Task;if(DisposeFailure is not null)throw new IOException(DisposeFailure);}
+        public async ValueTask DisposeAsync(){Interlocked.Increment(ref Disposals);if(DisposeFixture is not null)await DisposeFixture();if(DisposeGate is not null)await DisposeGate.Task;if(DisposeFailure is not null)throw new IOException(DisposeFailure);}
     }
 }

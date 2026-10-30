@@ -1,5 +1,7 @@
 namespace VictusFanControl.Runtime;
 
+public sealed record RuntimeStateObserverFailure(string Observer,string ExceptionType,string Message,DateTimeOffset AtUtc);
+
 /// <summary>
 /// Thread-safe runtime state machine shared by telemetry and the fan safety supervisor.
 /// A write-capable backend may be present, but authority is independently gated by
@@ -11,6 +13,11 @@ public sealed class RuntimeStateMachine
     private SystemState _state = SystemState.Starting;
     private string _reason = "Application starting.";
     private DateTimeOffset _changedAt = DateTimeOffset.UtcNow;
+    private long _observerFailureCount;
+    private RuntimeStateObserverFailure? _lastObserverFailure;
+
+    public long ObserverFailureCount => Interlocked.Read(ref _observerFailureCount);
+    public RuntimeStateObserverFailure? LastObserverFailure => Volatile.Read(ref _lastObserverFailure);
 
     public event EventHandler<SystemStateChangedEventArgs>? StateChanged;
 
@@ -47,6 +54,20 @@ public sealed class RuntimeStateMachine
             args = new SystemStateChangedEventArgs(previous, next, reason, _changedAt);
         }
 
-        StateChanged?.Invoke(this, args);
+        var observers = StateChanged;
+        if (observers is null) return;
+        foreach (EventHandler<SystemStateChangedEventArgs> observer in observers.GetInvocationList())
+        {
+            try { observer(this,args); }
+            catch (Exception error)
+            {
+                // State is already committed. One notification cannot suppress
+                // the remaining safety observers or terminate the producer.
+                var message=error.Message;
+                Volatile.Write(ref _lastObserverFailure,new(observer.Method.Name,error.GetType().Name,
+                    message.Length>512?message[..512]:message,DateTimeOffset.UtcNow));
+                Interlocked.Increment(ref _observerFailureCount);
+            }
+        }
     }
 }

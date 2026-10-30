@@ -4,7 +4,7 @@ namespace VictusFanControl.PerformanceGuardian;
 
 internal interface IGuardianConfigurationRuntime
 {
-    void ExecuteConfigurationUpdate(Action<PerformancePowerSourceKind> update);
+    void ExecuteConfigurationUpdate(Action<PerformancePowerSourceKind> update,Func<(bool Cpu,bool Gpu)>? selection=null);
 }
 
 internal interface IGuardianConfigurableDomains

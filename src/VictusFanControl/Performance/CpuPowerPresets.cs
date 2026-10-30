@@ -5,11 +5,11 @@ public static class CpuPowerProductDefaults
     public const string TargetProfileId =
         "HP-8C40-9D0R1LA-F18";
 
-    // Current product sliders remain strictly below the physically observed
-    // 45 W / 115 W baseline so every configured value preserves the
-    // downward-only product contract on the qualified target.
+    // The product permits sustained PL1 up to its configured PL2. PL2 remains
+    // below the qualified 115 W baseline; historical execution is downward-only.
     public const int MinimumPl1Watts = 8;
-    public const int MaximumConfigurablePl1Watts = 44;
+    public const int HistoricalMaximumPl1Watts = 44;
+    public const int MaximumConfigurablePl1Watts = MaximumConfigurablePl2Watts;
     public const int MinimumPl2Watts = 8;
     public const int MaximumConfigurablePl2Watts = 114;
 

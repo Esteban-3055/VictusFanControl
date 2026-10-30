@@ -1,0 +1,88 @@
+#include "ExternalController.h"
+#include "../include/BoardConfig.h"
+#include "presentation.h"
+#include "zero_output.h"
+#include "response.h"
+#include "smoothing.h"
+#include "external_only.h"
+#include "maximum_output.h"
+#include "wifi_recovery.h"
+#include <cstring>
+#include <iostream>
+#include <stdexcept>
+namespace {
+void require(bool b,const char* s){if(!b)throw std::runtime_error(s);}
+victus::ExternalConfig config(){victus::ExternalConfig c;std::strcpy(c.revision,"0123456789abcdef0123456789abcdef");return c;}
+}
+int controllerTests() {
+    presentationTests();
+    zeroOutputTests();
+    responseTests();
+    smoothingTests();
+    externalOnlyTests();
+    maximumOutputTests();
+    wifiRecoveryTests();
+    // Regression: 18 Hz with 8-bit LEDC caused ledcAttach() to fail and
+    // abort() before Wi-Fi/TCP could start. ESP32-C3 requires 14-bit timing.
+    require(board::PwmFrequencyHz==18&&board::PwmResolutionBits==14,"18 Hz / 14-bit LEDC profile");
+    require(board::LedcMaximumDuty==16383,"14-bit duty range");
+    require(board::LedcDutyFrom8Bit(0)==0&&board::LedcDutyFrom8Bit(255)==16383,"LEDC endpoints");
+    require(board::LedcDutyFrom8Bit(225)==14456,"NOT: logical 30 -> electrical 225 -> LEDC");
+    require(board::LedcDutyFrom8Bit(0)==0,"NOT: logical 255 -> electrical zero");
+    require(board::LedcDutyFrom8Bit(128)==8224,"LEDC midpoint rounding");
+    require(board::LedcDutyFrom8Bit(300)==16383,"out-of-range duty saturation");
+    for(uint32_t v=1;v<=255;++v)
+        require(board::LedcDutyFrom8Bit(v)>board::LedcDutyFrom8Bit(v-1),"strictly increasing LEDC scale");
+    auto c=config();require(c.valid(),"default config");
+    require(c.evaluate(0)==30&&c.evaluate(100)==255&&c.evaluate(50)==130,"curve interpolation");
+    auto bad=c;bad.points[2].input=25;require(!bad.valid(),"duplicate input");
+    bad=c;bad.points[0].output=-1;require(!bad.valid(),"below min");
+    bad=c;bad.points[4].output=256;require(!bad.valid(),"above max");
+    bad=c;bad.points[3].output=100;require(!bad.valid(),"decreasing output");
+    bad=c;bad.requestMaximum=bad.requestMinimum;require(!bad.valid(),"bad request calibration");
+    bad=c;for(auto& ch:bad.revision)ch='a';require(!bad.valid(),"unterminated persisted revision");
+    require(victus::ExternalController::electrical(30)==225&&victus::ExternalController::electrical(255)==0,"NOT 8-bit polarity");
+    require(board::LedcDutyFrom8Bit(victus::ExternalController::electrical(30))==14456
+         && board::LedcDutyFrom8Bit(victus::ExternalController::electrical(255))==0,
+            "physical LEDC 14-bit polarity");
+    victus::ExternalController fan;fan.configure(c);
+    fan.receive(true,27,0,false,0);require(fan.tick(0,24)==255,"startup pulse");
+    require(fan.tick(799,24)==255,"startup hold");
+    int previous=255;
+    for(uint32_t t=800;t<30000;t+=20) {
+        if(t%1000==0)fan.receive(true,27,0,false,t);
+        int duty=fan.tick(t,24);require(duty<=previous&&duty>=30,"monotone ramp down");require(previous-duty<=1,"bounded fall step");previous=duty;
+    }
+    require(previous<=34,"settles near floor inside hysteresis");
+    fan.receive(true,27,100,false,30000);
+    previous=fan.tick(30000,24);
+    for(uint32_t t=30020;t<=40000;t+=20) {
+        if(t%1000==0)fan.receive(true,27,100,false,t);
+        int duty=fan.tick(t,24);require(duty>=previous&&duty-previous<=1,"bounded monotone rise");previous=duty;
+    }
+    require(previous>=250,"settles near maximum");
+    require(fan.remote(),"remote active");fan.tick(41999,24);require(fan.remote(),"lease before deadline");
+    fan.tick(42000,24);require(!fan.remote(),"lease exactly 2s");
+    auto reference=fan;reference.receive(true,27,50,false,43000);
+    fan.receive(true,27,50,false,43000);require(fan.tick(43000,NAN)==reference.tick(43000,24)&&fan.remote(),"sensor fault does not affect controller");
+    reference=fan;reference.receive(true,27,0,false,44000);
+    fan.receive(true,27,0,false,44000);require(fan.tick(44000,45)==reference.tick(44000,24),"hot ambient does not affect controller");
+    fan.receive(false,27,50,false,45000);fan.tick(45000,24);require(!fan.remote(),"MonitorOnly cannot grant control");
+    fan.receive(true,27,NAN,false,45020);fan.tick(45020,24);require(!fan.remote(),"invalid demand");
+    victus::ExternalController floor;floor.configure(c);
+    for(uint32_t t=0;t<30000;t+=20){if(t%1000==0)floor.receive(true,27,0,false,t);floor.tick(t,24);}
+    require(floor.tick(30000,40)<40,"no ambient floor");
+    int beforeLocal=floor.tick(30000,24);
+    floor.receive(false,27,0,false,30020);require(floor.tick(30020,24)<=beforeLocal+1,"Local obeys the configured ramp");
+    c.input=1;fan.configure(c); // same revision is immutable and ignored by the controller
+    std::strcpy(c.revision,"1123456789abcdef0123456789abcdef");fan.configure(c);
+    fan.receive(true,65535,50,false,46000);fan.tick(46000,24);require(!fan.remote(),"out of explicit calibration");
+    fan.receive(true,27,-1,true,47000);fan.tick(47000,24);require(fan.remote(),"request input supports Manual without demand");
+    fan.receive(true,27,50,false,UINT32_MAX-1000);fan.tick(998,24);require(fan.remote(),"millis wrap live");
+    fan.tick(999,24);require(!fan.remote(),"millis wrap deadline");
+    victus::AmbientFilter ntc;require(ntc.update(25)==25&&ntc.update(29)==26,"NTC filter");
+    require(std::isnan(ntc.update(NAN))&&ntc.update(24)==24,"NTC fault not masked");
+    require(ntc.update(45)==45,"hot NTC bypasses smoothing");
+    std::cout<<"PASS external controller: curve bounds, interpolation, startup, inertia, hysteresis, ramps, ambient isolation, lease, authority, calibration and rollover\n";
+    return 0;
+}

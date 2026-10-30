@@ -86,7 +86,7 @@ internal sealed partial class ProductCanvas
     {
         var s=FreshSnapshot;var now=DateTimeOffset.UtcNow;
         var cpu=CpuFanReading(now);var gpu=GpuFanReading(now);
-        var key=$"{_scale:R}|{Accent.ToArgb()}|{cpu?.Rpm}|{gpu?.Rpm}|{s?.CpuControlTemperatureC}|{s?.CpuLoadPercent}|{s?.GpuTemperatureC}|{s?.GpuLoadPercent}";
+        var key=$"{_scale:R}|{Accent.ToArgb()}|{cpu?.Rpm}|{cpu?.Held}|{gpu?.Rpm}|{gpu?.Held}|{s?.CpuControlTemperatureC}|{s?.CpuLoadPercent}|{s?.GpuTemperatureC}|{s?.GpuLoadPercent}";
         var changed=_homeFanBackground is null||_homeFanLayerKey!=key;
         if(changed)
         {
@@ -138,7 +138,8 @@ internal sealed partial class ProductCanvas
         DrawText(g,"CPU · "+AppliedCpu(),1200,260,19,DomainColor(State.CpuState,Green),420);
         DrawText(g,"GPU · "+AppliedGpu(),1200,299,19,DomainColor(State.GpuState,Accent),420);
         DrawText(g,"Ventiladores · "+State.FanAuthority,1200,338,19,Muted,420);
-        DrawText(g,"Giro según RPM de cada ventilador",1200,377,17,Muted,420);
+        var held=CpuFanReading(now)?.Held==true || GpuFanReading(now)?.Held==true;
+        DrawText(g,held?"Animación con últimas RPM; sin lectura actual":"Giro según RPM de cada ventilador",1200,377,17,held?Yellow:Muted,420);
 
         Card(g,new(310,451,655,379));Card(g,new(985,451,662,379));
         var source=HomeCurveSource;
@@ -158,10 +159,11 @@ internal sealed partial class ProductCanvas
         using(var ring=new Pen(Border,2))background.DrawEllipse(ring,cx-88,cy-88,176,176);
         using(var hub=new SolidBrush(Background))g.FillEllipse(hub,cx-55,cy-55,110,110);
         using(var outline=new Pen(Accent,2))g.DrawEllipse(outline,cx-55,cy-55,110,110);
-        DrawText(g,reading?.Rpm.ToString("0")??"Esperando",cx-54,cy-23,reading is null?18:30,Ink,108,true,true,height:40);
-        DrawText(g,"RPM",cx-48,cy+17,15,Muted,96,centered:true,height:25);
+        DrawText(g,reading?.Rpm.ToString("0")??"Esperando",cx-54,cy-23,reading is null?18:30,reading?.Held==true?Yellow:Ink,108,true,true,height:40);
+        DrawText(g,HomeFanRpmCaption(reading),cx-54,cy+17,reading?.Held==true?13:15,reading?.Held==true?Yellow:Muted,108,centered:true,height:25);
         DrawText(background,Value(temperature,"°C")+"  ·  Uso "+Value(load,"%"),r.X,r.Bottom-23,18,Muted,r.Width,centered:true,height:25);
     }
+    internal static string HomeFanRpmCaption(ProductFanReading? reading) => reading?.Held==true?"Última RPM":"RPM";
     private void HomeDemandGraph(Graphics g,RectangleF card,ProductHomeDemandSample? current,DateTimeOffset now)
     {
         DrawText(g,"Demanda en tiempo real",card.X+24,card.Y+19,24,null,615,true);

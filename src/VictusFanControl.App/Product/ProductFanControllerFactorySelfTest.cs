@@ -17,6 +17,7 @@ internal static class ProductFanControllerFactorySelfTest
         var hardware=new HardwareIdentity(Hp8C40TargetProfile.BoardManufacturer,Hp8C40TargetProfile.BoardProduct,
             Hp8C40TargetProfile.BoardVersion,Hp8C40TargetProfile.SystemManufacturer,Hp8C40TargetProfile.SystemProductName,
             Hp8C40TargetProfile.SystemSkuPrefix+"#AKH",Hp8C40TargetProfile.ValidatedBiosVersion);
+        TestSourceRoundTrips(require,hardware);
         foreach(var retentionEnabled in new[]{false,true})
         foreach(var preview in new[]{false,true})
         foreach(var writable in new[]{false,true})
@@ -100,6 +101,51 @@ internal static class ProductFanControllerFactorySelfTest
         require(released.Action==AdaptiveFanProductionActionKind.RestoreFirmware && fans.Authority==FanAuthority.Firmware,"54/52 Automatic lost immediate 99 C release.");
         fans.DisposeAsync().AsTask().GetAwaiter().GetResult();
         Console.WriteLine("Product 54/52 control: PASS (real factory/controller/session, Manual 51..54, Automatic and live curve at 54/52, persisted AC curve/unchanged Battery, GPU cap, immediate 99 C release; fake IO).");
+    }
+    private static void TestSourceRoundTrips(Action<bool,string> require,HardwareIdentity hardware)
+    {
+        foreach(var initial in new[]{ProductPowerProfile.Ac,ProductPowerProfile.Battery})
+        {
+            long clock=0;var origin=DateTimeOffset.UtcNow;DateTimeOffset Now()=>origin.AddMilliseconds(clock);
+            var profiles=new ProductProfiles();
+            FanConfiguration Plateau(FanConfiguration fan,int level)=>fan with{UnifiedDemand=fan.UnifiedDemand! with
+                {Curve=fan.UnifiedDemand!.Curve.Select(p=>p with{Level=p.Input==100?50:level}).ToArray()}};
+            profiles=profiles with{Ac=profiles.Ac with{Fan=Plateau(profiles.Ac.Fan,20)},Battery=profiles.Battery with{Fan=Plateau(profiles.Battery.Fan,30)}};
+            var backend=new ProductBackend();var fans=new FanControlCoordinator(backend);
+            var controller=ProductFanControllerFactory.Create(fans,profiles,hardware,Hp8C40TargetProfile.Instance,false,false,()=>clock,Now);
+            controller.ConfigureAutomaticProtections(new());
+            controller.ConfigureAutomaticAsync(profiles.Get(initial).Fan,default).AsTask().GetAwaiter().GetResult();
+            controller.SetModeAsync(AdaptiveFanProductionMode.Automatic,default).AsTask().GetAwaiter().GetResult();
+            TelemetrySnapshot Sample()=>new(Now(),"Intel Core i7-13700H",55,5,17,Hp8C40TargetProfile.ExpectedGpuName,47,14,0,3000,3000)
+            {CpuExpectedPhysicalCoreCount=14,CpuCoreTemperatures=Enumerable.Range(0,14).Select(i=>new CpuCoreTemperatureSample(i,i,i<6?"Performance":"Efficiency",55)).ToArray()};
+            SafetyGateResult Raw(TelemetrySnapshot s)=>SafetyGate.Evaluate(hardware,SystemState.Healthy,s,Now(),true);
+            clock+=1000;var sample=Sample();var previous=controller.ProcessAutomaticAsync(sample,Raw(sample),default).AsTask().GetAwaiter().GetResult().EqualFanLevel!.Value;
+            var selected=initial;var config=profiles.PerformanceConfiguration();
+            var status=new VictusFanControl.Performance.PerformanceGuardianResponse(1,Guid.NewGuid(),config.TargetProfileId,
+                true,"fixture","fixture","SessionEnabled",true,true,true,"Active","ActiveUnverified",PowerSource:initial.ToString());
+            foreach(var target in new[]{initial==ProductPowerProfile.Ac?ProductPowerProfile.Battery:ProductPowerProfile.Ac,initial})
+            {
+                var gate=new ProductAutomaticSourceTransition(()=>clock);var before=backend.Requests.Count;
+                clock+=1000;sample=Sample();controller.EvaluateAutomaticSafety(sample,Raw(sample),true);
+                require(!gate.Observe(target.ToString(),selected.ToString(),config,config,status,true),"Round trip bypassed source confirmation.");
+                controller.ObserveAutomaticSourceWaitAsync(sample,()=>{},default).AsTask().GetAwaiter().GetResult();
+                clock+=1000;sample=Sample();controller.EvaluateAutomaticSafety(sample,Raw(sample),true);
+                status=status with{RequestId=Guid.NewGuid(),PowerSource=target.ToString()};
+                require(gate.Observe(target.ToString(),selected.ToString(),config,config,status,true),"Fresh round-trip limits failed admission.");
+                var destination=profiles.Get(target).Fan;
+                controller.ApplyUnifiedDemandAsync(destination.UnifiedDemand!,()=>{},default,sourceConfiguration:destination).AsTask().GetAwaiter().GetResult();
+                require(backend.Requests.Count==before&&fans.Authority==FanAuthority.Custom&&controller.Mode==AdaptiveFanProductionMode.Automatic&&
+                    FanConfigurationStore.Serialize(controller.AutomaticConfiguration!)==FanConfigurationStore.Serialize(destination),
+                    "Source handoff wrote fans, reset authority or retained the previous curve/tuning.");
+                clock+=1000;sample=Sample();var result=controller.ProcessAutomaticAsync(sample,Raw(sample),default).AsTask().GetAwaiter().GetResult();
+                require(result.Action is not (AdaptiveFanProductionActionKind.Blocked or AdaptiveFanProductionActionKind.RestoreFirmware)&&
+                    result.EqualFanLevel.HasValue&&Math.Abs(result.EqualFanLevel.Value-previous)<=1,
+                    "Profile handoff blocked control or reset its physical level/inertia.");
+                previous=result.EqualFanLevel!.Value;selected=target;
+            }
+            controller.ReleaseToFirmwareAsync("fixture",default).AsTask().GetAwaiter().GetResult();fans.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+        Console.WriteLine("PASS actual product controller: AC/Battery startup and both profile round trips preserve authority, curve/tuning selection, bounded inertia and zero fan writes during reconciliation; fake IO.");
     }
     private sealed class ProductBackend:IFanControlBackend
     {

@@ -9,6 +9,37 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if(args.SequenceEqual(new[]{"--independent-performance-self-test"}))
+        {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunIndependentPerformanceChecks();return;}
+        if(args.SequenceEqual(new[]{"--cpu-power-editor-self-test"}))
+        {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunCpuPowerEditorChecks();return;}
+        if(args.SequenceEqual(new[]{"--session-end-timing-self-test"}))
+        {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunSessionEndTimingChecks();return;}
+        if(args.SequenceEqual(new[]{"--session-end-self-test"}))
+        {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunSessionEndChecks();return;}
+        if(args.SequenceEqual(new[]{"--hyperx-ui-self-test"}))
+        {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunHyperXChecks();return;}
+        if(args.SequenceEqual(new[]{"--hyperx-self-test"})||args.SequenceEqual(new[]{"--hyperx-probe"}))
+        {
+            try{if(args[0]=="--hyperx-probe")HyperXSelfTest.ProbeAsync(90).GetAwaiter().GetResult();else HyperXSelfTest.Run();}
+            catch(Exception e){Console.Error.WriteLine(e);Environment.ExitCode=1;}return;
+        }
+        if(args.SequenceEqual(new[]{"--stability-gui-self-test"}))
+        {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunStabilityChecks();return;}
+        if(args.SequenceEqual(new[]{"--stability-pipeline-self-test"}))
+        {
+            try{StabilityPipelineSelfTest.RunAsync().GetAwaiter().GetResult();}
+            catch(Exception error){Console.Error.WriteLine(error);Environment.ExitCode=1;}
+            return;
+        }
+        if (args.SequenceEqual(new[]{"--telemetry-lifecycle-self-test"}))
+        { Environment.ExitCode=TelemetryLifecycleSelfTest.RunAsync().GetAwaiter().GetResult(); return; }
+        if(args.SequenceEqual(new[]{"--automatic-coordination-self-test"}))
+        {
+            try { ProductStartupCoordinationSelfTest.Run((ok,message)=>{if(!ok)throw new InvalidOperationException(message);}); }
+            catch(Exception ex) { Console.Error.WriteLine(ex); Environment.ExitCode=1; }
+            return;
+        }
         // Dispatch before GUI/log/runtime startup. This child can only acquire NVIDIA telemetry.
         if (args.Length > 0 && args[0] is "--nvml-telemetry-worker" or "--nvml-telemetry-fixture")
         { Environment.ExitCode = NvmlTelemetryWorkerHost.Run(args); return; }
@@ -21,6 +52,8 @@ internal static class Program
         }
         if(args.Length==1&&args[0]=="--external-cooling-ui-self-test")
         {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunExternalCoolingChecks();return;}
+        if(args.Length==1&&args[0]=="--external-curve-ui-self-test")
+        {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunExternalCurveChecks();return;}
         if(args.Length==1&&args[0]=="--external-cooling-self-test")
         {
             try { ExternalCoolingSelfTest.RunAsync().GetAwaiter().GetResult(); }
@@ -62,10 +95,24 @@ internal static class Program
                 var path=VictusFanControl.Product.ProductProfilesStore.DefaultPath;
                 var original=File.Exists(path)?File.ReadAllBytes(path):null;
                 if(plan.SaveProfiles)VictusFanControl.Product.ProductProfilesStore.Save(configured);
-                try { if(plan.RegisterStartup)WindowsStartupRegistration.SetEnabledAsync(true,modules,configured.StartMinimized).GetAwaiter().GetResult(); }
+                try { if(plan.RegisterStartup)WindowsStartupRegistration.SetEnabledForInstallationAsync(true,modules,configured.StartMinimized).GetAwaiter().GetResult(); }
                 catch
                 {
-                    if(plan.SaveProfiles){if(original is null)File.Delete(path);else File.WriteAllBytes(path,original);}
+                    if(plan.SaveProfiles)
+                    {
+                        if(original is null)File.Delete(path);
+                        else
+                        {
+                            var rollback=path+".rollback-"+Guid.NewGuid().ToString("N");
+                            try
+                            {
+                                using(var file=new FileStream(rollback,FileMode.CreateNew,FileAccess.Write,FileShare.None))
+                                {file.Write(original);file.Flush(true);}
+                                File.Move(rollback,path,overwrite:true);
+                            }
+                            finally { if(File.Exists(rollback))File.Delete(rollback); }
+                        }
+                    }
                     throw;
                 }
                 Environment.ExitCode=0;
@@ -145,11 +192,13 @@ internal static class Program
         };
 
         using var singleInstance = new Mutex(
-            initiallyOwned: true,
-            name: @"Local\VictusFanControl.App",
-            createdNew: out var createdNew);
+            initiallyOwned: false,
+            name: @"Local\VictusFanControl.App");
+        bool ownsInstance;
+        try { ownsInstance=singleInstance.WaitOne(0); }
+        catch(AbandonedMutexException) { ownsInstance=true; } // Existing journal gates remain mandatory.
 
-        if (!createdNew)
+        if (!ownsInstance)
         {
             MessageBox.Show(
                 "VictusFanControl is already running in this Windows session.",
@@ -158,6 +207,7 @@ internal static class Program
                 MessageBoxIcon.Information);
             return;
         }
+
 
         ApplicationConfiguration.Initialize();
 
@@ -815,7 +865,11 @@ internal static class Program
         ProductFanRangePreview.Enabled=args.Contains("--fan-upper-range-preview");
         if(ProductFanRangePreview.Enabled && (hardwareTestModeCount!=0 || productAutomaticReview is not null || args.Contains("--platform-thermal-experiment") || args.Contains("--product-restart-state")))
             throw new ArgumentException("Upper-range preview cannot be combined with other hardware/review entries.");
-        var modulesDirectory = ResolveModulesDirectory(args);
+        // Product startup renders before filesystem/module availability checks.
+        // Historical qualification entries retain their strict resolver.
+        var modulesDirectory = hardwareTestModeCount==0
+            ? Path.GetFullPath(ReadOptionValue(args,"--modules-dir")??Path.Combine(AppContext.BaseDirectory,"modules"))
+            : ResolveModulesDirectory(args);
         if (modulesDirectory is null)
         {
             AppLog.Write("Startup failed: required PawnIO modules were not found.");
@@ -908,13 +962,22 @@ internal static class Program
 
         if (hardwareTestModeCount == 0)
         {
+            VictusFanControl.Scheduling.ProductProcessPriority.Apply(message => AppLog.Write(message));
+            VictusFanControl.Scheduling.ProductShutdownOrder.Apply(guardian:false,message => AppLog.Write(message));
             ProductRestartRequest? restart;
             try
             {
                 var statePath=ReadOptionValue(args,"--product-restart-state");
                 var restartState=statePath is null?null:ProductSessionRestart.ReadReleasedState(statePath);
                 using(var product = new ProductForm(modulesDirectory,!ProductFanRangePreview.Enabled&&args.Contains("--start-minimized"),automaticReview:productAutomaticReview,restartState:restartState))
-                {Application.Run(product);restart=product.RestartRequest;}
+                {
+                    Application.Run(product);restart=product.RestartRequest;
+                    if(product.UserRequestedExit)
+                    {
+                        if(Environment.ExitCode!=0)AppLog.Write("Voluntary exit with unresolved cleanup retained in journals; scheduled restart suppressed. Prior code="+Environment.ExitCode);
+                        Environment.ExitCode=0;
+                    }
+                }
                 AppLog.Write("Product GUI exited.");
                 if(restart is not null&&Environment.ExitCode==0)
                 {

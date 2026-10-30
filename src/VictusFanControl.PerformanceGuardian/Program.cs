@@ -10,6 +10,12 @@ internal static class Program
         Console.OutputEncoding = System.Text.Encoding.UTF8;
         try
         {
+            if (VictusFanControl.Scheduling.ProductProcessPriority.IsProductionGuardian(args))
+            {
+                VictusFanControl.Scheduling.ProductProcessPriority.Apply(Console.Error.WriteLine);
+                VictusFanControl.Scheduling.ProductShutdownOrder.Apply(guardian:true,Console.Error.WriteLine);
+            }
+            if(args.SequenceEqual(new[]{"--selectable-domains-self-test"}))return SelectableGuiPerformanceDomainsSelfTest.Run(Console.Out);
             if (args.Length > 0 && args[0] == "--recover-product-fans") return ProductFanRecovery.Run(args);
             if (args.SequenceEqual(new[] { "--product-fan-recovery-self-test" })) return ProductFanRecoverySelfTest.Run();
             if (args.Length > 0 && args[0] == "--gui-fixture-startup-failure")
@@ -29,6 +35,12 @@ internal static class Program
                 return await PerformanceGuiSessionHost.RunAsync(args, fixture: true, fixtureEnableFailure: true).ConfigureAwait(false);
             if (args.Length > 0 && args[0] == "--gui-fixture-session")
                 return await PerformanceGuiSessionHost.RunAsync(args, fixture: true).ConfigureAwait(false);
+            if (args.Length > 0 && args[0] == "--gui-fixture-release-failure")
+                return await PerformanceGuiSessionHost.RunAsync(args, fixture: true, fixtureReleaseFailure: true).ConfigureAwait(false);
+            if (args.Length > 0 && args[0] == "--gui-fixture-lost-release-reply")
+                return await PerformanceGuiSessionHost.RunAsync(args, fixture: true, fixtureReleaseFailure: true, fixtureLostReply:true).ConfigureAwait(false);
+            if (args.Length > 0 && args[0] == "--gui-fixture-unknown-release")
+                return await PerformanceGuiSessionHost.RunAsync(args, fixture: true, fixtureUnknownReleaseFailure: true).ConfigureAwait(false);
             if (args.Length > 0 && args[0] == "--gui-fixture-update-failure")
                 return await PerformanceGuiSessionHost.RunAsync(args, fixture: true, fixtureUpdateFailure: true).ConfigureAwait(false);
             if (args.Length > 0 && args[0] == "--gui-session")
@@ -36,6 +48,7 @@ internal static class Program
             if (args.Length == 1 &&
                 args[0] == "--self-test")
             {
+                if(SelectableGuiPerformanceDomainsSelfTest.Run(Console.Out)!=0)return 1;
                 var authorityResult =
                     PerformanceGuardianAuthoritySelfTest.Run(
                         Console.Out);

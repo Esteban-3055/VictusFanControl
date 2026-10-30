@@ -10,6 +10,7 @@ internal static partial class Program
     private static async Task Main()
     {
         ProtocolTests();
+        CurveTests();
         HardeningProtocolTests();
         SimulatorInputTests();
         GoldenVectors();

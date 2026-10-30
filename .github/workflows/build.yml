@@ -25,6 +25,19 @@ jobs:
       - name: Restore
         run: dotnet restore VictusFanControl.sln
 
+      - name: Original 1.2.9 updater stable/preview compatibility (no installation)
+        shell: pwsh
+        run: ./scripts/test-updater-129-compatibility.ps1
+
+      - name: Installer shared recovery fixtures before long checks (no installation)
+        shell: pwsh
+        run: |
+          dotnet build tools/ProductSetup -c Release -warnaserror
+          if ($LASTEXITCODE -ne 0) { throw 'Installer shared recovery build failed.' }
+          dotnet run --project tools/ProductSetup -c Release --no-build -- --self-test
+          if ($LASTEXITCODE -ne 0) { throw 'Installer shared recovery fixtures failed.' }
+          ./scripts/test-installation-publication.ps1
+
       # Hosted runners can spend more than five seconds initializing CIM's
       # service provider. Warm only this read-only inventory query; the actual
       # isolation guards keep their existing five-second fail-closed deadline.
@@ -621,9 +634,12 @@ jobs:
       - name: Build
         run: dotnet build VictusFanControl.sln -c Release --no-restore -warnaserror
 
-      - name: Original 1.2.9 updater preview compatibility (no installation)
+
+      - name: Real-time shutdown cooling and IPC release (no hardware)
         shell: pwsh
-        run: ./scripts/test-updater-129-compatibility.ps1
+        run: |
+          dotnet .\src\VictusFanControl.App\bin\Release\net8.0-windows\VictusFanControl.App.dll --session-end-timing-self-test
+          if ($LASTEXITCODE -ne 0) { throw 'Shutdown timing/IPC release failed.' }
 
       - name: HP 8C40 P14.2 build and verify win-x64 publish layout
         shell: pwsh
@@ -872,16 +888,16 @@ jobs:
         shell: pwsh
         run: |
           $assets = Join-Path $env:RUNNER_TEMP 'VictusFanControl-public-release-assets'
-          $payload = Join-Path $assets 'VictusFanControl-1.2.12-win-x64.zip'
+          $payload = Join-Path $assets 'VictusFanControl-1.3.13-win-x64.zip'
           $setup = Join-Path $env:RUNNER_TEMP 'VictusFanControl-setup-publish'
           dotnet run --project tools/ProductSetup -c Release -- --self-test
           if ($LASTEXITCODE -ne 0) { throw 'Installer security fixtures failed.' }
           dotnet publish tools/ProductSetup -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -p:DebugSymbols=false "-p:SetupPayload=$payload" -o $setup
           if ($LASTEXITCODE -ne 0) { throw 'EXE installer publish failed.' }
-          $installer = Join-Path $assets 'VictusFanControl-1.2.12-Setup-win-x64.exe'
+          $installer = Join-Path $assets 'VictusFanControl-1.3.13-Setup-win-x64.exe'
           Copy-Item (Join-Path $setup 'VictusSetup.exe') $installer
           $identity = [Diagnostics.FileVersionInfo]::GetVersionInfo($installer)
-          if ($identity.FileVersion -ne '1.2.12.0' -or $identity.FileDescription -ne 'VictusSetup') { throw 'Installer identity mismatch.' }
+          if ($identity.FileVersion -ne '1.3.13.0' -or $identity.FileDescription -ne 'VictusSetup') { throw 'Installer identity mismatch.' }
           $test = Start-Process -FilePath $installer -ArgumentList '--self-test' -NoNewWindow -PassThru -Wait
           if ($test.ExitCode -ne 0) { throw 'Published EXE/embedded payload self-test failed.' }
           python scripts/prepare-installer-assets.py --installer $installer --source-head '${{ github.sha }}' --payload $payload
@@ -890,7 +906,7 @@ jobs:
       - name: Upload Windows EXE installer
         uses: actions/upload-artifact@v4
         with:
-          name: VictusFanControl-1.2.12-Setup-win-x64-${{ github.sha }}
+          name: VictusFanControl-1.3.13-Setup-win-x64-${{ github.sha }}
           path: |
             ${{ runner.temp }}/VictusFanControl-public-release-assets/*Setup*
             ${{ runner.temp }}/VictusFanControl-public-release-assets/*win-x64.zip*
@@ -900,7 +916,7 @@ jobs:
       - name: Upload definitive GUI review package
         uses: actions/upload-artifact@v4
         with:
-          name: VictusFanControl-1.2.12-win-x64-${{ github.sha }}
+          name: VictusFanControl-1.3.13-win-x64-${{ github.sha }}
           path: ${{ runner.temp }}/VictusFanControl-product-gui-review
           if-no-files-found: error
           retention-days: 30

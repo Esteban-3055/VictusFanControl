@@ -28,7 +28,8 @@ internal readonly record struct GuardianDomainLifecycleSnapshot(
     string? CpuState,
     string? GpuState,
     string? CpuStatus,
-    string? GpuStatus);
+    string? GpuStatus,
+    Guid? RecoveryGpuSession = null);
 
 internal interface IGuardianDomainLifecycle
 {
@@ -126,6 +127,8 @@ internal sealed class PerformanceGuardianHost
     private int _rejectedRequests;
     private int _connections;
     private bool _parentLost;
+    private Exception? _recoveryDrainFailure;
+    internal bool DropRecoveryReplyInFixture { get; init; }
     private string _exitReason =
         "NOT_STARTED";
 
@@ -167,11 +170,13 @@ internal sealed class PerformanceGuardianHost
         {
             mutex =
                 new Mutex(
-                    initiallyOwned: true,
-                    _options.MutexName,
-                    out var createdNew);
+                    initiallyOwned: false,
+                    _options.MutexName);
+            bool ownsMutex;
+            try { ownsMutex=mutex.WaitOne(0); }
+            catch(AbandonedMutexException) { ownsMutex=true; } // Durable journal admission is unchanged.
 
-            if (!createdNew)
+            if (!ownsMutex)
             {
                 _exitReason =
                     "DUPLICATE_GUARDIAN";
@@ -210,7 +215,7 @@ internal sealed class PerformanceGuardianHost
                     _options.TargetProfileId,
                     _options.OwnerPid,
                     _options.OwnerStartUtcTicks,
-                    _options.SessionNonce);
+                    _options.SessionNonce,allowEmptySession:_domains is IGuardianSelectableDomains);
 
             if (!string.IsNullOrWhiteSpace(
                     _options.ReadyPath))
@@ -275,6 +280,12 @@ internal sealed class PerformanceGuardianHost
                 }
             }
 
+            if (_recoveryDrainFailure is not null)
+            {
+                failure = _recoveryDrainFailure;
+                _exitReason = "CLIENT_RECOVERY_DRAINED_JOURNALS_RETAINED";
+                return PerformanceGuardianProtocol.ExitRecoveryPending;
+            }
             if (_parentLost)
             {
                 var cpu =
@@ -394,7 +405,8 @@ internal sealed class PerformanceGuardianHost
     internal readonly record struct SessionCleanupResult(
         bool SourceStopAttempted,
         bool ReleaseAttempted,
-        Exception? Failure)
+        Exception? Failure,
+        bool SourceStopSucceeded = false)
     {
         internal bool Succeeded =>
             Failure is null;
@@ -423,6 +435,7 @@ internal sealed class PerformanceGuardianHost
 
         var releaseAttempted =
             false;
+        var sourceStopSucceeded = false;
 
         try
         {
@@ -431,6 +444,7 @@ internal sealed class PerformanceGuardianHost
 
             sourceRuntime.Stop(
                 reason);
+            sourceStopSucceeded = true;
         }
         catch (Exception ex)
         {
@@ -462,8 +476,17 @@ internal sealed class PerformanceGuardianHost
         return new SessionCleanupResult(
             sourceStopAttempted,
             releaseAttempted,
-            failure);
+            failure,
+            sourceStopSucceeded);
     }
+
+    internal static bool CanDrainForRecovery(string requestType, bool cpuEnabled, bool gpuEnabled,
+        SessionCleanupResult cleanup, GuardianDomainLifecycleSnapshot snapshot) =>
+        requestType == PerformanceGuardianProtocol.Shutdown && !cleanup.Succeeded &&
+        cleanup.SourceStopSucceeded && gpuEnabled &&
+        (!cpuEnabled || snapshot.CpuState == "Disabled") &&
+        snapshot.GpuState == "RecoveryRequired" &&
+        snapshot.RecoveryGpuSession is { } session && session != Guid.Empty;
 
     private async Task ProcessConnectionAsync(
         NamedPipeServerStream pipe,
@@ -585,6 +608,12 @@ internal sealed class PerformanceGuardianHost
                 if (!cleanup.Succeeded)
                 {
                     _rejectedRequests++;
+                    var snapshot = _domains.Snapshot;
+                    var drainForRecovery = CanDrainForRecovery(request.Type, previousCpu, previousGpu, cleanup, snapshot);
+                    // Never retry Reset in this owner. Stop callbacks and exit;
+                    // only an authenticated reply AND actual exit permit the
+                    // parent to launch the exact-journal recovery helper.
+                    if (drainForRecovery) _recoveryDrainFailure = cleanup.Failure;
 
                     await SendResponseAsync(
                         pipe,
@@ -592,7 +621,7 @@ internal sealed class PerformanceGuardianHost
                         new PerformanceGuardianAuthorityResult(
                             Accepted: false,
                             Code:
-                                cleanup.ReleaseAttempted
+                                drainForRecovery ? PerformanceGuardianProtocol.ReleaseFailedDraining : cleanup.ReleaseAttempted
                                     ? "SESSION_CLEANUP_FAILED"
                                     : "SESSION_CLEANUP_RELEASE_NOT_ATTEMPTED",
                             Message:
@@ -607,6 +636,8 @@ internal sealed class PerformanceGuardianHost
                             GpuEnabled:
                                 authority.GpuEnabled),
                         stop.Token).ConfigureAwait(false);
+
+                    if (drainForRecovery) { stop.Cancel(); return; }
 
                     continue;
                 }
@@ -637,7 +668,16 @@ internal sealed class PerformanceGuardianHost
                         throw new InvalidOperationException("This Guardian does not support live configuration updates.");
                     var next = request.Configuration ?? throw new InvalidOperationException("Missing validated presets.");
                     next.Validate();
-                    runtime.ExecuteConfigurationUpdate(source => configured.UpdateConfiguration(next, source));
+                    try
+                    {
+                        runtime.ExecuteConfigurationUpdate(source => configured.UpdateConfiguration(next, source),
+                            ()=> (configured.Configuration.CpuEnabled,configured.Configuration.GpuEnabled));
+                    }
+                    finally
+                    {
+                        authority.CommitDomainSelection(configured.Configuration.CpuEnabled,configured.Configuration.GpuEnabled);
+                        result=result with{CpuEnabled=authority.CpuEnabled,GpuEnabled=authority.GpuEnabled};
+                    }
                     result = result with { Code = "CONFIGURATION_UPDATED", Message = "Live presets updated in the original ownership session." };
                 }
                 catch (Exception ex)
@@ -865,8 +905,10 @@ internal sealed class PerformanceGuardianHost
         PerformanceGuardianAuthorityResult result,
         CancellationToken cancellationToken)
     {
-        var response =
-            new PerformanceGuardianResponse(
+        var response = _sourceRuntime.CaptureStatus(source =>
+        {
+            var domains = _domains.Snapshot;
+            return new PerformanceGuardianResponse(
                 PerformanceGuardianProtocol.Version,
                 request.RequestId,
                 _options.TargetProfileId,
@@ -877,14 +919,18 @@ internal sealed class PerformanceGuardianHost
                 result.SessionEnabled,
                 result.CpuEnabled,
                 result.GpuEnabled,
-                _domains.Snapshot.CpuState,
-                _domains.Snapshot.GpuState,
-                _domains.Snapshot.CpuStatus,
-                _domains.Snapshot.GpuStatus,
-                _sourceRuntime.Snapshot.LastSource.ToString(),
-                _sourceRuntime.Snapshot.Failure,
-                (_domains as IGuardianConfigurableDomains)?.Configuration);
+                domains.CpuState,
+                domains.GpuState,
+                domains.CpuStatus,
+                domains.GpuStatus,
+                source.LastSource.ToString(),
+                source.Failure,
+                (_domains as IGuardianConfigurableDomains)?.Configuration,
+                result.Code == PerformanceGuardianProtocol.ReleaseFailedDraining ? domains.RecoveryGpuSession : null);
+        },reconcile: request.Type==PerformanceGuardianProtocol.Status && result.Accepted && result.SessionEnabled &&
+            _domains is IGuardianConfigurableDomains);
 
+        if(DropRecoveryReplyInFixture && result.Code==PerformanceGuardianProtocol.ReleaseFailedDraining)return;
         try
         {
             await PerformanceGuardianCodec.WriteResponseAsync(
@@ -979,7 +1025,8 @@ internal sealed class PerformanceGuardianHost
                     domains.CpuHardwareWriteAttempts > 0 ||
                     domains.GpuHardwareWriteAttempts > 0,
                 Failure:
-                    failure?.ToString());
+                    failure?.ToString(),
+                RecoveryHandoff: _recoveryDrainFailure is not null ? CreateRecoveryHandoff(domains) : null);
 
         DurableJson(
             _options.ReportPath,
@@ -990,6 +1037,14 @@ internal sealed class PerformanceGuardianHost
         string targetProfileId) =>
         @"Global\VictusFanControl.PerformanceGuardian." +
         targetProfileId;
+
+    private PerformanceRecoveryHandoffReceipt CreateRecoveryHandoff(GuardianDomainLifecycleSnapshot domains)
+    {
+        using var child=Process.GetCurrentProcess();
+        return new(1,_options.TargetProfileId,_options.SessionNonce,_options.OwnerPid,_options.OwnerStartUtcTicks,
+            child.Id,child.StartTime.ToUniversalTime().Ticks,domains.RecoveryGpuSession??Guid.Empty,
+            !_sourceRuntime.Snapshot.Active,domains.CpuState is null or "Disabled",domains.GpuState=="RecoveryRequired");
+    }
 
     private static void DurableText(
         string path,
@@ -1079,5 +1134,6 @@ internal sealed class PerformanceGuardianHost
         string? SourceLastStopReason,
         string? SourceFailure,
         bool HardwareWritesPerformed,
-        string? Failure);
+        string? Failure,
+        PerformanceRecoveryHandoffReceipt? RecoveryHandoff);
 }

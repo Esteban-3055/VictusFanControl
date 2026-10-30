@@ -597,7 +597,7 @@ internal sealed class PerformanceControlSurface :
             Minimum =
                 CpuPowerProductDefaults.MinimumPl1Watts,
             Maximum =
-                CpuPowerProductDefaults.MaximumConfigurablePl1Watts,
+                CpuPowerProductDefaults.HistoricalMaximumPl1Watts,
             TickFrequency = 4,
             SmallChange = 1,
             LargeChange = 4,

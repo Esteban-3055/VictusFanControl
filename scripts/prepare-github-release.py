@@ -11,7 +11,7 @@ import shutil
 import zipfile
 
 
-VERSION = "1.2.12"
+VERSION = "1.3.13"
 TARGET = "HP-8C40-9D0R1LA-F18"
 MANIFEST = "PRODUCT-GUI-MANIFEST.json"
 
@@ -47,8 +47,9 @@ def main():
     require(manifest["finalReleaseReady"] is True, "Package not ready")
     require(manifest["normalAutomatic"] == contract["normalAutomatic"] == "authorized-exact-target",
             "Wrong control authorization")
-    require(contract["target"] == TARGET and contract["stableReleaseAuthorized"] is True,
-            "Wrong target or missing release authorization")
+    require(contract["target"] == TARGET and contract["stableReleaseAuthorized"] is False
+            and contract["previewReleaseAuthorized"] is True,
+            "Wrong target or missing preview authorization")
     require(contract["physicalPassClaimed"] is False, "Must retain physical evidence limits")
     require(manifest["releaseChannel"] == contract["channel"] == "preview", "Wrong release channel")
     require(manifest["fanCommandLimits"] == contract["fanCommandLimits"] and
@@ -56,13 +57,25 @@ def main():
             contract["fanCommandLimits"]["cpuMaximumCommandLevel"] == 54 and
             contract["fanCommandLimits"]["gpuMaximumCommandLevel"] == 52 and
             contract["fanCommandLimits"]["mapping"] == "CPU=logical;GPU=min(logical,52)", "Wrong product fan limits")
+    require(manifest["performanceControlSelection"] == contract["performanceControlSelection"] == {
+        "automaticActivation": "selected-domains", "domains": "cpu-gpu-independent-live-apply",
+        "bothOffAllowed": True, "fanModeOnLimitRelease": "unchanged",
+        "hardwareAcquisition": "lazy-exact-target-domain", "standby": "retain-selected-domains",
+        "failure": "retain-ownership-and-independent-cleanup",
+    }, "Wrong independent performance selection contract")
+    require(manifest["cpuPowerConfiguration"] == contract["cpuPowerConfiguration"] == {
+        "minimumWatts": 8, "maximumPl2Watts": 114, "maximumPl1": "configured-pl2",
+        "execution": "exact-target-product-gui-explicit-pl1-to-pl2", "baselineRequired": "unlocked-45-115",
+        "reportedHardwareBoundsEnforced": True, "historicalQualification": "downward-only",
+        "recovery": "owned-fields-release-only",
+    }, "Wrong product CPU power contract")
     require(manifest["automaticProtectionControls"] == contract["automaticProtectionControls"] ==
-            "independent-cpu-temperature-gpu-temperature-cpu-power-handoffs-clean-resume-10-30-60s-three-attempts",
+            "independent-cpu-temperature-gpu-temperature-handoffs-clean-resume-10-30-60s-three-attempts",
             "Wrong configurable protection contract")
     require(manifest["automaticPowerContract"] == contract["automaticPowerContract"] == {
-        "cpuHandoffWatts": 60, "cpuHandoffSelectable": True, "gpuConsumptionHandoff": False,
+        "cpuHandoffWatts": None, "cpuHandoffSelectable": False, "gpuConsumptionHandoff": False,
         "gpuTelemetryCoherenceWatts": [0, 300], "gpuPowerStillContributesToDemand": True,
-    }, "Wrong CPU-only power handoff contract")
+    }, "Wrong consumption handoff contract")
     retention = contract["experimentalPlatformRetention"]
     require(manifest["productPlatformRetention"] == "removed-no-platform-sensor-acquisition" and
             manifest["platformThermalExperiment"] == "retired-no-live-entry" and
@@ -125,7 +138,7 @@ def main():
     (args.output / (archive.name + ".sha256")).write_text(
         f"{digest}  {archive.name}\n", encoding="utf-8")
     provenance = {
-        "schemaVersion": 1, "version": VERSION, "target": TARGET,
+        "schemaVersion": 1, "version": VERSION, "target": TARGET, "channel": "preview",
         "repository": args.repository, "sourceHead": args.source_head,
         "buildRunId": args.build_run_id,
         "buildUrl": f"https://github.com/{args.repository}/actions/runs/{args.build_run_id}",

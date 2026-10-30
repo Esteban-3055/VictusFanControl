@@ -95,9 +95,40 @@ internal static partial class Program
         var unavailable=new Esp32TcpClient();using(var cancel=new CancellationTokenSource(TimeSpan.FromSeconds(7)))
         {await unavailable.RunAsync(new(){Mode=ExternalCoolingMode.MonitorOnly,UseSimulator=true,Port=port,AutoReconnect=false},key.ToArray(),new Source(),cancel.Token);Require(unavailable.Diagnostics.Failures==1,"Unreachable server not reported.");}
         Console.WriteLine("PASS authentication rejection, automatic reconnect/new sessions, manager concurrency, suspend/resume, clean shutdown, unavailable server.");
+        await DelayedBaseStartupTest(key);
         await RemoteLeaseTest(key);
         await RestartServerTest(key);
+        await StopAcceptRaceTest(key);
         await ResourceTest(key);
+    }
+
+    private static async Task DelayedBaseStartupTest(byte[] key)
+    {
+        foreach(var reconnect in new[]{true,false})
+        {
+            var reserve=new TcpListener(IPAddress.Loopback,0);reserve.Start();var port=((IPEndPoint)reserve.LocalEndpoint).Port;reserve.Stop();
+            await using var manager=new ExternalCoolingManager(new Source(),()=>key.ToArray());
+            await manager.ConfigureAsync(new(){Mode=ExternalCoolingMode.MonitorOnly,UseSimulator=true,Port=port,AutoReconnect=reconnect});
+            await Until(()=>manager.Diagnostics.Failures>=1);
+            Require(manager.Diagnostics.Connections==0&&manager.Diagnostics.Sent==0&&manager.Diagnostics.Received==0,
+                "Missing base fabricated a connection or telemetry.");
+            await using var server=new Server(key,new(),port);
+            if(reconnect)
+            {
+                await Until(()=>manager.Diagnostics.State==ExternalCoolingConnectionState.Connected&&manager.Diagnostics.Received>=2);
+                lock(server.Observations)Require(server.Observations.All(x=>x.Telemetry.Solicitud is null&&!x.Telemetry.SolicitudValida),
+                    "Delayed MonitorOnly startup acquired external authority.");
+            }
+            else
+            {
+                await Task.Delay(1200);
+                Require(manager.Diagnostics.Connections==0&&manager.Diagnostics.Failures==1,"Disabled reconnect retried after base startup.");
+            }
+            await manager.DisconnectAsync();
+            await manager.ResumeAsync();
+            Require(manager.Diagnostics.State==ExternalCoolingConnectionState.Disconnected,"Resume overrode explicit disconnect after delayed startup.");
+        }
+        Console.WriteLine("PASS delayed base/Windows startup: unavailable at launch then authenticated automatically when available; opt-out and explicit disconnect preserved; loopback only.");
     }
     private static async Task RemoteLeaseTest(byte[] key)
     {
@@ -130,6 +161,23 @@ internal static partial class Program
             Console.WriteLine("PASS actual server stop/restart on same TCP port and new authenticated session.");
         }
         finally{await manager.DisconnectAsync();await server.DisposeAsync();}
+    }
+    private static async Task StopAcceptRaceTest(byte[] key)
+    {
+        // Exercise real loopback accepts/cancellation/socket disposal, without a
+        // device or a test-only accept implementation in the production server.
+        for(var i=0;i<40;i++)
+        {
+            var server=new Server(key,new());
+            await server.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(2));
+        }
+        var listener=new TcpListener(IPAddress.Loopback,0);listener.Start();
+        var run=SimulatorServer.RunAsync(listener,key,new(),null,null,CancellationToken.None);
+        listener.Stop();bool rejected=false;
+        try{await run.WaitAsync(TimeSpan.FromSeconds(2));}
+        catch(Exception error)when(error is SocketException or ObjectDisposedException or InvalidOperationException){rejected=true;}
+        Require(rejected,"An unrequested listener failure was silently treated as normal cancellation.");
+        Console.WriteLine("PASS simulator accept shutdown: 40 cancelled loopback servers drain; unrequested listener failure remains visible.");
     }
     private static async Task ResourceTest(byte[] key)
     {

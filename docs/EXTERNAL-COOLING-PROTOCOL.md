@@ -172,3 +172,10 @@ Minimize/close-to-tray does not suspend this service. Application exit disposes 
 Limits and deadlines keep ESP32-C3 memory bounded. Minimum device resources: <=4096 byte input
 frame, one output frame, SHA256/HMAC context, 2 nonces and 2 derived keys, sequence counters,
 and 16 device reply sequence/send-time pairs for the monotonic request lease.
+
+
+## Optional HyperX display extension (post-1.3.4)
+
+Authenticated telemetry may contain `hyperxBatteryPct` (nullable number 0–100) and `hyperxSampledAtUtc` (nullable original acquisition time). Both must be present as values together or null/absent together. They cannot authorize a control request. Their independent source lifetime is 180000 ms, combined with monotonic residence on ESP32 and a live authenticated PC link. Re-sending a cached reading does not renew acquisition age. The LCD separately retains the last valid percentage in RAM when PC telemetry disappears, marking it with `*`; this display cache does not become live telemetry.
+
+`hyperxDisplay` is an optional object with required boolean `lowEnabled`, `criticalEnabled` and integer `lowPercent`, `criticalPercent`, `lowDurationMs`, `criticalDurationMs`, `lowBlinkCycles`, `criticalBlinkCycles`. Critical is 10–98; low is greater than critical and at most 99; duration is 1000–120000 ms; cycles are 1–20 and require duration >= cycles * 1000. Only a new, fresh, authenticated battery acquisition can trigger a warning. Duplicate frames/reconnects cannot restart its timer. These preferences are display-only, retained in RAM, and have no effect on NVS, session authority or PWM. Old peers may omit the extension; old firmware ignores the new optional fields. See HYPERX-BATTERY-LCD.md for the user interface, retained-cache semantics and validation scope.

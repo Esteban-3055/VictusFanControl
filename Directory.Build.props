@@ -11,11 +11,13 @@
     <InformationalVersion>0.4.0-rc.1</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
-  <!-- P14 historical audit builds retain their original version. Product release publishing opts in. -->
+  <!-- P14 historical audit builds retain their original version. Product release publishing opts in.
+       Preview 1.3.13 permits independent live CPU/GPU selection while retaining Automatic fans;
+       historical thermal qualification keeps its original thresholds and separate regression checks. -->
   <PropertyGroup Condition="'$(VictusProductRelease)' == 'true'">
-    <Version>1.2.12</Version>
-    <AssemblyVersion>1.2.12.0</AssemblyVersion>
-    <FileVersion>1.2.12.0</FileVersion>
-    <InformationalVersion>1.2.12</InformationalVersion>
+    <Version>1.3.13</Version>
+    <AssemblyVersion>1.3.13.0</AssemblyVersion>
+    <FileVersion>1.3.13.0</FileVersion>
+    <InformationalVersion>1.3.13</InformationalVersion>
   </PropertyGroup>
 </Project>

@@ -70,19 +70,13 @@ bool equalProof(const std::string& a, const std::string& b) {
     for (size_t i=0; i<32; ++i) difference = difference | (x[i]^y[i]);
     return difference == 0;
 }
-bool ControlPolicy::map(int request, int& pwm) const {
-    if (minimum < 0 || maximum > 65535 || minimum >= maximum || minimumRunningPwm < 0 || minimumRunningPwm > 100 || request < minimum || request > maximum) return false;
-    pwm = static_cast<int>(std::lround(100.0*(request-minimum)/(maximum-minimum)));
-    if (pwm > 0) pwm = std::max(pwm,minimumRunningPwm); return true;
+Session::Session(const Key& key,Crypto& c,const ExternalConfig* previousConfiguration): pairing(key),crypto(c) {
+    // Configuration survives TCP reconnects; authentication, telemetry and the
+    // remote lease never do. Reused revisions remain immutable across sessions.
+    if(previousConfiguration&&previousConfiguration->valid()) {
+        configuration=*previousConfiguration;hasConfiguration=true;
+    }
 }
-int ControlPolicy::local(double ambient) {
-    if (!std::isfinite(ambient) || ambient < -40 || ambient > 100) return 100;
-    return std::max(35,std::min(100,static_cast<int>(std::lround(35+(ambient-25)*3.25))));
-}
-int ControlPolicy::electricalDuty(int pct, bool inverted) {
-    auto duty = static_cast<int>(std::lround(std::max(0,std::min(100,pct))*255.0/100)); return inverted ? 255-duty : duty;
-}
-Session::Session(const Key& key,Crypto& c): pairing(key),crypto(c) {}
 Session::~Session() {
     for (auto* k : {&pairing,&receiveKey,&sendKey}) { volatile uint8_t* p = k->data(); for (size_t i=0;i<32;++i) p[i]=0; }
 }
@@ -121,11 +115,16 @@ bool Session::accept(const std::string& line,uint32_t now,double ambient,int app
     if (type!="telemetry" || sequence<=previous || !equalProof(mac,base64(crypto.hmac(receiveKey,
         "VictusExternalCooling/v1/frame\ntelemetry\n"+id+"\n"+std::to_string(sequence)+"\n"+raw))) || !telemetry(p,now)) return false;
     previous=sequence; if (outgoing==INT64_MAX) return false;
-    StaticJsonDocument<512> status;
+    StaticJsonDocument<1024> status;
     status["ackSequence"]=sequence;
     if (std::isfinite(ambient) && ambient>=-40 && ambient<=100) status["ambientTempC"]=ambient; else status["ambientTempC"]=nullptr;
     if (applied>=0&&applied<=100) status["appliedPwmPct"]=applied; else status["appliedPwmPct"]=nullptr;
-    status["mode"]=remote?"Remote":"Local"; status["communication"]=std::isfinite(ambient)?"Ready":"Fault";
+    // Sensor availability is expressed by ambientTempC=null, not a TCP fault.
+    status["mode"]=remote?"Remote":"Local"; status["communication"]="Ready";
+    status["externalCurveVersion"]=1;status["externalMinimumOutput"]=0;
+    if(appliedConfigRevision.empty()) status["appliedConfigRevision"]=nullptr; else status["appliedConfigRevision"]=appliedConfigRevision;
+    if(appliedDuty>=0&&appliedDuty<=255) status["appliedDuty"]=appliedDuty; else status["appliedDuty"]=nullptr;
+    if(externalRequest>=0&&externalRequest<=255) status["externalRequest"]=externalRequest; else status["externalRequest"]=nullptr;
     auto extensions=status.createNestedObject("extensions"); extensions["slot1"]=nullptr; extensions["slot2"]=nullptr;
     std::string payload; serializeJson(status,payload); response=frame("deviceStatus",++outgoing,payload,true); return true;
 }
@@ -144,6 +143,25 @@ bool Session::telemetry(JsonObjectConst p,uint32_t now) {
     for (auto k : {"sampledAtUtc","decisionAtUtc","cpuTempSampledAtUtc","gpuTempSampledAtUtc","ramSampledAtUtc"}) {
         int64_t at; if (!p[k].isNull() && (!timestamp(p[k],at) || at>captured)) return false;
     }
+    // Optional v1 display extension. It cannot authorize a fan request.
+    auto hyp=p["hyperxBatteryPct"]; auto hypAt=p["hyperxSampledAtUtc"];
+    if(!number(hyp,0,100))return false;
+    int64_t hypTime=0;
+    if(hyp.isNull()!=hypAt.isNull() || (!hypAt.isNull() && (!timestamp(hypAt,hypTime)||hypTime>captured||hypTime<=-62135596800000LL)))return false;
+    HyperXDisplayConfig hxConfig;
+    bool hxPresent=!p["hyperxDisplay"].isNull();
+    if(hxPresent) {
+        auto hx=p["hyperxDisplay"].as<JsonObjectConst>();
+        if(hx.isNull()||!hx["lowEnabled"].is<bool>()||!hx["criticalEnabled"].is<bool>())return false;
+        hxConfig.lowEnabled=hx["lowEnabled"].as<bool>();hxConfig.criticalEnabled=hx["criticalEnabled"].as<bool>();
+        struct HxField{const char* name;int* value;int min,max;};
+        for(auto f:{HxField{"lowPercent",&hxConfig.lowPercent,11,99},{"criticalPercent",&hxConfig.criticalPercent,0,100},
+            {"lowDurationMs",&hxConfig.lowDurationMs,1000,120000},{"criticalDurationMs",&hxConfig.criticalDurationMs,1000,120000},
+            {"lowBlinkCycles",&hxConfig.lowBlinkCycles,1,20},{"criticalBlinkCycles",&hxConfig.criticalBlinkCycles,1,20}}) {
+            if(!integer(hx[f.name],f.min,f.max))return false;*f.value=hx[f.name].as<int>();
+        }
+        if(!hxConfig.valid())return false;
+    }
     bool valid=p["solicitudValida"].as<bool>(); auto mode=p["modoSolicitado"].as<std::string>();
     if (valid==p["solicitud"].isNull() || (!valid&&(!p["cpuTargetLevel"].isNull()||!p["gpuTargetLevel"].isNull())) || (mode!="Automatic"&&!p["demandaPct"].isNull())) return false;
     if (valid) {
@@ -152,8 +170,56 @@ bool Session::telemetry(JsonObjectConst p,uint32_t now) {
         for (auto k : {"sampledAtUtc","cpuTempSampledAtUtc","gpuTempSampledAtUtc"}) { int64_t at; if (!timestamp(p[k],at) || captured-at>=5000) return false; }
         if (mode=="Automatic") { int64_t at; if (p["demandaPct"].isNull() || !timestamp(p["decisionAtUtc"],at) || captured-at>=5000) return false; }
     }
+    ExternalConfig candidate;
+    bool configPresent=!p["externalConfiguration"].isNull();
+    if(configPresent) {
+        auto c=p["externalConfiguration"].as<JsonObjectConst>();
+        if(c.isNull()||!integer(c["schemaVersion"],1,1)||!c["revision"].is<const char*>())return false;
+        auto revision=c["revision"].as<std::string>();if(revision.size()!=32)return false;
+        std::copy(revision.begin(),revision.end(),candidate.revision);
+        struct Field {const char* name;int* value;int min,max;};
+        for(auto f:{Field{"input",&candidate.input,0,1},{"requestMinimum",&candidate.requestMinimum,0,65534},
+            {"requestMaximum",&candidate.requestMaximum,1,65535},{"manualOutput",&candidate.manualOutput,0,255},
+            {"rise",&candidate.rise,1,100},{"fall",&candidate.fall,1,100},{"filterMs",&candidate.filterMs,0,10000},
+            {"hysteresis",&candidate.hysteresis,0,30},{"downHoldMs",&candidate.downHoldMs,0,30000},
+            {"startMs",&candidate.startMs,0,3000},{"startOutput",&candidate.startOutput,0,255}}) {
+            if(!integer(c[f.name],f.min,f.max))return false;*f.value=c[f.name].as<int>();
+        }
+        auto points=c["points"].as<JsonArrayConst>();
+        if(points.isNull()||points.size()<2||points.size()>16)return false;
+        candidate.count=static_cast<int>(points.size());int i=0;
+        for(auto point:points) {
+            if(!integer(point["input"],0,100)||!integer(point["output"],0,255))return false;
+            candidate.points[i++]={point["input"].as<int>(),point["output"].as<int>()};
+        }
+        if(!candidate.valid())return false;
+        // Includes the retained configuration from before this authenticated session.
+        if(hasConfiguration&&std::string(configuration.revision)==candidate.revision) {
+            if(configuration.count!=candidate.count||configuration.input!=candidate.input||configuration.requestMinimum!=candidate.requestMinimum||
+                configuration.requestMaximum!=candidate.requestMaximum||configuration.manualOutput!=candidate.manualOutput||configuration.rise!=candidate.rise||
+                configuration.fall!=candidate.fall||configuration.filterMs!=candidate.filterMs||configuration.hysteresis!=candidate.hysteresis||
+                configuration.downHoldMs!=candidate.downHoldMs||configuration.startMs!=candidate.startMs||configuration.startOutput!=candidate.startOutput)return false;
+            for(int j=0;j<candidate.count;++j)if(configuration.points[j].input!=candidate.points[j].input||configuration.points[j].output!=candidate.points[j].output)return false;
+        }
+    }
+    if(configPresent) {configuration=candidate;hasConfiguration=true;}
+    auto age=[&](const char* field)->uint32_t {
+        int64_t at;
+        return timestamp(p[field],at) ? static_cast<uint32_t>(std::min<int64_t>(5000,captured-at)) : 5000;
+    };
+    if(hxPresent){hyperxDisplay=hxConfig;hasHyperxDisplay=true;}
+    latest.received=true;latest.receivedAt=now;
+    latest.hyperxSampledUtc=hypTime;
+    latest.hyperxPct=hyp.isNull()?NAN:hyp.as<double>();
+    latest.hyperxAge=hypAt.isNull()?180000:static_cast<uint32_t>(std::min<int64_t>(180000,captured-hypTime));
+    latest.usageAge=age("sampledAtUtc");latest.ramAge=age("ramSampledAtUtc");
+    latest.demandAge=age("decisionAtUtc");
+    latest.cpuTempAge=age("cpuTempSampledAtUtc");latest.gpuTempAge=age("gpuTempSampledAtUtc");
+    latest.manual=mode=="Manual";
     latest.cpu=p["cpuUsagePct"].isNull()?-1:p["cpuUsagePct"].as<double>(); latest.gpu=p["gpuUsagePct"].isNull()?-1:p["gpuUsagePct"].as<double>();
     latest.ram=p["ramUsagePct"].isNull()?-1:p["ramUsagePct"].as<double>(); latest.demand=p["demandaPct"].isNull()?-1:p["demandaPct"].as<double>();
+    latest.cpuTempC=p["cpuTempC"].isNull()?NAN:p["cpuTempC"].as<double>();
+    latest.gpuTempC=p["gpuTempC"].isNull()?NAN:p["gpuTempC"].as<double>();
     latest.request=valid?p["solicitud"].as<int>():-1; latest.valid=valid; latest.source=p["powerSource"].as<std::string>();
     if (valid) for (auto stamp:replies) if (stamp.sequence==p["replyToDeviceSequence"].as<int64_t>() && static_cast<uint32_t>(now-stamp.at)<2000) remoteRequest=true;
     return true;

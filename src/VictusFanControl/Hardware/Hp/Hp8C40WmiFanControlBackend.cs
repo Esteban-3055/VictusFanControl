@@ -17,6 +17,7 @@ internal interface IWmiFanGuiGuardian : IAsyncDisposable
     void PersistIntent(int level);
     void Heartbeat();
     Task<FanWmiReleaseEvidence> ReleaseAsync(CancellationToken token);
+    Task<FanWmiReleaseEvidence> ConfirmCompletedReleaseAsync(CancellationToken token);
 }
 
 /// <summary>
@@ -132,7 +133,17 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
         if (!_active)
             return;
         if (_reentryBlocked)
-            throw new InvalidOperationException("WMI session recovery is unresolved; release cannot be retried blindly.");
+        {
+            // A detached guardian may finish after the original wait failed.
+            // Observe its bound process/report only; never repeat native recovery.
+            WmiFanExperimentBoundary.BeginRecovery();
+            using var drain = CancellationTokenSource.CreateLinkedTokenSource(token);
+            drain.CancelAfter(TimeSpan.FromSeconds(10));
+            await HpWmiFanTelemetryReader.WaitForProductionQuiescenceAsync(drain.Token).ConfigureAwait(false);
+            ReleaseEvidence = await _guardian.ConfirmCompletedReleaseAsync(drain.Token).ConfigureAwait(false);
+            CompleteRelease();
+            return;
+        }
 
         _releaseInProgress = true;
         WmiFanExperimentBoundary.BeginRecovery();
@@ -166,7 +177,12 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
                 "guardian lease retained and re-entry blocked: " + guardianFailure.Message, guardianFailure);
         }
 
-        if (!ReleaseEvidence.GuardianLeaseRetired ||
+        CompleteRelease();
+    }
+
+    private void CompleteRelease()
+    {
+        if (ReleaseEvidence is null || !ReleaseEvidence.GuardianLeaseRetired ||
             (_session.MayHaveWritten && (!ReleaseEvidence.ReleaseRequestAccepted || !ReleaseEvidence.LegacyDefaultRequestAccepted)))
         {
             _releaseInProgress = false;

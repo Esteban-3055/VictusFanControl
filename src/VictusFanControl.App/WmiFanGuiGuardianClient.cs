@@ -19,7 +19,7 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
     public string SessionDirectory { get; private set; }
     public string ReportPath => Path.Combine(SessionDirectory, "guardian-report.json");
 
-    internal WmiFanGuiGuardianClient(bool fixture = false, string? fixtureDirectory = null, string? releasedBoundaryDirectory = null, bool productUpperRange = false)
+    internal WmiFanGuiGuardianClient(bool fixture = false, string? fixtureDirectory = null, string? releasedBoundaryDirectory = null, bool productUpperRange = false, bool deferBoundary = false)
     {
         _fixture = fixture;
         _productUpperRange = productUpperRange;
@@ -30,9 +30,14 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
             ? Path.Combine(Path.GetTempPath(), "Victus-FanWmi-fixture-" + Guid.NewGuid().ToString("N"))
             : CreateSessionDirectory());
         Directory.CreateDirectory(SessionDirectory);
-        if (!fixture)
+        if(!deferBoundary)ActivateBoundary(releasedBoundaryDirectory);
+    }
+
+    internal void ActivateBoundary(string? releasedBoundaryDirectory)
+    {
+        if (!_fixture)
         {
-            if(releasedBoundaryDirectory is null) WmiFanExperimentBoundary.Enable(SessionDirectory, true, gui: true, productUpperRange: productUpperRange);
+            if(releasedBoundaryDirectory is null) WmiFanExperimentBoundary.Enable(SessionDirectory, true, gui: true, productUpperRange: _productUpperRange);
             else
             {
                 if(!string.Equals(Path.GetFullPath(releasedBoundaryDirectory),WmiFanExperimentBoundary.SessionDirectory,StringComparison.OrdinalIgnoreCase))
@@ -110,20 +115,44 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
         if (_child is null)
             return new(false, false, !File.Exists(releasedLeasePath), false, releasedReportPath, "NO_SESSION");
 
-        WmiFanGuiGuardianHost.RequestStop(releasedDirectory, "CLIENT_RELEASE");
+        if (_fixture) WmiFanGuiGuardianHost.RequestStop(releasedDirectory, "CLIENT_RELEASE");
+        else await Task.Run(() => WmiFanExperimentBoundary.PrepareGuiReleaseStop(releasedDirectory, TimeSpan.FromSeconds(10))).ConfigureAwait(false);
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
         deadline.CancelAfter(TimeSpan.FromSeconds(20));
         await _child.WaitForExitAsync(deadline.Token).ConfigureAwait(false);
+        return CompleteRelease(releasedDirectory, releasedReportPath, releasedLeasePath);
+    }
+
+    public Task<FanWmiReleaseEvidence> ConfirmCompletedReleaseAsync(CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        // Keep the actual Process handle: PID absence or a report alone cannot
+        // establish completion. This path never signals stop or dispatches WMI.
+        if (_child is null || !_child.HasExited)
+            throw new IOException("WMI guardian completion is not confirmed; release remains blocked.");
+        return Task.FromResult(CompleteRelease(SessionDirectory, ReportPath, LeasePath));
+    }
+
+    private FanWmiReleaseEvidence CompleteRelease(string releasedDirectory, string releasedReportPath, string releasedLeasePath)
+    {
+        if (_child is null || !_child.HasExited ||
+            File.Exists(Path.Combine(releasedDirectory, "native-inflight.json")) ||
+            File.Exists(Path.Combine(releasedDirectory, "native-uncertain.signal")))
+            throw new IOException("WMI native completion is unconfirmed; retain release evidence.");
         if (!File.Exists(releasedReportPath))
             throw new IOException("WMI guardian exited without release report; retain the lease.");
 
         using var report = JsonDocument.Parse(File.ReadAllText(releasedReportPath));
         var r = report.RootElement;
-        if (r.GetProperty("OwnerPid").GetInt32() != _ownerPid ||
+        if (r.GetProperty("SchemaVersion").GetInt32() != 1 ||
+            r.GetProperty("OwnerPid").GetInt32() != _ownerPid ||
             r.GetProperty("OwnerStartUtcTicks").GetInt64() != _ownerStart ||
             r.GetProperty("TargetProfileId").GetString() != Hp8C40TargetProfile.Instance.Id ||
             !r.GetProperty("DirectEcProhibited").GetBoolean() ||
             r.GetProperty("IndependentFirmwareOwnershipVerified").GetBoolean() ||
+            !r.GetProperty("GuardianLeaseRetired").GetBoolean() ||
+            (File.Exists(Path.Combine(releasedDirectory, "write-intent.json")) &&
+                (!r.GetProperty("ReleaseRequestAccepted").GetBoolean() || !r.GetProperty("LegacyDefaultRequestAccepted").GetBoolean())) ||
             r.GetProperty("Failure").ValueKind != JsonValueKind.Null ||
             _child.ExitCode != 0 ||
             File.Exists(releasedLeasePath))
@@ -137,9 +166,6 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
             releasedReportPath,
             r.GetProperty("ExitReason").GetString()!);
 
-        _child.Dispose();
-        _child = null;
-
         if (!_fixture)
         {
             var nextDirectory = CreateSessionDirectory();
@@ -150,6 +176,9 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
             _clock.Restart();
             _released = false;
         }
+
+        _child.Dispose();
+        _child = null;
 
         return evidence;
     }

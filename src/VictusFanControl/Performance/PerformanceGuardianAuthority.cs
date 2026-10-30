@@ -34,12 +34,14 @@ internal sealed class PerformanceGuardianAuthority
     private readonly int _ownerPid;
     private readonly long _ownerStartUtcTicks;
     private readonly Guid _sessionNonce;
+    private readonly bool _allowEmptySession;
 
     internal PerformanceGuardianAuthority(
         string targetProfileId,
         int ownerPid,
         long ownerStartUtcTicks,
-        Guid sessionNonce)
+        Guid sessionNonce,
+        bool allowEmptySession=false)
     {
         if (string.IsNullOrWhiteSpace(
                 targetProfileId))
@@ -69,6 +71,7 @@ internal sealed class PerformanceGuardianAuthority
                 nameof(sessionNonce));
         }
 
+        _allowEmptySession=allowEmptySession;
         _targetProfileId =
             targetProfileId;
 
@@ -170,6 +173,12 @@ internal sealed class PerformanceGuardianAuthority
         };
     }
 
+    internal void CommitDomainSelection(bool cpu,bool gpu)
+    {
+        if(!SessionEnabled||!_allowEmptySession&&!cpu&&!gpu)
+            throw new InvalidOperationException("Domain selection requires an authenticated live GUI session.");
+        CpuEnabled=cpu;GpuEnabled=gpu;
+    }
     private PerformanceGuardianAuthorityResult HandleShutdown()
     {
         CpuEnabled =
@@ -263,7 +272,7 @@ internal sealed class PerformanceGuardianAuthority
             false;
 
         if (!cpu &&
-            !gpu)
+            !gpu && !_allowEmptySession)
         {
             return Reject(
                 "EMPTY_SESSION",

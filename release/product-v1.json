@@ -3,12 +3,13 @@
   "kind": "VictusFanControl.ProductRelease",
   "target": "HP-8C40-9D0R1LA-F18",
   "releaseStage": "target-specific-release",
-  "stableReleaseAuthorized": true,
+  "stableReleaseAuthorized": false,
+  "previewReleaseAuthorized": true,
   "normalAutomatic": "authorized-exact-target",
-  "startup": "optional-persistent-wait-three-fresh-observations-bounded-preparation-retry-coupled-performance",
+  "startup": "optional-persistent-wait-three-fresh-observations-bounded-preparation-retry-selected-performance",
   "reentryAfterInterruption": "explicit-clean-release-fresh-runtime-same-gui-three-fresh-observations",
   "sessionRestart": "explicit-drain-release-check-records-new-process-firmware-retain-draft-and-diagnostics",
-  "automaticThermalContract": "cpu-start90-active95-confirm2000ms-cpu99-immediate-raw-response",
+  "automaticThermalContract": "cpu-start90-active95-confirm2000ms-cpu99-immediate-gpu-strictly-over95",
   "physicalEvidence": [
     "product-gui-source-transition-8c40-2026-10-06.json",
     "product-gui-sustained-load-8c40-2026-10-06.json",
@@ -30,7 +31,11 @@
     "cpu-spike-filter-2s-fresh-continuity-extreme-bypass-and-actual-cooling",
     "background-session-recovery-and-qualified-resumption-on-current-target",
     "extended-30s-per-level-54-52-manual-plateau-and-firmware-return",
-    "current-automatic-54-52-under-load-and-source-lifecycle-transitions"
+    "current-automatic-54-52-under-load-and-source-lifecycle-transitions",
+    "definitive-session-recovery-current-target-without-windows-restart",
+    "habitual-gpu-strictly-over95-and-post-candidate-ac-battery-reconciliation",
+    "current-product-pl1-above45-up-to-pl2-thermal-load-and-firmware-enforcement",
+    "current-independent-cpu-gpu-toggle-with-retained-automatic-and-standby"
   ],
   "evidenceLimits": [
     "Prior thermal observations used the previous GUI 90C confirmation contract.",
@@ -46,7 +51,9 @@
     "Configurable software handoffs and unattended resumption have software fixtures only; firmware thermal throttling, sensor integrity and unknown native-call exclusion are unchanged.",
     "New telemetry grace periods have software regression coverage only; physical thermal and WMI latency behavior still requires observation on the target.",
     "CPU spike suppression is verified in software fixtures; its actual cooling and acoustic effect still requires observation on the target.",
-    "Background session recovery and cancellation are verified with zero-hardware Windows fixtures; the current-target hardware recovery remains to be observed."
+    "Background session recovery and cancellation are verified with zero-hardware Windows fixtures; the current-target hardware recovery remains to be observed.",
+    "Definitive session recovery has zero-hardware fixtures only. Permanent provider/driver hangs and old unknown native markers cannot be proven completed by cancelling a client or closing its process; no unconditional no-reboot recovery is claimed.",
+    "GPU >95 C habitual handoff and eight-second AC/Battery reconciliation have software regression evidence only; no new target hardware or thermal qualification is claimed."
   ],
   "offlinePolicyEvidence": [
     "product-fan-stability-replay-8c40-2026-10-06.json",
@@ -60,17 +67,17 @@
     "normalAutomaticPromoted": false,
     "auxiliaryFault": "not-applicable-no-acquisition"
   },
-  "version": "1.2.12",
+  "version": "1.3.13",
   "physicalPassClaimed": false,
   "manualAutomaticRetryPhysicalValidation": "pending-current-target-observation",
-  "automaticProtectionControls": "independent-cpu-temperature-gpu-temperature-cpu-power-handoffs-clean-resume-10-30-60s-three-attempts",
+  "automaticProtectionControls": "independent-cpu-temperature-gpu-temperature-handoffs-clean-resume-10-30-60s-three-attempts",
   "automaticProtectionDefaults": {
     "cpuThermalHandoff": true,
     "gpuThermalHandoff": true,
-    "powerEnvelopeHandoff": true,
+    "powerEnvelopeHandoff": false,
     "resumeAutomatic": true
   },
-  "unattendedAutomaticResumption": "previous-active-request-only-clean-release-fresh-runtime-three-new-observations-no-unknown-native-reentry",
+  "unattendedAutomaticResumption": "previous-intent-confirmed-release-fresh-runtime-30s-distinct-complete-acquisitions-no-unknown-native-reentry",
   "telemetryTolerance": {
     "scope": "habitual-exact-target-only",
     "fanMaximumAgeMilliseconds": 10000,
@@ -81,8 +88,8 @@
     "auxiliaryFailure": "not-applicable-no-platform-sensor-acquisition"
   },
   "automaticPowerContract": {
-    "cpuHandoffWatts": 60,
-    "cpuHandoffSelectable": true,
+    "cpuHandoffWatts": null,
+    "cpuHandoffSelectable": false,
     "gpuConsumptionHandoff": false,
     "gpuTelemetryCoherenceWatts": [
       0,
@@ -106,8 +113,12 @@
     "stableInventoryMilliseconds": 10000,
     "oneAttemptPerInventory": true,
     "maximumEpisodesBeforeHealthyReset": 3,
-    "healthyAutomaticResetMilliseconds": 60000,
-    "resume": "previous-applied-profile-or-saved-startup-intent-three-new-observations",
+    "healthyAutomaticResetMilliseconds": 600000,
+    "resume": "previous-applied-profile-or-saved-startup-intent-30s-new-complete-acquisitions",
+    "sharedEpisodeBudget": true,
+    "cooldownMilliseconds": 300000,
+    "postCooldownAdmission": "one-attempt-only-with-30s-fresh-stability-and-confirmed-owner",
+    "invalidReadPolicy": "retain-exact-inventory-no-native-attempt-no-transient-retry",
     "userFirmwareCancelsResume": true,
     "scope": "running-gui-including-startup-and-minimized",
     "nativeUncertaintyPolicy": "retain-existing-recovery-blocks"
@@ -193,5 +204,42 @@
     "fans": "HP-WMI-ACPI-2D",
     "platformSensors": "removed",
     "directEc": "prohibited"
+  },
+  "sessionRecovery": {
+    "gpuRetirementProof": "authenticated-reply-or-durable-nonce-target-parent-child-start-session-receipt-and-actual-exit23-not-confirmed-reset",
+    "windowsSessionEnd": "bounded-20000ms-sta-drain-cancelled-query-preserves-session-unknown-completion-retains-records",
+    "manualAction": "Recuperar sesión definitiva",
+    "pipeline": "mandatory-fence-optional-detached-diagnostic-exact-inventory-confirmed-drain-release-only-fresh-runtime",
+    "persistentTelemetryFaultDelayMilliseconds": [
+      10000,
+      30000,
+      60000
+    ],
+    "maximumSessionEpisodesBeforeHealthyReset": 3,
+    "healthyResetMilliseconds": 600000,
+    "automaticResume": "previous-intent-only-30s-fresh-complete-acquisitions-protections-and-user-stop",
+    "nativeCompletionEvidence": "process-local-exact-invocation-return-receipt",
+    "unknownNativePolicy": "retain-records-no-new-dispatch-no-forced-process-or-system-restart",
+    "physicalValidation": "pending-current-target-observation"
+  },
+  "automaticSourceTransition": "bounded-8000ms-post-candidate-guardian-preserves-inertia",
+  "cpuPowerConfiguration": {
+    "minimumWatts": 8,
+    "maximumPl2Watts": 114,
+    "maximumPl1": "configured-pl2",
+    "execution": "exact-target-product-gui-explicit-pl1-to-pl2",
+    "baselineRequired": "unlocked-45-115",
+    "reportedHardwareBoundsEnforced": true,
+    "historicalQualification": "downward-only",
+    "recovery": "owned-fields-release-only"
+  },
+  "performanceControlSelection": {
+    "automaticActivation": "selected-domains",
+    "domains": "cpu-gpu-independent-live-apply",
+    "bothOffAllowed": true,
+    "fanModeOnLimitRelease": "unchanged",
+    "hardwareAcquisition": "lazy-exact-target-domain",
+    "standby": "retain-selected-domains",
+    "failure": "retain-ownership-and-independent-cleanup"
   }
 }

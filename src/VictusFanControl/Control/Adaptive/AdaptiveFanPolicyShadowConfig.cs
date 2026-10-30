@@ -17,12 +17,12 @@ public sealed record AdaptiveFanPolicyShadowConfigDocument
     public int DecreaseConfirmationSamples { get; init; }
     public double DecreaseDeadbandLevels { get; init; }
     public double MaximumSampleGapSeconds { get; init; }
-    public List<AdaptiveFanCurvePoint>? CpuTemperatureCurve { get; init; }
-    public List<AdaptiveFanCurvePoint>? GpuTemperatureCurve { get; init; }
-    public List<AdaptiveFanCurvePoint>? CpuPowerCurve { get; init; }
-    public List<AdaptiveFanCurvePoint>? GpuPowerCurve { get; init; }
-    public List<AdaptiveFanCurvePoint>? CpuLoadCurve { get; init; }
-    public List<AdaptiveFanCurvePoint>? GpuLoadCurve { get; init; }
+    public IReadOnlyList<AdaptiveFanCurvePoint>? CpuTemperatureCurve { get; init; }
+    public IReadOnlyList<AdaptiveFanCurvePoint>? GpuTemperatureCurve { get; init; }
+    public IReadOnlyList<AdaptiveFanCurvePoint>? CpuPowerCurve { get; init; }
+    public IReadOnlyList<AdaptiveFanCurvePoint>? GpuPowerCurve { get; init; }
+    public IReadOnlyList<AdaptiveFanCurvePoint>? CpuLoadCurve { get; init; }
+    public IReadOnlyList<AdaptiveFanCurvePoint>? GpuLoadCurve { get; init; }
 }
 
 /// <summary>
