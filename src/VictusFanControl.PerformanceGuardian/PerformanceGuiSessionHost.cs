@@ -34,7 +34,7 @@ internal static class PerformanceGuiSessionHost
             var recording = new GuiFixtureDomains(fixtureEnableFailure, fixtureUpdateFailure, configuration, fixtureReleaseFailure, fixtureUnknownReleaseFailure);
             using var runtime = new GuardianPerformancePowerSourceRuntime(new GuiFixtureSource(),
                 new RecordingGuardianCpuSourceTransitionSink(), new RecordingGuardianGpuSourceTransitionSink(),
-                new WindowsGuardianPowerSourceNotificationListenerFactory());
+                new WindowsGuardianPowerSourceNotificationListenerFactory(),allowEmptySelection:true);
             return await new PerformanceGuardianHost(options with { MutexName = "Local\\VFC.GuiFixture." + options.SessionNonce.ToString("N") }, recording, runtime)
                 { DropRecoveryReplyInFixture=fixtureLostReply }
                 .RunAsync(CancellationToken.None).ConfigureAwait(false);
@@ -58,35 +58,39 @@ internal static class PerformanceGuiSessionHost
         if (File.Exists(cpuJournal) || File.Exists(gpuJournal))
             throw new InvalidOperationException("Existing CPU/GPU journal requires recovery; it will not be overwritten.");
 
-        using var cpuBackend = configuration.CpuEnabled ? new PawnIoCpuPowerLimitBackend(module, hardwareWritesAuthorized: true,
-            executionPolicy:CpuPowerExecutionPolicy.ProductPl1ToPl2) : null;
-        if (cpuBackend is not null)
+        GuiPerformanceDomain CreateCpu(PerformanceGuiSessionConfiguration next)
         {
-            var baseline = cpuBackend.Read();
-            if (baseline.Locked || baseline.Pl1Watts != 45 || baseline.Pl2Watts != 115)
-                throw new InvalidOperationException("CPU baseline must remain unlocked 45/115 W; close external power writers first.");
+            var backend=new PawnIoCpuPowerLimitBackend(module,hardwareWritesAuthorized:true,executionPolicy:CpuPowerExecutionPolicy.ProductPl1ToPl2);
+            try
+            {
+                var baseline=backend.Read();
+                if(baseline.Locked||baseline.Pl1Watts!=45||baseline.Pl2Watts!=115)
+                    throw new InvalidOperationException("CPU baseline must remain unlocked 45/115 W; close external power writers first.");
+                var domain=new QualifiedCpuGuardianDomainLifecycle(backend,new JsonCpuPowerSessionJournal(cpuJournal,next.TargetProfileId),
+                    next.CpuPresets(),executionPolicy:CpuPowerExecutionPolicy.ProductPl1ToPl2);
+                return new(domain,(updated,confirmed)=>domain.UpdatePresets(updated.CpuPresets(),confirmed),domain,null,domain.Dispose);
+            }
+            catch{backend.Dispose();throw;}
         }
-        using var nvml = configuration.GpuEnabled ? new NvmlClient("NVIDIA GeForce RTX 4060 Laptop GPU", requirePreferredDevice: true) : null;
-        var gpuBackend = nvml is not null ? new NvmlGpuClockLimitBackend(nvml, hardwareWritesAuthorized: true) : null;
-        if (gpuBackend is not null && !gpuBackend.Capabilities.HasCompleteCommandSurface)
-            throw new InvalidOperationException("GPU NVML Set/Reset unavailable.");
-        using var cpu = cpuBackend is not null ? new QualifiedCpuGuardianDomainLifecycle(cpuBackend,
-            new JsonCpuPowerSessionJournal(cpuJournal, configuration.TargetProfileId), configuration.CpuPresets(),
-            executionPolicy:CpuPowerExecutionPolicy.ProductPl1ToPl2) : null;
-        using var gpu = gpuBackend is not null ? new QualifiedGpuGuardianDomainLifecycle(gpuBackend,
-            new JsonGpuClockSessionJournal(gpuJournal, configuration.TargetProfileId), configuration.GpuPresets()) : null;
-        using var combined = cpu is not null && gpu is not null ? new CombinedGuardianDomainLifecycle(cpu, cpu, gpu, gpu) : null;
-        IGuardianDomainLifecycle domain = (IGuardianDomainLifecycle?)combined ?? (IGuardianDomainLifecycle?)cpu ?? gpu!;
+        GuiPerformanceDomain CreateGpu(PerformanceGuiSessionConfiguration next)
+        {
+            var nvml=new NvmlClient("NVIDIA GeForce RTX 4060 Laptop GPU",requirePreferredDevice:true);
+            try
+            {
+                var backend=new NvmlGpuClockLimitBackend(nvml,hardwareWritesAuthorized:true);
+                if(!backend.Capabilities.HasCompleteCommandSurface)throw new InvalidOperationException("GPU NVML Set/Reset unavailable.");
+                var domain=new QualifiedGpuGuardianDomainLifecycle(backend,new JsonGpuClockSessionJournal(gpuJournal,next.TargetProfileId),next.GpuPresets());
+                return new(domain,(updated,confirmed)=>domain.UpdatePresets(updated.GpuPresets(),confirmed),null,domain,
+                    ()=>{try{domain.Dispose();}finally{nvml.Dispose();}});
+            }
+            catch{nvml.Dispose();throw;}
+        }
+        using var domains=new SelectableGuiPerformanceDomains(configuration,CreateCpu,CreateGpu);
         using var source = new GuardianPerformancePowerSourceRuntime(new WindowsPerformancePowerSourceReader(),
-            (ICpuPowerSourceTransitionSink?)combined ?? (ICpuPowerSourceTransitionSink?)cpu ?? new RecordingGuardianCpuSourceTransitionSink(),
-            (IGpuClockSourceTransitionSink?)combined ?? (IGpuClockSourceTransitionSink?)gpu ?? new RecordingGuardianGpuSourceTransitionSink(),
-            new WindowsGuardianPowerSourceNotificationListenerFactory());
-        using var standby = new GuardianModernStandbyLifecycleRuntime(source, domain,
+            domains,domains,new WindowsGuardianPowerSourceNotificationListenerFactory(),allowEmptySelection:true);
+        using var standby = new GuardianModernStandbyLifecycleRuntime(source, domains,
             new WindowsGuardianModernStandbyNotificationListenerFactory());
-        var configured = new ConfiguredGuiPerformanceDomains(domain, configuration,
-            cpu is null ? null : (next, confirmed) => cpu.UpdatePresets(next.CpuPresets(), confirmed),
-            gpu is null ? null : (next, confirmed) => gpu.UpdatePresets(next.GpuPresets(), confirmed));
-        return await new PerformanceGuardianHost(options, configured, standby).RunAsync(CancellationToken.None).ConfigureAwait(false);
+        return await new PerformanceGuardianHost(options, domains, standby).RunAsync(CancellationToken.None).ConfigureAwait(false);
     }
     private sealed class GuiFixtureSource : IPerformancePowerSourceReader
     {
@@ -94,7 +98,7 @@ internal static class PerformanceGuiSessionHost
     }
 
     private sealed class GuiFixtureDomains(bool failEnable, bool failUpdate, PerformanceGuiSessionConfiguration initial,
-        bool failRelease, bool unknownRelease) : IGuardianDomainLifecycle, IGuardianConfigurableDomains
+        bool failRelease, bool unknownRelease) : IGuardianDomainLifecycle, IGuardianSelectableDomains
     {
         private readonly RecordingGuardianDomainLifecycle _recording = new();
         private bool _active;
@@ -104,15 +108,15 @@ internal static class PerformanceGuiSessionHost
         public void UpdateConfiguration(PerformanceGuiSessionConfiguration next, PerformancePowerSourceKind source)
         {
             next.Validate();
-            if (!_active || next.CpuEnabled != Configuration.CpuEnabled || next.GpuEnabled != Configuration.GpuEnabled || source != PerformancePowerSourceKind.Ac)
+            if (!_active || source != PerformancePowerSourceKind.Ac)
                 throw new InvalidOperationException("Fixture update admission rejected.");
             if (failUpdate) throw new IOException("Synthetic update failure; prior committed configuration retained.");
             Configuration = next;
         }
         public GuardianDomainLifecycleSnapshot Snapshot => _recording.Snapshot with
         {
-            CpuState = _releaseFailed ? "Disabled" : _active ? "Active" : "Disabled",
-            GpuState = _releaseFailed ? "RecoveryRequired" : _active ? "ActiveUnverified" : "Disabled",
+            CpuState = _releaseFailed ? "Disabled" : _active&&Configuration.CpuEnabled ? "Active" : "Disabled",
+            GpuState = _releaseFailed ? "RecoveryRequired" : _active&&Configuration.GpuEnabled ? "ActiveUnverified" : "Disabled",
             RecoveryGpuSession = _releaseFailed && failRelease ? _session : null
         };
         public ValueTask EnableAsync(bool cpuEnabled, bool gpuEnabled, PerformancePowerSourceKind source, CancellationToken token)

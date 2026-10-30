@@ -50,6 +50,7 @@ internal static partial class ProductGuiSelfTest
             TestSourceTheme(Require);
             TestCpuPowerEditor(Require);
             TestLivePerformanceApply(Require);
+            TestIndependentPerformanceControls(Require);
             TestSessionLogs(Require);
             TestSessionRestart(Require);
             PerformanceRecoveryPreviewSelfTest.Run(Require);
@@ -768,7 +769,8 @@ internal static partial class ProductGuiSelfTest
         var expected=form.Draft.PerformanceConfiguration();
         require(runtime.Commands==1&&runtime.LastPerformance==expected&&expected.AcPl1Watts==80&&expected.AcPl2Watts==80,"Live Apply clipped the PL1/PL2 request above 44 W.");
         runtime.Publish(active with{AppliedPerformance=expected});require(!canvas.CanApplyPerformance&&canvas.AppliedCpu()=="80 / 80 W","Confirmed values left Apply enabled or displayed old limits.");
-        form.HandleCommand("cpu-toggle");require(form.Draft.CpuEnabled,"Active CPU domain checkbox silently changed ownership.");
+        form.HandleCommand("cpu-toggle");require(!form.Draft.CpuEnabled&&runtime.Commands==1&&canvas.State.FanMode=="Automatic","Active CPU selection was blocked or changed ownership before Apply.");
+        form.HandleCommand("cpu-toggle");
         form.EditValue("gpu",1801);require(canvas.CanApplyPerformance,"Exact GPU edit did not enable Apply.");
         foreach(var blocked in new[]{active with{AppliedPerformance=expected,PerformanceUpdating=true},active with{AppliedPerformance=expected,LifecycleBlocked=true},
             active with{AppliedPerformance=expected,AutomaticSourceTransition="Battery"},active with{AppliedPerformance=expected,AutomaticPreparing=true},

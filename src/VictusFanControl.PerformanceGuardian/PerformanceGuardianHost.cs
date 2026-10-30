@@ -215,7 +215,7 @@ internal sealed class PerformanceGuardianHost
                     _options.TargetProfileId,
                     _options.OwnerPid,
                     _options.OwnerStartUtcTicks,
-                    _options.SessionNonce);
+                    _options.SessionNonce,allowEmptySession:_domains is IGuardianSelectableDomains);
 
             if (!string.IsNullOrWhiteSpace(
                     _options.ReadyPath))
@@ -668,7 +668,16 @@ internal sealed class PerformanceGuardianHost
                         throw new InvalidOperationException("This Guardian does not support live configuration updates.");
                     var next = request.Configuration ?? throw new InvalidOperationException("Missing validated presets.");
                     next.Validate();
-                    runtime.ExecuteConfigurationUpdate(source => configured.UpdateConfiguration(next, source));
+                    try
+                    {
+                        runtime.ExecuteConfigurationUpdate(source => configured.UpdateConfiguration(next, source),
+                            ()=> (configured.Configuration.CpuEnabled,configured.Configuration.GpuEnabled));
+                    }
+                    finally
+                    {
+                        authority.CommitDomainSelection(configured.Configuration.CpuEnabled,configured.Configuration.GpuEnabled);
+                        result=result with{CpuEnabled=authority.CpuEnabled,GpuEnabled=authority.GpuEnabled};
+                    }
                     result = result with { Code = "CONFIGURATION_UPDATED", Message = "Live presets updated in the original ownership session." };
                 }
                 catch (Exception ex)

@@ -44,13 +44,16 @@ internal static class PerformanceGuiConfigurationUpdateSelfTest
                 "GUI status could not reconcile a missed Battery notification through the lifecycle wrapper.");
             reader.Source=PerformancePowerSourceKind.Ac;standby.CaptureStatus(s=>s,true);
             Require(cpuSource.Calls==2&&gpuSource.Calls==2,"Battery-to-AC status reconciliation did not dispatch both selected domains.");
+            standby.ExecuteConfigurationUpdate(_=>{},()=> (false,true));
             reader.Source=PerformancePowerSourceKind.Ac;standbyListener.Emit(GuardianModernStandbySignalKind.SessionDisplayOff);
             try{standby.ExecuteConfigurationUpdate(_=>updates++);throw new Exception("display Off accepted");}catch(InvalidOperationException){}
             Require(updates==1,"display/lifecycle fence wrote presets");
             var reads=reader.Reads;reader.Source=PerformancePowerSourceKind.Battery;standby.CaptureStatus(s=>s,true);
             Require(reader.Reads==reads&&cpuSource.Calls==2&&gpuSource.Calls==2,
                 "Status bypassed display-Off release and queried/reacquired a profile.");
-            output.WriteLine("PASS GUI source status fallback through lifecycle wrapper; display-Off blocks reconciliation and reentry.");
+            standbyListener.Emit(GuardianModernStandbySignalKind.SessionDisplayOn);
+            Require(!domains.Snapshot.LastCpuEnabled&&domains.Snapshot.LastGpuEnabled,"Display-On reenabled an explicitly disabled CPU.");
+            output.WriteLine("PASS GUI source status fallback through lifecycle wrapper; display-Off blocks reconciliation; display-On retains independent selection.");
             output.WriteLine("PASS live update source and display/standby fences; fake IO only");
             return 0;
         }

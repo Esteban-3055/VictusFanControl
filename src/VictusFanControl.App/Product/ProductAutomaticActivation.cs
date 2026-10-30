@@ -16,7 +16,7 @@ internal sealed class ProductAutomaticActivation
     internal bool Pending { get { lock (_sync) return _pending.HasValue; } }
     internal Ticket Begin(ProductProfiles profiles)
     {
-        var frozen = ProductProfilesStore.Copy(profiles with { CpuEnabled = true, GpuEnabled = true });
+        var frozen = ProductProfilesStore.Copy(profiles);
         frozen.PerformanceConfiguration().Validate();
         lock (_sync)
         {
@@ -41,12 +41,16 @@ internal sealed class ProductAutomaticActivation
         finally { lock (_sync) if (_pending == ticket.Generation) _pending = null; }
     }
     internal static async Task PreparePerformanceAsync(PerformanceGuiSessionConfiguration expected, bool hasProcess,
-        PerformanceGuiSessionConfiguration? applied, Func<Task> refreshStatus, Func<Task> enable)
+        PerformanceGuiSessionConfiguration? applied, Func<Task> refreshStatus, Func<Task> enable,Func<Task>? update=null)
     {
         if (hasProcess)
         {
-            if (applied != expected) throw new InvalidOperationException("Libera CPU/GPU antes de activar Automatic con límites diferentes o una sesión parcial.");
-            await refreshStatus().ConfigureAwait(false);
+            if(applied!=expected)
+            {
+                if(update is null)throw new InvalidOperationException("La sesión necesita una actualización explícita antes de Automatic.");
+                await update().ConfigureAwait(false);
+            }
+            else await refreshStatus().ConfigureAwait(false);
         }
         else await enable().ConfigureAwait(false);
     }
@@ -54,11 +58,15 @@ internal sealed class ProductAutomaticActivation
     {
         Cancel(); await restoreFans().ConfigureAwait(false); await releaseLimits().ConfigureAwait(false);
     }
+    internal static bool PerformanceHealthy(PerformanceGuiSessionConfiguration expected,
+        PerformanceGuiSessionConfiguration? applied,PerformanceGuardianResponse? status,bool fresh)=>
+        applied==expected&&fresh&&status is{Ok:true,SessionEnabled:true,RuntimeFailure:null}&&
+        status.CpuEnabled==expected.CpuEnabled&&status.GpuEnabled==expected.GpuEnabled&&
+        (expected.CpuEnabled?status.CpuState=="Active":status.CpuState=="Disabled")&&
+        (expected.GpuEnabled?status.GpuState=="ActiveUnverified":status.GpuState=="Disabled");
     internal static bool PerformanceReady(PerformanceGuiSessionConfiguration expected,
         PerformanceGuiSessionConfiguration? applied, PerformanceGuardianResponse? status, bool fresh, string source) =>
-        expected.CpuEnabled && expected.GpuEnabled && applied == expected && fresh && source is "Ac" or "Battery" &&
-        status is { Ok: true, SessionEnabled: true, CpuEnabled: true, GpuEnabled: true,
-            CpuState: "Active", GpuState: "ActiveUnverified", RuntimeFailure: null } && status.PowerSource == source;
+        source is "Ac" or "Battery"&&PerformanceHealthy(expected,applied,status,fresh)&&status!.PowerSource==source;
 }
 
 /// <summary>Bounded source reconciliation. A cached pre-change response cannot authorize a handoff.</summary>
@@ -78,9 +86,8 @@ internal sealed class ProductAutomaticSourceTransition
     internal bool Observe(string source, string selected, PerformanceGuiSessionConfiguration expected,
         PerformanceGuiSessionConfiguration? applied, PerformanceGuardianResponse? status, bool fresh)
     {
-        if (source is not ("Ac" or "Battery") || !expected.CpuEnabled || !expected.GpuEnabled || !fresh || applied != expected ||
-            status is not { Ok: true, SessionEnabled: true, CpuEnabled: true, GpuEnabled: true,
-                CpuState: "Active", GpuState: "ActiveUnverified", RuntimeFailure: null })
+        if (source is not ("Ac" or "Battery") || status is null ||
+            !ProductAutomaticActivation.PerformanceHealthy(expected,applied,status,fresh))
             throw new InvalidOperationException("Transición Automatic sin fuente válida o confirmación vigente de CPU/GPU; volver a Firmware.");
         var now = _clock();
         if (!_started.HasValue && source == selected && ProductAutomaticActivation.PerformanceReady(expected, applied, status, fresh, source)) return true;

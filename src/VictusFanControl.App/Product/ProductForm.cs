@@ -296,7 +296,7 @@ internal sealed partial class ProductForm : Form
         if(id.StartsWith("hyperx-",StringComparison.Ordinal)&&_hyperXPage is{} headset){if(!_canvas.Busy)_=headset.ExecuteAsync(id[7..]);return;}
         if(id.StartsWith("external-curve-",StringComparison.Ordinal)&&_canvas.ExternalCurve is{} curve){_=curve.ExecuteAsync(id[15..]);return;}
         if(id!="external-cooling"&&id.StartsWith("external-",StringComparison.Ordinal)&&_externalCoolingPage is{} external){_=external.ExecuteAsync(id);return;}
-        if (id is "firmware" or "fan-mode-0" or "fan-mode-1" or "performance-release" or "session-restart")
+        if (id is "firmware" or "fan-mode-0" or "fan-mode-1" or "session-restart")
             _automaticRecoveryResumeSuppressed = true;
         if (_recoveryTask is not null && id is "firmware" or "fan-mode-0" or "fan-mode-1" or "performance-release")
         {
@@ -315,7 +315,7 @@ internal sealed partial class ProductForm : Form
         }
         if(id is "session-restart" or "firmware" or "fan-mode-0" or "fan-mode-1" or "fan-mode-2" or "performance-apply" or "performance-release")
             _startupAutomatic?.Cancel("Automático al iniciar cancelado por el usuario.");
-        if(id is "session-restart" or "firmware" or "fan-mode-0" or "fan-mode-1" or "performance-release")_automaticResumption.Cancel();
+        if(id is "session-restart" or "firmware" or "fan-mode-0" or "fan-mode-1")_automaticResumption.Cancel();
         if(id=="session-restart"){_ = RestartSessionAsync();return;}
         if(id=="session-force-recovery"){_ = ForceSessionRecoveryAsync();return;}
         if(id.StartsWith("page-")){_canvas.Page=(ProductPage)int.Parse(id[5..]);_canvas.SelectedNode=-1;_canvas.Invalidate();return;}
@@ -356,7 +356,6 @@ internal sealed partial class ProductForm : Form
         if(id=="fan-mode-2"&&_canvas.State.LifecycleBlocked){_ = RetryAutomaticAsync();return;}
         if(id=="manual-apply"&&(!_canvas.State.ManualAuthorized||_canvas.State.FanMode!="Manual"||_canvas.State.Runtime!="Healthy"||_canvas.State.LifecycleBlocked))return;
         if(id=="performance-apply"&&!_canvas.CanApplyPerformance)return;
-        if(id is "cpu-toggle" or "gpu-toggle"&&_canvas.State.PerformanceProcessPresent)return;
         if(id=="performance-release"&&!_canvas.State.PerformanceProcessPresent)return;
         if(id is "pl1-text" or "pl2-text" or "gpu-text")
         {
@@ -417,7 +416,9 @@ internal sealed partial class ProductForm : Form
                 });break;
             case "manual-apply":_ = RunAsync(()=>_runtime?.ApplyManualAsync(_canvas.ManualLevel)??Task.CompletedTask);break;
             case "performance-apply":_ = RunAsync(()=>{var profiles=_canvas.PerformanceDraft;profiles.Validate();profiles.PerformanceConfiguration().Validate();return _runtime?.ApplyPerformanceAsync(profiles)??Task.CompletedTask;});break;
-            case "performance-release":_ = RunAsync(()=>_runtime?.ReleasePerformanceAsync()??Task.CompletedTask);break;
+            case "performance-release":
+                Change(_draft with{CpuEnabled=false,GpuEnabled=false});
+                _ = RunAsync(()=>_runtime?.ReleasePerformanceAsync()??Task.CompletedTask);break;
             case "node-add":AddNode();break;
             case "node-remove":RemoveNode();break;
             case "curve-reset":ResetCurve(false);break;

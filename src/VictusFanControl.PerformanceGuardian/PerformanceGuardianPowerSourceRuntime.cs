@@ -69,6 +69,7 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
         new();
 
     private readonly IPerformancePowerSourceReader _reader;
+    private readonly bool _allowEmptySelection;
     private readonly ICpuPowerSourceTransitionSink _cpu;
     private readonly IGpuClockSourceTransitionSink _gpu;
     private readonly IGuardianPowerSourceNotificationListenerFactory
@@ -100,8 +101,10 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
         IPerformancePowerSourceReader reader,
         ICpuPowerSourceTransitionSink cpu,
         IGpuClockSourceTransitionSink gpu,
-        IGuardianPowerSourceNotificationListenerFactory listenerFactory)
+        IGuardianPowerSourceNotificationListenerFactory listenerFactory,
+        bool allowEmptySelection=false)
     {
+        _allowEmptySelection=allowEmptySelection;
         _reader =
             reader ??
             throw new ArgumentNullException(
@@ -161,7 +164,7 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
         ThrowIfDisposed();
 
         if (!cpuEnabled &&
-            !gpuEnabled)
+            !gpuEnabled && !_allowEmptySelection)
         {
             throw new InvalidOperationException(
                 "Performance Guardian source runtime requires at least one explicitly enabled domain.");
@@ -218,7 +221,7 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
         }
     }
 
-    public void ExecuteConfigurationUpdate(Action<PerformancePowerSourceKind> update)
+    public void ExecuteConfigurationUpdate(Action<PerformancePowerSourceKind> update,Func<(bool Cpu,bool Gpu)>? selection=null)
     {
         ThrowIfDisposed();
         lock (_sync)
@@ -227,7 +230,11 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
             if (!_active || _failure is not null || !observed.Succeeded ||
                 observed.Source is not (PerformancePowerSourceKind.Ac or PerformancePowerSourceKind.Battery) || observed.Source != _lastSource)
                 throw new InvalidOperationException("Source runtime is not ready for an update; wait for confirmed stable AC/Battery.");
-            update(observed.Source);
+            try{update(observed.Source);}
+            finally
+            {
+                if(selection is not null){var domains=selection();_cpuEnabled=domains.Cpu;_gpuEnabled=domains.Gpu;}
+            }
             var after = _reader.Read();
             if (!after.Succeeded || after.Source != observed.Source)
                 throw new InvalidOperationException("Power source changed during preset update; inspect committed domain values.");

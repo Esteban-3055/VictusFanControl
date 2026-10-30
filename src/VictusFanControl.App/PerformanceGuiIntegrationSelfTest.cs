@@ -16,7 +16,6 @@ internal static class PerformanceGuiIntegrationSelfTest
             new PerformanceGuiSessionConfiguration().Validate();
             foreach (var invalid in new[]
             {
-                new PerformanceGuiSessionConfiguration { CpuEnabled = false, GpuEnabled = false },
                 new PerformanceGuiSessionConfiguration { AcPl1Watts = 115, AcPl2Watts = 115 },
                 new PerformanceGuiSessionConfiguration { BatteryPl1Watts = 20, BatteryPl2Watts = 15 },
                 new PerformanceGuiSessionConfiguration { TargetProfileId = "88F8" }
@@ -94,7 +93,10 @@ internal static class PerformanceGuiIntegrationSelfTest
             var configuration = new PerformanceGuiSessionConfiguration { AcPl1Watts = 20, AcPl2Watts = 40 };
             try
             {
-                var enabled = await client.EnableAsync(configuration);
+                var idle=configuration with{CpuEnabled=false,GpuEnabled=false};
+                Require((await client.EnableAsync(idle)).Ok&&client.LimitsActive&&client.LastStatus is{CpuState:"Disabled",GpuState:"Disabled"},
+                    "Initial no-limit GUI session was rejected or claimed active hardware.");
+                var enabled = await client.UpdateAsync(configuration);
                 Require(enabled.Ok && client.LimitsActive && client.AppliedConfiguration == configuration, "GUI enable state.");
                 Require((await client.StatusAsync())?.CpuState == "Active", "GUI status round trip.");
                 var rejected = false;
@@ -108,8 +110,15 @@ internal static class PerformanceGuiIntegrationSelfTest
                 Require((await client.UpdateAsync(updated)).Ok&&client.AppliedConfiguration==updated&&client.LimitsActive&&launched.Id==guardianPid,
                     "Live IPC update replaced owner or failed to confirm presets.");
                 Require((await client.StatusAsync())?.Configuration==updated,"STATUS lost live committed presets.");
-                rejected=false;try{await client.UpdateAsync(updated with{GpuEnabled=false});}catch(InvalidOperationException){rejected=true;}
-                Require(rejected&&client.AppliedConfiguration==updated,"Domain selection changed inside an active session.");
+                foreach(var selection in new[]{(false,true),(true,false),(false,false),(true,true)})
+                {
+                    var selected=updated with{CpuEnabled=selection.Item1,GpuEnabled=selection.Item2};
+                    Require((await client.UpdateAsync(selected)).Ok&&client.AppliedConfiguration==selected&&launched.Id==guardianPid,
+                        "Independent domain selection replaced the Guardian owner or was rejected.");
+                    var selectedStatus=await client.StatusAsync();
+                    Require(selectedStatus?.CpuState==(selection.Item1?"Active":"Disabled")&&selectedStatus.GpuState==(selection.Item2?"ActiveUnverified":"Disabled"),
+                        "Independent selection reported false active/disabled state.");
+                }
                 Require((await client.UpdateAsync(updated)).Ok&&client.HasProcess,"Repeated unchanged update lost the owner.");
                 var ipcGate=(SemaphoreSlim)typeof(PerformanceGuardianClient).GetField("_gate",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.GetValue(client)!;
                 await ipcGate.WaitAsync();

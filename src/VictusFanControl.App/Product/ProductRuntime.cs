@@ -473,7 +473,16 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
                         var configuration = ticket.Performance;
                         await ProductAutomaticActivation.PreparePerformanceAsync(configuration, _performance.HasProcess,
                             _performance.AppliedConfiguration, async () => { await _performance.StatusAsync(); },
-                            async () => { _requestedPerformance = configuration; await _performance.EnableAsync(configuration); });
+                            async () => { _requestedPerformance = configuration; await _performance.EnableAsync(configuration); },
+                            async () =>
+                            {
+                                await _performance.UpdateAsync(configuration,token=>FanCommandAsync(async()=>
+                                {
+                                    token.ThrowIfCancellationRequested();await RefreshAutomaticAdmissionAsync(ticket);
+                                    AutomaticAdmission(_automaticReview is null?ticket.Profiles.Protections:new());
+                                }));
+                                _requestedPerformance=_performance.AppliedConfiguration;
+                            });
                     },
                     () => FanCommandAsync(async () =>
                     {
@@ -482,7 +491,7 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
                         if (current != slot) throw new InvalidOperationException("La fuente cambió durante la preparación; selecciona Automatic de nuevo con la fuente estable.");
                         if (!ProductAutomaticActivation.PerformanceReady(ticket.Performance, _performance.AppliedConfiguration,
                             _performance.LastStatus, _performance.LastStatusFresh, current.ToString()))
-                            throw new InvalidOperationException("CPU/GPU no confirmaron ambos límites para la fuente real; Automatic permanece en Firmware.");
+                            throw new InvalidOperationException("CPU/GPU no confirmaron la selección solicitada para la fuente real; Automatic permanece en Firmware.");
                         await _controller.ConfigureAutomaticAsync(ticket.Profiles.Get(current).Fan, CancellationToken.None);
                         // Configuration may await a controller lock; recheck cancellation before committing.
                         await RefreshAutomaticAdmissionAsync(ticket,onlyIfExpired:true);
@@ -678,9 +687,8 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
             {
                 admissionToken.ThrowIfCancellationRequested();
                 var source=new WindowsPerformancePowerSourceReader().Read().Source.ToString();
-                if (!CanUpdatePerformance(source) || _performance.AppliedConfiguration is not { } old ||
-                    old.CpuEnabled!=configuration.CpuEnabled || old.GpuEnabled!=configuration.GpuEnabled)
-                    throw new InvalidOperationException("Actualizar requiere datos vigentes, sesión CPU/GPU activa y la misma selección de dominios. Espera una fuente estable.");
+                if (!CanUpdatePerformance(source) || _performance.AppliedConfiguration is not { } old)
+                    throw new InvalidOperationException("Actualizar requiere datos vigentes y una sesión CPU/GPU confirmada. Espera una fuente estable.");
                 if (old==configuration) return Task.CompletedTask;
                 if (_controller.Mode==AdaptiveFanProductionMode.Automatic)
                 {
@@ -751,13 +759,13 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
         _worker.StateMachine.State==SystemState.Healthy&&_performance.LimitsActive&&_performance.LastStatus?.PowerSource==source&&
         source is "Ac" or "Battery"&&_fans.Authority is not (FanAuthority.Restoring or FanAuthority.Faulted)&&
         ProductPerformanceUpdate.HasCurrentTelemetry(_snapshot,DateTimeOffset.UtcNow);
-    public Task ReleasePerformanceAsync() => _automaticActivation.ReleaseLimitsAsync(
-        // Restore fans before removing the prerequisite limits; do not hold the Performance queue while releasing WMI.
-        () => FanCommandAsync(async () =>
-        {
-            if (_controller.Mode == AdaptiveFanProductionMode.Automatic) await SetFanModeAsync(AdaptiveFanProductionMode.Firmware);
-        }),
-        () => CommandAsync(async () => { await _performance.CloseAsync(); Publish("CPU/GPU liberados mediante Performance Guardian."); }));
+    public Task ReleasePerformanceAsync()=>CommandAsync(async()=>
+    {
+        if(!_performance.HasProcess)return;
+        var applied=_performance.AppliedConfiguration??throw new InvalidOperationException("Falta la selección CPU/GPU confirmada.");
+        await UpdatePerformanceAsync(applied with{CpuEnabled=false,GpuEnabled=false});
+        Publish("Límites CPU/GPU desactivados. Se conserva el modo de ventiladores.");
+    });
     private Task CommandAsync(Func<Task> command) => RunCommandAsync(_commands,command);
     private Task FanCommandAsync(Func<Task> command) => RunCommandAsync(_fanCommands,command);
     private Task RunCommandAsync(SemaphoreSlim domain,Func<Task> command) => Task.Run(async () =>
@@ -861,7 +869,7 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
                 PerformanceRecovery = recovery,
                 CanApplyPerformance = recovery?.Pending!=true&&!_performanceUpdating&&!_automaticActivation.Pending&&!_sourceTransition.Pending&&
                     (_target == Hp8C40TargetProfile.Instance && PerformanceAdmissionPermitted(_closing,_lifecycleBlocked,_performance.HasProcess,_worker.StateMachine.State,_fans.Authority) || CanUpdatePerformance(source)),
-                PerformanceActive = _performance.LimitsActive, PerformanceProcessPresent = _performance.HasProcess,
+                PerformanceActive = _performance.LimitsActive&&_performance.AppliedConfiguration is{ } limits&&(limits.CpuEnabled||limits.GpuEnabled), PerformanceProcessPresent = _performance.HasProcess,
                 PerformanceUpdating = _performanceUpdating,
                 PlatformRetention = null,
                 CpuState = p?.CpuState ?? (_performance.HasProcess || recovery?.Pending==true ? "Recovering" : "Disabled"), GpuState = p?.GpuState ?? (_performance.HasProcess || recovery?.Pending==true ? "Recovering" : "Disabled"),

@@ -38,8 +38,10 @@ internal sealed class PerformanceGuardianClient
         }
     }
     internal static bool IsStatusFresh(long nowTicks,long observedTicks,bool ownerAlive) => ownerAlive&&observedTicks>0&&nowTicks>=observedTicks&&nowTicks-observedTicks<TimeSpan.FromSeconds(6).Ticks;
+    // Readiness of the selected domains; an idle, supervised no-limit session is valid too.
     internal bool LimitsActive => LastStatusFresh && LastStatus is { Ok:true,SessionEnabled:true,RuntimeFailure:null } s &&
-        (!s.CpuEnabled || s.CpuState == "Active") && (!s.GpuEnabled || s.GpuState == "ActiveUnverified");
+        (s.CpuEnabled?s.CpuState=="Active":s.CpuState=="Disabled") &&
+        (s.GpuEnabled?s.GpuState=="ActiveUnverified":s.GpuState=="Disabled");
 
     internal PerformanceGuardianClient(string modulesDirectory, Func<ProcessStartInfo, Process?>? startProcess = null,
         Func<PerformanceRecoveryPreview>? recoveryPreview = null)
@@ -103,9 +105,8 @@ internal sealed class PerformanceGuardianClient
         await _gate.WaitAsync(admission.Token).ConfigureAwait(false);
         try
         {
-            if (_process is null || _process.HasExited || !LimitsActive || AppliedConfiguration is null ||
-                configuration.CpuEnabled != AppliedConfiguration.CpuEnabled || configuration.GpuEnabled != AppliedConfiguration.GpuEnabled)
-                throw new InvalidOperationException("Actualizar requiere la misma sesión activa y selección CPU/GPU.");
+            if (_process is null || _process.HasExited || !LimitsActive || AppliedConfiguration is null)
+                throw new InvalidOperationException("Actualizar requiere la misma sesión sana y una selección CPU/GPU confirmada.");
             // A pending STATUS owns the transport only, not a performance update.
             // Pause fan dispatch and start the write deadline once this owner is free.
             if(beforeSend is not null)await beforeSend(admission.Token).ConfigureAwait(false);
@@ -135,9 +136,8 @@ internal sealed class PerformanceGuardianClient
         try
         {
             configuration.Validate();
-            if (AppliedConfiguration is { } previous &&
-                (configuration.CpuEnabled != previous.CpuEnabled || configuration.GpuEnabled != previous.GpuEnabled))
-                throw new IOException("Guardian changed active domains unexpectedly.");
+            if(configuration.CpuEnabled!=response.CpuEnabled||configuration.GpuEnabled!=response.GpuEnabled)
+                throw new IOException("Guardian configuration differs from its committed domain selection.");
         }
         catch { LastStatus = null; throw; }
         AppliedConfiguration = configuration;

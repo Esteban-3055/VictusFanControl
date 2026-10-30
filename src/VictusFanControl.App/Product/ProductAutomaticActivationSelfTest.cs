@@ -92,10 +92,24 @@ internal static class ProductAutomaticActivationSelfTest
         TestSourceTransitions(require);
         TestRetentionSourceTransitions(require);
         var activation = new ProductAutomaticActivation();
-        var profiles = new ProductProfiles { CpuEnabled = false, GpuEnabled = false };
+        foreach(var selection in new[]{(true,true),(true,false),(false,true),(false,false)})
+        {
+            var chooser=new ProductAutomaticActivation();
+            var selected=chooser.Begin(new ProductProfiles{CpuEnabled=selection.Item1,GpuEnabled=selection.Item2});
+            require(selected.Performance.CpuEnabled==selection.Item1&&selected.Performance.GpuEnabled==selection.Item2,
+                "Automatic ignored the selected CPU/GPU domains.");
+            foreach(var source in new[]{"Ac","Battery"})
+            {
+                var selectedStatus=new PerformanceGuardianResponse(1,Guid.NewGuid(),selected.Performance.TargetProfileId,true,"OK","fixture","SessionEnabled",true,
+                    selection.Item1,selection.Item2,selection.Item1?"Active":"Disabled",selection.Item2?"ActiveUnverified":"Disabled",PowerSource:source);
+                require(ProductAutomaticActivation.PerformanceReady(selected.Performance,selected.Performance,selectedStatus,true,source),
+                    "CPU-only/GPU-only/no-limit Automatic admission was rejected.");
+            }
+        }
+        var profiles = new ProductProfiles { CpuEnabled = true, GpuEnabled = true };
         var ticket = activation.Begin(profiles);
-        require(ticket.Performance.CpuEnabled && ticket.Performance.GpuEnabled && !profiles.CpuEnabled && !profiles.GpuEnabled,
-            "Automatic did not freeze both enabled domains independently of the saved toggles.");
+        require(ticket.Performance.CpuEnabled && ticket.Performance.GpuEnabled && profiles.CpuEnabled && profiles.GpuEnabled,
+            "Automatic did not freeze the selected enabled domains.");
         require(!ReferenceEquals(ticket.Profiles.Ac.Fan, profiles.Ac.Fan) && ticket.Performance.AcPl1Watts == profiles.Ac.CpuPl1Watts &&
             ticket.Performance.BatteryGpuMaximumMHz == profiles.Battery.GpuMaximumMHz, "Automatic lost the frozen AC/Battery preferences.");
         bool duplicate = false; try { activation.Begin(profiles); } catch (InvalidOperationException) { duplicate = true; }

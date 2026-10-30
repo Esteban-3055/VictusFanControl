@@ -206,14 +206,18 @@ internal sealed class GuardianModernStandbyLifecycleRuntime :
         }
     }
 
-    public void ExecuteConfigurationUpdate(Action<PerformancePowerSourceKind> update)
+    public void ExecuteConfigurationUpdate(Action<PerformancePowerSourceKind> update,Func<(bool Cpu,bool Gpu)>? selection=null)
     {
         ThrowIfDisposed();
         lock (_sync)
         {
             if (!_active || _suspended || _primaryDisplayReleaseCompleted || _failure is not null || _inner is not IGuardianConfigurationRuntime runtime)
                 throw new InvalidOperationException("Display/lifecycle boundary blocks configuration update.");
-            runtime.ExecuteConfigurationUpdate(update);
+            try{runtime.ExecuteConfigurationUpdate(update,selection);}
+            finally
+            {
+                if(selection is not null){var domains=selection();_cpuEnabled=domains.Cpu;_gpuEnabled=domains.Gpu;}
+            }
         }
     }
 

@@ -6,7 +6,7 @@
   "stableReleaseAuthorized": false,
   "previewReleaseAuthorized": true,
   "normalAutomatic": "authorized-exact-target",
-  "startup": "optional-persistent-wait-three-fresh-observations-bounded-preparation-retry-coupled-performance",
+  "startup": "optional-persistent-wait-three-fresh-observations-bounded-preparation-retry-selected-performance",
   "reentryAfterInterruption": "explicit-clean-release-fresh-runtime-same-gui-three-fresh-observations",
   "sessionRestart": "explicit-drain-release-check-records-new-process-firmware-retain-draft-and-diagnostics",
   "automaticThermalContract": "cpu-start90-active95-confirm2000ms-cpu99-immediate-gpu-strictly-over95",
@@ -34,7 +34,8 @@
     "current-automatic-54-52-under-load-and-source-lifecycle-transitions",
     "definitive-session-recovery-current-target-without-windows-restart",
     "habitual-gpu-strictly-over95-and-post-candidate-ac-battery-reconciliation",
-    "current-product-pl1-above45-up-to-pl2-thermal-load-and-firmware-enforcement"
+    "current-product-pl1-above45-up-to-pl2-thermal-load-and-firmware-enforcement",
+    "current-independent-cpu-gpu-toggle-with-retained-automatic-and-standby"
   ],
   "evidenceLimits": [
     "Prior thermal observations used the previous GUI 90C confirmation contract.",
@@ -66,7 +67,7 @@
     "normalAutomaticPromoted": false,
     "auxiliaryFault": "not-applicable-no-acquisition"
   },
-  "version": "1.3.12",
+  "version": "1.3.13",
   "physicalPassClaimed": false,
   "manualAutomaticRetryPhysicalValidation": "pending-current-target-observation",
   "automaticProtectionControls": "independent-cpu-temperature-gpu-temperature-handoffs-clean-resume-10-30-60s-three-attempts",
@@ -231,5 +232,14 @@
     "reportedHardwareBoundsEnforced": true,
     "historicalQualification": "downward-only",
     "recovery": "owned-fields-release-only"
+  },
+  "performanceControlSelection": {
+    "automaticActivation": "selected-domains",
+    "domains": "cpu-gpu-independent-live-apply",
+    "bothOffAllowed": true,
+    "fanModeOnLimitRelease": "unchanged",
+    "hardwareAcquisition": "lazy-exact-target-domain",
+    "standby": "retain-selected-domains",
+    "failure": "retain-ownership-and-independent-cleanup"
   }
 }
