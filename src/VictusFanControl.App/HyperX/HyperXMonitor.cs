@@ -48,13 +48,14 @@ internal sealed class HyperXMonitor : IAsyncDisposable
             else percent=batteryEstimate.Observe(b.Millivolts,sampleMilliseconds);
             latest=latest with{ReceiverPresent=true,
                 Status=b.Charging!=true&&percent is null?"Voltaje recibido; porcentaje sin referencia suficiente":
+                    b.Millivolts<HyperXBatteryEstimator.ReferenceMinimumMillivolts?"Batería muy baja · estimación provisional":
                     eventPath is null?"Batería recibida; eventos de micrófono no disponibles":"Lectura recibida",
                 Millivolts=b.Millivolts,Percent=percent,Charging=b.Charging,SampledAt=sampledAt};
         }
         // One optional record per real reply, never per redraw/export. Retain raw
         // evidence for future calibration without logging HID paths or device IDs.
         AppLog.WriteStructured("HYPERX BATTERY ESTIMATE",new{sampledAtUtc=sampledAt,millivolts=b.Millivolts,
-            rawPercent=b.Percent,percent,chargingInferred=b.Charging,curve="srn-linear-v1",lowRangeCalibrated=false});
+            rawPercent=b.Percent,percent,chargingInferred=b.Charging,curve=HyperXBatteryEstimator.Curve,lowRangeCalibrated=false});
         return true;
     }
     internal void Start(){worker??=Task.Run(RunAsync);}

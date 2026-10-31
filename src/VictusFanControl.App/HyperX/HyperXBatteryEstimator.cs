@@ -2,18 +2,21 @@ namespace VictusFanControl.App;
 
 /// <summary>Display-only voltage estimate, not a measurement of remaining charge.
 /// Reference knots are the lower voltage edges of the existing srn MIT table.
-/// Interpolation fills its gaps; no extrapolation invents an uncharacterized 0..9%.</summary>
+/// The 3300..3584 mV tail is a provisional display estimate, not calibrated capacity.</summary>
 internal sealed class HyperXBatteryEstimator
 {
     // Share the decoder's existing upper plausibility limit. Values above the
     // last reference knot stay at the estimated 100% ceiling, not a charge flag
     // or a newly calibrated high-voltage capacity curve.
-    internal const int MinimumMillivolts=3584,MaximumMillivolts=4500;
+    internal const int MinimumMillivolts=3300,ReferenceMinimumMillivolts=3584,MaximumMillivolts=4500;
+    internal const string Curve="srn-linear-low-provisional-v2";
     internal const double TimeConstantMilliseconds=60_000;
     private const double DisplayHysteresisPoints=0.75;
     private static readonly (int Millivolts,int Percent)[] Knots=
     [
-        (3584,10),(3674,15),(3703,20),(3732,25),(3743,30),(3753,35),(3764,40),
+        // Observed discharge reached 3308 mV before subsequent queries failed.
+        // 3300 is the existing decoder floor, not a measured shutdown threshold.
+        (3300,0),(3584,10),(3674,15),(3703,20),(3732,25),(3743,30),(3753,35),(3764,40),
         (3774,45),(3784,50),(3792,55),(3804,60),(3825,65),(3840,70),(3860,75),
         (3890,80),(3910,85),(3940,90),(3960,95),(3970,100),(4107,100)
     ];
@@ -50,5 +53,5 @@ internal sealed class HyperXBatteryEstimator
             displayed=Round(filtered.Value);
         return displayed;
     }
-    private static int Round(double percent)=>(int)Math.Round(Math.Clamp(percent,10,100),MidpointRounding.AwayFromZero);
+    private static int Round(double percent)=>(int)Math.Round(Math.Clamp(percent,0,100),MidpointRounding.AwayFromZero);
 }

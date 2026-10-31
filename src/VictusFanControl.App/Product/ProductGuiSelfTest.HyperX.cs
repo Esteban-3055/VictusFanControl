@@ -79,6 +79,10 @@ internal static partial class ProductGuiSelfTest
             var point=PointAt(drag.Bounds.Right-5,drag.Bounds.Y+15);form.Canvas.PointerDown(point);
             form.HandleCommand("hyperx-info");var afterNavigation=page.Draft;form.Canvas.PointerMove(PointAt(drag.Bounds.Left,drag.Bounds.Y));form.Canvas.PointerUp(point);
             Check(page.Draft==afterNavigation&&!form.Canvas.Capture,"Tab switch left a hidden slider dragging");
+            page.UpdateReading(reading with{Percent=0,Millivolts=3308,Charging=null,Status="Batería muy baja · estimación provisional"},now);form.Canvas.Refresh();
+            Check(page.Reading.Percent==0&&page.Reading.Fresh(page.PresentedAt),"Valid estimated zero was treated as missing in the battery page");
+            using(var lowBitmap=new Bitmap(form.Width,form.Height))
+            {form.DrawToBitmap(lowBitmap,new(0,0,form.Width,form.Height));lowBitmap.Save(Path.Combine(dir,"hyperx-low-provisional.png"),ImageFormat.Png);}
             page.UpdateReading(reading with{SampledAt=now.AddSeconds(-180)},now);Check(!page.Reading.Fresh(page.PresentedAt),"Stale state rendered as live");
             form.HandleCommand("page-"+(int)ProductPage.ExternalCurve);Application.DoEvents();
             Check(!page.Selected&&runtime.Commands==0&&ProductProfilesStore.Serialize(form.Draft)==notebook,"HyperX editing/navigation changed notebook preferences or hardware authority");
