@@ -17,10 +17,12 @@ internal static partial class HyperXBatteryEstimatorSelfTest
         check(integers.SetEquals(Enumerable.Range(0,101)),"Curve cannot resolve all one-percent levels in its supported range");
         foreach(var mv in new[]{3763,3783,3824,3834,3839,4096})
             check(HyperXBatteryEstimator.RawPercent(mv) is not null,"Former srn range gap still loses battery data");
-        foreach(var mv in new[]{int.MinValue,0,3299,4501,int.MaxValue})
-            check(HyperXBatteryEstimator.RawPercent(mv) is null,"Curve extrapolated outside the unchanged decoder bounds");
-        check(HyperXBatteryEstimator.RawPercent(3300)==0&&HyperXBatteryEstimator.RawPercent(3584)==10,
+        foreach(var mv in new[]{int.MinValue,0,2999,4501,int.MaxValue})
+            check(HyperXBatteryEstimator.RawPercent(mv) is null,"Curve extrapolated outside the decoder bounds");
+        check(HyperXBatteryEstimator.RawPercent(3200)==0&&HyperXBatteryEstimator.RawPercent(3584)==10,
             "Provisional low tail changed its endpoints");
+        check(HyperXSnapshot.Decode(Reply(3280)) is{Millivolts:3280,Percent:>2 and <3,Charging:null},"Recorded unplugged 3280 mV report was discarded");
+        check(HyperXSnapshot.Decode(Reply(2999)) is null&&HyperXSnapshot.Decode(Reply(0)) is null,"Implausible report became zero battery");
         foreach(var mv in new[]{4108,4133,4134,4169,4200,4500})
             check(HyperXBatteryEstimator.RawPercent(mv)==100,"Valid high voltage lost the existing estimated-full ceiling");
         var estimate=new HyperXBatteryEstimator();
@@ -40,8 +42,8 @@ internal static partial class HyperXBatteryEstimatorSelfTest
         for(int i=1;i<=8;i++)check(estimate.Observe(i%2==0?3787:3788,i*60_000)==52,"One-point jitter was amplified by integer rounding");
         estimate.Reset();estimate.Observe(3970,0);
         check(estimate.Observe(3584,60_000)==10,"Smoothing postponed the lowest supported critical reading");
-        check(estimate.Observe(3500,120_000)==7,"Provisional low voltage disappeared or was delayed by smoothing");
-        check(estimate.Observe(3299,180_000) is null&&estimate.Observe(3792,240_000)==55,"Invalid voltage became zero or polluted recovery");
+        check(estimate.Observe(3500,120_000)==8,"Provisional low voltage disappeared or was delayed by smoothing");
+        check(estimate.Observe(2999,180_000) is null&&estimate.Observe(3792,240_000)==55,"Invalid voltage became zero or polluted recovery");
         estimate.Reset();estimate.Observe(3960,0);
         int? full=null;for(int i=1;i<=8;i++)full=estimate.Observe(3970,i*60_000);
         check(full==100,"Filtering or hysteresis permanently prevents full-threshold notification");
@@ -86,13 +88,13 @@ internal static partial class HyperXBatteryEstimatorSelfTest
             reader.ApplyBatteryReport(Reply(3910),now.AddSeconds(480),480_000);
             check(reader.Snapshot.Percent==85,"Different receiver inherited smoothed charge");
             reader.ApplyBatteryReport(Reply(3500),now.AddSeconds(540),540_000);
-            check(reader.Snapshot is{Millivolts:3500,Percent:7,Charging:null}&&reader.Snapshot.Status.Contains("provisional")&&export.Capture(now.AddSeconds(540)).HyperxBatteryPct==7,"Provisional low range disappeared, was not labelled, or invented charging");
+            check(reader.Snapshot is{Millivolts:3500,Percent:8,Charging:null}&&reader.Snapshot.Status.Contains("provisional")&&export.Capture(now.AddSeconds(540)).HyperxBatteryPct==8,"Provisional low range disappeared, was not labelled, or invented charging");
             var lowPolicy=new HyperXNotificationPolicy();var lowSettings=new HyperXSettings{LowPercent=12,CriticalPercent=5};
             check(lowPolicy.Evaluate(reader.Snapshot,lowSettings,now.AddSeconds(540)).Single().Title.Contains("baja"),"User low threshold missed the provisional tail");
             // Recorded discharge voltages; expected values are provisional display
             // estimates, not physical capacity or a measured shutdown threshold.
             int lowSample=0;
-            foreach(var point in new[]{(3425,4),(3383,3),(3340,1),(3308,0),(3300,0)})
+            foreach(var point in new[]{(3425,6),(3383,5),(3340,4),(3308,3),(3300,3),(3280,2),(3200,0),(3000,0)})
             {
                 var seconds=600+60*lowSample++;var at=now.AddSeconds(seconds);
                 reader.ApplyBatteryReport(Reply(point.Item1),at,seconds*1000L);
@@ -102,7 +104,7 @@ internal static partial class HyperXBatteryEstimatorSelfTest
                 var wire=ExternalCoolingProtocol.Create("telemetry",Guid.NewGuid().ToString("N"),1,frame);
                 check(frame.HyperxSampledAtUtc==at&&ExternalCoolingProtocol.Telemetry(wire).HyperxBatteryPct==point.Item2,"Low/zero battery was lost on authenticated export");
                 var notices=lowPolicy.Evaluate(s,lowSettings,at);
-                check(point.Item1==3425?notices.Single().Title.Contains("crítica"):notices.Count==0,"User 5% critical threshold missed or repeated");
+                check(point.Item1==3383?notices.Single().Title.Contains("crítica"):notices.Count==0,"User 5% critical threshold missed or repeated");
                 check(export.Capture(at.AddSeconds(180)).HyperxBatteryPct is null,"Provisional battery bypassed freshness");
             }
             reader.InvalidateBattery("fixture timeout");
@@ -111,7 +113,7 @@ internal static partial class HyperXBatteryEstimatorSelfTest
             check(reader.Snapshot.Percent is null&&reader.Snapshot.SampledAt is null,"Low estimate revived a powered-off headset");
         }
         finally{reader.DisposeAsync().AsTask().GetAwaiter().GetResult();}
-        Console.WriteLine("PASS HyperX provisional low range: recorded 3425/3383/3340/3308 mV, 0..100 monotonic estimates, immediate 5% critical and zero-valued authenticated export; timeout/off/stale remain unknown; no hardware IO.");
+        Console.WriteLine("PASS HyperX provisional low range: recorded 3425/3383/3340/3308/3280 mV, 0..100 monotonic estimates, immediate 5% critical and zero-valued authenticated export; timeout/off/stale remain unknown; no hardware IO.");
         Console.WriteLine("PASS HyperX continuous estimate: monotonic one-percent interpolation, repaired table gaps, acquisition-only EMA/hysteresis, no delayed 10% critical, source/error/charging resets and unchanged age/authenticated export; no hardware IO.");
     }
     private sealed class EmptyMemory:IPhysicalMemoryUsage {public double? ReadPercent()=>null;}

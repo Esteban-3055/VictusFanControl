@@ -2,21 +2,23 @@ namespace VictusFanControl.App;
 
 /// <summary>Display-only voltage estimate, not a measurement of remaining charge.
 /// Reference knots are the lower voltage edges of the existing srn MIT table.
-/// The 3300..3584 mV tail is a provisional display estimate, not calibrated capacity.</summary>
+/// The 3000..3584 mV tail is a provisional display estimate, not calibrated capacity.</summary>
 internal sealed class HyperXBatteryEstimator
 {
     // Share the decoder's existing upper plausibility limit. Values above the
     // last reference knot stay at the estimated 100% ceiling, not a charge flag
     // or a newly calibrated high-voltage capacity curve.
-    internal const int MinimumMillivolts=3300,ReferenceMinimumMillivolts=3584,MaximumMillivolts=4500;
+    internal const int MinimumMillivolts=3000,ReferenceMinimumMillivolts=3584,MaximumMillivolts=4500;
     internal const string Curve="srn-linear-low-provisional-v2";
     internal const double TimeConstantMilliseconds=60_000;
     private const double DisplayHysteresisPoints=0.75;
     private static readonly (int Millivolts,int Percent)[] Knots=
     [
         // Observed discharge reached 3308 mV before subsequent queries failed.
-        // 3300 is the existing decoder floor, not a measured shutdown threshold.
-        (3300,0),(3584,10),(3674,15),(3703,20),(3732,25),(3743,30),(3753,35),(3764,40),
+        // A subsequent unplugged real reply carried 3280 mV. Use a provisional
+        // 3200 mV zero reference, retaining zero below it within the sanity guard.
+        // Neither 3000 nor 3200 is a measured hardware shutdown threshold.
+        (3000,0),(3200,0),(3584,10),(3674,15),(3703,20),(3732,25),(3743,30),(3753,35),(3764,40),
         (3774,45),(3784,50),(3792,55),(3804,60),(3825,65),(3840,70),(3860,75),
         (3890,80),(3910,85),(3940,90),(3960,95),(3970,100),(4107,100)
     ];

@@ -19,7 +19,8 @@ internal sealed record HyperXSnapshot
     internal static (int Millivolts,double? Percent,bool? Charging)? Decode(ReadOnlySpan<byte> b)
     {
         if(b.Length is not(15 or 20)||b[0]!=0x21||b[1]!=0xff||b[2]!=5)return null;
-        int mv=(b[3]<<8)|b[4];if(mv is <3300 or >4500)return null;
+        int mv=(b[3]<<8)|b[4];
+        if(mv is <HyperXBatteryEstimator.MinimumMillivolts or >HyperXBatteryEstimator.MaximumMillivolts)return null;
         // This report contains voltage, not a verified charger-present flag.
         // Real unplugged headsets can report above the historical 4107 mV cutoff.
         // Keep the estimate visible and represent charging as unknown.

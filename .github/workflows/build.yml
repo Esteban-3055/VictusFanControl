@@ -775,7 +775,7 @@ jobs:
       - name: Experimental physical platform Windows UI fixtures (no hardware IO)
         run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --platform-physical-self-test
 
-      - name: Product GUI prolonged isolated resource soak
+      - name: Product GUI prolonged isolated resource soak (includes provisional low-battery display)
         run: dotnet run --project .\src\VictusFanControl.App -c Release --no-build -- --product-gui-soak-self-test
 
       - name: Performance CPU settings persistence self-test
