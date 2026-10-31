@@ -138,6 +138,11 @@ public static class ExternalCoolingProtocol
         Range(t.HyperxBatteryPct,0,100);
         if(t.HyperxBatteryPct.HasValue!=t.HyperxSampledAtUtc.HasValue || t.HyperxSampledAtUtc is {} hx&&(hx==default||hx>t.CapturedAtUtc))
             throw new InvalidDataException("Invalid HyperX display measurement.");
+        if(t.HyperxDisplayRetained
+            ? !t.HyperxBatteryPct.HasValue||t.HyperxSampledAtUtc!=t.CapturedAtUtc||
+                t.HyperxOriginalSampledAtUtc is not{} original||original==default||original>t.CapturedAtUtc
+            : t.HyperxOriginalSampledAtUtc.HasValue)
+            throw new InvalidDataException("Invalid retained HyperX display projection.");
         Range(t.CpuTempC,-20,130);Range(t.GpuTempC,-20,130);
         foreach(var level in new[]{t.Solicitud,t.CpuTargetLevel,t.GpuTargetLevel})
             if(level is <0 or >65535)throw new InvalidDataException("Invalid logical/target level.");

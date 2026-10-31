@@ -1,7 +1,5 @@
 # Victus Base ESP32-C3 SuperMini — consolidación Work 0.4
 
-Preliminar 1.3.14: la LCD retiene el último porcentaje HyperX con `*` cuando falta una lectura fresca de los audífonos, aunque el PC siga conectado. La retención no renueva la edad de la muestra ni inicia avisos nuevos; los datos frescos de CPU/GPU conservan su presentación normal. El dato se guarda solo en RAM y desaparece al reiniciar la placa. Para esta función hace falta cargar el sketch actualizado.
-
 Preliminar 1.3.7: umbral crítico HyperX 0–100 % y avisos baja/crítica repetidos sin PC con dato anterior marcado `*`. Requiere cargar el sketch nuevo para estas funciones; no cambia NVS, pines, HMAC, PWM o potencia Wi-Fi. La compilación y los tests no constituyen un PASS físico.
 
 Implementación única compatible con VictusFanControl y su pestaña **Curva Externa**.

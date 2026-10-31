@@ -19,7 +19,7 @@ internal sealed partial class ProductCanvas
         DrawText(g,"HyperX Cloud Flight",365,171,28,Ink,850,true);
         DrawText(g,s.Status,334,218,19,Muted,850);
         DrawText(g,"Última lectura de batería",1210,173,18,Muted,410);
-        var age=s.SampledAt is{} at?$"{at.ToLocalTime():HH:mm:ss} · hace {Math.Max(0,(now-at).TotalSeconds):0} s":"Sin lectura disponible";
+        var age=(s.SampledAt??s.LastKnownSampledAt) is{} at?$"{at.ToLocalTime():HH:mm:ss} · hace {Math.Max(0,(now-at).TotalSeconds):0} s":"Sin lectura disponible";
         DrawText(g,age,1210,211,21,fresh?Ink:Muted,410);
         void Toggle(string key,string name,bool value,RectangleF rect)=>Action(key,(value?"✓  ":"○  ")+name,rect,value);
         void Value(string key,string label,RectangleF rect,string unit)
@@ -31,8 +31,8 @@ internal sealed partial class ProductCanvas
         if(p.Tab==0)
         {
             const float width=322.25f;
-            string[] titles=["Batería aproximada","Voltaje reportado","Estado de carga","Micrófono"];
-            string[] values=[fresh&&s.Percent is{} pct?$"{pct} %":"—",fresh&&s.Millivolts is{} mv?$"{mv/1000.0:0.000} V":"—",
+            string[] titles=[fresh?"Batería aproximada":"Último porcentaje conocido","Voltaje reportado","Estado de carga","Micrófono"];
+            string[] values=[fresh&&s.Percent is{} pct?$"{pct} %":s.LastKnownPercent is{} last?$"{last} % *":"—",fresh&&s.Millivolts is{} mv?$"{mv/1000.0:0.000} V":"—",
                 !fresh||s.Charging is null?"No confirmado":s.Charging.Value?"Cargando*":"Sin carga indicada",
                 s.Muted is null?"Desconocido":s.Muted.Value?"Silenciado":"Sin silencio"];
             for(int i=0;i<4;i++)
@@ -47,7 +47,7 @@ internal sealed partial class ProductCanvas
             DrawText(g,"Encendido",1004,519,20,Muted,180);DrawText(g,s.Powered is null?"Desconocido":s.Powered.Value?"Encendidos":"Apagados",1210,519,23,Ink,410);
             DrawText(g,"Lectura de batería cada 60 s. Los cambios del micrófono se reciben al accionar su botón.",334,575,21,Muted,1250);
             DrawText(g,s.Muted is null?"Pulsa el botón de silencio para identificar el estado inicial del micrófono.":"Puedes ajustar los avisos en Notificaciones y su presentación en Pantalla LCD.",334,621,19,Muted,1250);
-            Card(g,new(310,696,1337,60));DrawText(g,"Porcentaje estimado por voltaje; 0–9 % es provisional. No confirma cable de carga, autonomía restante ni que los audífonos estén encendidos.",334,709,18,Muted,1287,height:38);
+            Card(g,new(310,696,1337,60));DrawText(g,"Porcentaje estimado; 0–9 % provisional. * = lectura anterior. Durante la carga el voltaje puede sobreestimar el nivel.",334,709,18,Muted,1287,height:38);
         }
         else if(p.Tab==1)
         {

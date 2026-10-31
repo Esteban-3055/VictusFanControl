@@ -63,7 +63,7 @@ internal static partial class HyperXBatteryEstimatorSelfTest
             }
             var packet=ExternalCoolingProtocol.Create("telemetry",Guid.NewGuid().ToString("N"),1,export.Capture(now));
             check(ExternalCoolingProtocol.Telemetry(packet).HyperxBatteryPct==56,"Non-five-point battery value changed on the ESP32 wire");
-            check(export.Capture(now.AddSeconds(180)).HyperxBatteryPct is null,"Filtered battery bypassed the independent freshness limit");
+            check(!reader.Snapshot.Fresh(now.AddSeconds(180))&&export.Capture(now.AddSeconds(180)) is{HyperxDisplayRetained:true,HyperxBatteryPct:56,HyperxOriginalSampledAtUtc:not null},"Expired battery was not retained only as an explicit LCD projection");
             reader.ApplyBatteryReport(Reply(3804),now.AddSeconds(60),60_000);
             check(reader.Snapshot.Percent is >56 and <60,"Reader publishes the unsmoothed percentage");
             reader.ApplyBatteryReport(Reply(3584),now.AddSeconds(120),120_000);
@@ -105,7 +105,7 @@ internal static partial class HyperXBatteryEstimatorSelfTest
                 check(frame.HyperxSampledAtUtc==at&&ExternalCoolingProtocol.Telemetry(wire).HyperxBatteryPct==point.Item2,"Low/zero battery was lost on authenticated export");
                 var notices=lowPolicy.Evaluate(s,lowSettings,at);
                 check(point.Item1==3383?notices.Single().Title.Contains("crítica"):notices.Count==0,"User 5% critical threshold missed or repeated");
-                check(export.Capture(at.AddSeconds(180)).HyperxBatteryPct is null,"Provisional battery bypassed freshness");
+                check(!s.Fresh(at.AddSeconds(180))&&export.Capture(at.AddSeconds(180)) is{HyperxDisplayRetained:true,HyperxOriginalSampledAtUtc:not null},"Provisional battery bypassed live freshness or lost marked LCD retention");
             }
             reader.InvalidateBattery("fixture timeout");
             check(reader.Snapshot.Percent is null&&export.Capture(now).HyperxBatteryPct is null,"Timeout became a fresh zero battery");

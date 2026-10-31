@@ -2,7 +2,7 @@ namespace VictusFanControl.App;
 
 /// <summary>Independent optional USB reader. No WMI, EC, controller or audio recording.
 /// Battery requests are rate limited; mute uses a blocking, cancellable HID read.</summary>
-internal sealed class HyperXMonitor : IAsyncDisposable
+internal sealed class HyperXMonitor(Action<int,DateTimeOffset>? persistHistory=null) : IAsyncDisposable
 {
     private readonly CancellationTokenSource stop=new();
     private readonly object gate=new();
@@ -19,6 +19,11 @@ internal sealed class HyperXMonitor : IAsyncDisposable
     private readonly System.Collections.Concurrent.ConcurrentQueue<HyperXSnapshot> muteEvents=new();
     internal IEnumerable<HyperXSnapshot> DrainMuteEvents(){while(muteEvents.TryDequeue(out var e))yield return e;}
     internal HyperXSnapshot Snapshot {get{lock(gate)return latest;}}
+    internal void SeedDisplayHistory(HyperXDisplayHistory history)
+    {
+        if(!history.Valid(DateTimeOffset.UtcNow))return;
+        Publish(s=>s with{LastKnownPercent=history.Percent,LastKnownSampledAt=history.SampledAtUtc});
+    }
     private void Publish(Func<HyperXSnapshot,HyperXSnapshot> update)
     {lock(gate){latest=update(latest);if(latest.Percent is null||latest.SampledAt is null)batteryEstimate.Reset();}}
     internal void SelectBatterySource(string? path)
@@ -28,7 +33,8 @@ internal sealed class HyperXMonitor : IAsyncDisposable
             if(string.Equals(batteryPath,path,StringComparison.OrdinalIgnoreCase))return;
             batteryPath=path;batteryEstimate.Reset();
             while(muteEvents.TryDequeue(out _)){} // No pending events from a different receiver.
-            latest=new(){ReceiverPresent=path is not null,Status=path is null?"Receptor no disponible":"Preparando receptor"};
+            latest=new(){ReceiverPresent=path is not null,Status=path is null?"Receptor no disponible":"Preparando receptor",
+                LastKnownPercent=latest.LastKnownPercent,LastKnownSampledAt=latest.LastKnownSampledAt};
         }
     }
     internal void InvalidateBattery(string status)=>Publish(s=>s with{Status=status,Percent=null,Millivolts=null,Charging=null,SampledAt=null});
@@ -50,12 +56,17 @@ internal sealed class HyperXMonitor : IAsyncDisposable
                 Status=b.Charging!=true&&percent is null?"Voltaje recibido; porcentaje sin referencia suficiente":
                     b.Millivolts<HyperXBatteryEstimator.ReferenceMinimumMillivolts?"Batería muy baja · estimación provisional":
                     eventPath is null?"Batería recibida; eventos de micrófono no disponibles":"Lectura recibida",
-                Millivolts=b.Millivolts,Percent=percent,Charging=b.Charging,SampledAt=sampledAt};
+                Millivolts=b.Millivolts,Percent=percent,Charging=b.Charging,SampledAt=sampledAt,
+                LastKnownPercent=percent??latest.LastKnownPercent,LastKnownSampledAt=percent.HasValue?sampledAt:latest.LastKnownSampledAt};
         }
         // One optional record per real reply, never per redraw/export. Retain raw
         // evidence for future calibration without logging HID paths or device IDs.
         AppLog.WriteStructured("HYPERX BATTERY ESTIMATE",new{sampledAtUtc=sampledAt,millivolts=b.Millivolts,
             rawPercent=b.Percent,percent,chargingInferred=b.Charging,curve=HyperXBatteryEstimator.Curve,lowRangeCalibrated=false});
+        if(percent is{} saved)
+            try{persistHistory?.Invoke(saved,sampledAt);}
+            catch(Exception e)when(e is IOException or UnauthorizedAccessException or InvalidDataException)
+            {AppLog.Write("HyperX optional display history was not saved: "+e.GetType().Name);}
         return true;
     }
     internal void Start(){worker??=Task.Run(RunAsync);}
@@ -71,7 +82,8 @@ internal sealed class HyperXMonitor : IAsyncDisposable
                 {
                     await StopEventsAsync();
                     SelectBatterySource(null);
-                    Publish(_=>new(){Status=batteries.Length==0?"Receptor no disponible":"Varios receptores: no se selecciona uno arbitrariamente"});
+                    Publish(s=>s with{Status=batteries.Length==0?"Receptor no disponible":"Varios receptores: no se selecciona uno arbitrariamente",
+                        ReceiverPresent=false,Percent=null,Millivolts=null,Charging=null,SampledAt=null,Muted=null,Powered=null});
                 }
                 else
                 {

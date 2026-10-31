@@ -328,12 +328,12 @@ void display(uint32_t now) {
         view.gpuTempC=m.fresh(m.gpuTempC,m.gpuTempAge,now);
         view.hyperxPct=m.freshHyperx(now);
     }
-    view.hyperxPct=hyperxLcd.forDisplay(view.hyperxPct,view.hyperxCached);
+    if(!view.telemetryFresh) {view.hyperxPct=hyperxLcd.lastPercent();view.hyperxCached=std::isfinite(view.hyperxPct);}
     uint32_t elapsed=victus::lcdElapsed(now,lcdCycleStartedAt);
     victus::LcdPage page=victus::lcdPage(elapsed);
     char first[17]{},second[17]{};
     victus::renderLcd(page,view,first,second);
-    hyperxLcd.overlay(now,first,second,view.pcAuthenticated&&view.telemetryFresh&&view.wifi,!view.hyperxCached);
+    hyperxLcd.overlay(now,first,second,view.pcAuthenticated&&view.telemetryFresh&&view.wifi);
     lcdDriver.row(0x80,first);
     lcdDriver.row(0xC0,second);
     if(lcdDriver.ready()) lcdLastRefreshAt=millis();

@@ -28,6 +28,12 @@ public sealed record ExportTelemetry
     public HyperxDisplayConfiguration? HyperxDisplay {get;init;}
     public double? HyperxBatteryPct { get; init; }
     public DateTimeOffset? HyperxSampledAtUtc { get; init; }
+    // Legacy LCD projection: SampledAt is the display refresh when retained;
+    // OriginalSampledAt preserves the actual headset acquisition unmodified.
+    [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool HyperxDisplayRetained {get;init;}
+    [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public DateTimeOffset? HyperxOriginalSampledAtUtc {get;init;}
     public double? CpuTempC { get; init; }
     public double? GpuTempC { get; init; }
     public string PowerSource { get; init; } = "Unknown";

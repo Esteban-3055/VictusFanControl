@@ -33,6 +33,8 @@ internal sealed class TelemetryExportService(Func<ProductRuntimeState> state, IP
         var s=state(); var sample=s.Snapshot;
         var headset=hyperx?.Invoke();
         bool headsetFresh=headset?.Fresh(now)==true&&headset.Percent.HasValue;
+        bool headsetRetained=!headsetFresh&&headset?.LastKnownPercent is >=0 and <=100&&
+            headset.LastKnownSampledAt is{} lastAt&&lastAt!=default&&lastAt<=now;
         bool Fresh(DateTimeOffset? at, TimeSpan age) => at is {} t && now >= t && now-t <= age;
         var live=sample is not null && Fresh(sample.Timestamp, sample.MaximumControlAge);
         static bool NonNegative(double? value)=>value is{} v&&double.IsFinite(v)&&v>=0;
@@ -71,7 +73,13 @@ internal sealed class TelemetryExportService(Func<ProductRuntimeState> state, IP
         {
             CapturedAtUtc=now, SampledAtUtc=live?sample!.Timestamp:null, DecisionAtUtc=decisionAt,
             HyperxDisplay=hyperxDisplay?.Invoke(),
-            HyperxBatteryPct=headsetFresh?headset!.Percent:null,HyperxSampledAtUtc=headsetFresh?headset!.SampledAt:null,
+            // Legacy LCD firmware has no retained-value marker while the PC is
+            // online. Project the stored number for display at this frame time;
+            // carry its real acquisition separately and never alter the monitor.
+            HyperxBatteryPct=headsetFresh?headset!.Percent:headsetRetained?headset!.LastKnownPercent:null,
+            HyperxSampledAtUtc=headsetFresh?headset!.SampledAt:headsetRetained?now:null,
+            HyperxDisplayRetained=headsetRetained,
+            HyperxOriginalSampledAtUtc=headsetRetained?headset!.LastKnownSampledAt:null,
             CpuTempSampledAtUtc=live&&Fresh(cpuAt,sample!.MaximumControlAge)?cpuAt:null,
             GpuTempSampledAtUtc=live&&Fresh(gpuAt,sample!.MaximumControlAge)?gpuAt:null,
             RamSampledAtUtc=ram.HasValue?now:null, RamUsagePct=ram,

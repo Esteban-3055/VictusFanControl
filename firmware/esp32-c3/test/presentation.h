@@ -102,21 +102,6 @@ inline void presentationTests() {
     data.telemetryFresh=false;data.hyperxCached=true;data.hyperxPct=alert.lastPercent();data.ambientC=21;
     renderLcd(LcdPage::Temperatures,data,top,bottom);
     check(std::strstr(top,"CPU:--C")&&std::strstr(bottom,"Hyp:20*"),"cached battery marked previous while CPU/GPU expire");
-    // Actual production presentation selection, with a live PC and absent,
-    // powered-off, charging-suppressed or expired headset telemetry.
-    data.telemetryFresh=true;data.cpuTempC=49;data.gpuTempC=42;
-    data.hyperxPct=alert.forDisplay(NAN,data.hyperxCached);
-    renderLcd(LcdPage::Temperatures,data,top,bottom);
-    check(std::strstr(top,"CPU:49C")&&std::strstr(bottom,"Hyp:20*")&&data.hyperxCached,
-        "headset loss with a live PC retains marked battery without expiring CPU/GPU");
-    check(!alert.overlay(6000,top,bottom,true,false),"retained headset value cannot restart a completed connected alert");
-    HyperXDisplayState noHistory;bool cached=true;
-    check(std::isnan(noHistory.forDisplay(NAN,cached))&&!cached,"boot without history invented a cached percentage");
-    HyperXDisplayState zeroCache;zeroCache.observe(0,1000,0,0);
-    check(zeroCache.forDisplay(NAN,cached)==0&&cached,"disconnected genuine zero was lost");
-    check(zeroCache.overlay(0,top,bottom,true,false)&&std::strstr(bottom,"Ult: 0% *"),"finite retained alert must identify old data while PC stays connected");
-    check(zeroCache.forDisplay(55,cached)==55&&!cached,"fresh headset return kept the previous-reading marker");
-    data.telemetryFresh=false;
     alert.observe(10,2000,0,7000);
     check(alert.overlay(7000,top,bottom)&&std::strstr(top,"CRITICA"),"critical transition has priority");
     alert.observe(10,3000,0,8000);

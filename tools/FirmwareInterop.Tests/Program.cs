@@ -37,7 +37,7 @@ try
     var line=await bridge.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(10));
     if(!int.TryParse(line,out var port))throw new InvalidDataException("Bridge did not publish its loopback port.");
     var client=new Esp32TcpClient();
-    using var cancellation=new CancellationTokenSource(TimeSpan.FromSeconds(15));
+    using var cancellation=new CancellationTokenSource(TimeSpan.FromSeconds(25));
     var source=new Source(display);
     var connection=client.RunAsync(new() {Host="127.0.0.1",Port=port,Mode=ExternalCoolingMode.MonitorAndRequest,AutoReconnect=false,Curve=curve},
         Convert.FromBase64String("AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="),source,cancellation.Token);
@@ -72,7 +72,28 @@ try
             }
         }
         Console.WriteLine($"PASS production Windows TCP client <-> actual C++ firmware: HyperX 55%/60s-old source and all display settings match; all curve configuration fields match, applied revision {curve.Revision}; mutual authentication, directional MACs, fragmented replies, Battery telemetry; no hardware IO.");
-        var before=d.Received;source.Firmware=true;
+        var retainedBefore=d.Received;source.Retained=true;
+        while(client.Diagnostics.Received<retainedBefore+3&&!connection.IsCompleted)await Task.Delay(50,cancellation.Token);
+        if(client.Diagnostics.Failures!=0||client.Diagnostics.Device is not{Mode:"Remote"}||
+            client.Diagnostics.LastSent?.Contains("\"hyperxDisplayRetained\":true")!=true)
+            throw new InvalidOperationException("Legacy firmware rejected the retained LCD projection.");
+        using(var sent=JsonDocument.Parse(client.Diagnostics.LastSent!))
+        {
+            var payload=sent.RootElement;
+            if(payload.GetProperty("hyperxBatteryPct").GetDouble()!=2||
+                payload.GetProperty("hyperxOriginalSampledAtUtc").GetDateTimeOffset()!=source.OriginalSampledAt)
+                throw new InvalidOperationException("Retained LCD projection lost its actual acquisition metadata.");
+        }
+        using(var stream=new FileStream(report,FileMode.Open,FileAccess.Read,FileShare.ReadWrite))
+        using(var reader=new StreamReader(stream))
+        {
+            var content=await reader.ReadToEndAsync();
+            var records=content[..(content.LastIndexOf('\n')+1)].Split('\n',StringSplitOptions.RemoveEmptyEntries);
+            if(!records.Any(record=>{using var receipt=JsonDocument.Parse(record);return receipt.RootElement.GetProperty("hyperxBatteryPct").GetDouble()==2;}))
+                throw new InvalidOperationException("The unmodified C++ firmware did not receive retained 2% for display.");
+        }
+        Console.WriteLine("PASS PC retained HyperX LCD projection: original day-old acquisition remains explicit; unmodified C++ firmware receives 2%, accepts additive metadata and retains its control state; no firmware change.");
+        var before=client.Diagnostics.Received;source.Firmware=true;
         while(client.Diagnostics.Received<before+2&&!connection.IsCompleted)await Task.Delay(50,cancellation.Token);
         if(client.Diagnostics.Failures!=0 || client.Diagnostics.Device is not {Mode:"Local"} || client.Diagnostics.LastSent?.Contains("\"solicitud\":null")!=true)
             throw new InvalidOperationException("Firmware/null request did not restore Local in the C++ device engine.");
@@ -91,12 +112,15 @@ sealed class Source(HyperxDisplayConfiguration display) : ITelemetryExportSource
 {
     internal static HyperxDisplayConfiguration DefaultDisplay {get;}=new(){LowPercent=25,CriticalPercent=15,LowDurationMs=7000,LowBlinkCycles=7,CriticalDurationMs=14000,CriticalBlinkCycles=7};
     public volatile bool Firmware;
+    public volatile bool Retained;
+    public readonly DateTimeOffset OriginalSampledAt=DateTimeOffset.UtcNow.AddDays(-1);
     public ExportTelemetry Capture(DateTimeOffset now)
     {
-        var firmware=Firmware;
+        var firmware=Firmware;var retained=Retained;
         return new()
         {
-        HyperxBatteryPct=55,HyperxSampledAtUtc=now.AddSeconds(-60),HyperxDisplay=display,
+        HyperxBatteryPct=retained?2:55,HyperxSampledAtUtc=retained?now:now.AddSeconds(-60),HyperxDisplay=display,
+        HyperxDisplayRetained=retained,HyperxOriginalSampledAtUtc=retained?OriginalSampledAt:null,
         CapturedAtUtc=now,SampledAtUtc=now,DecisionAtUtc=now,CpuTempSampledAtUtc=now,GpuTempSampledAtUtc=now,RamSampledAtUtc=now,
         CpuUsagePct=10,GpuUsagePct=0,RamUsagePct=44,DemandaPct=firmware?null:35,Solicitud=firmware?null:27,SolicitudValida=!firmware,CpuTargetLevel=firmware?null:27,GpuTargetLevel=firmware?null:27,
         ModoSolicitado=firmware?"Firmware":"Automatic",ModoEfectivo=firmware?"Firmware":"Automatic",CpuTempC=55,GpuTempC=42,PowerSource="Battery",RequestEvidence=firmware?"Unavailable":"WmiAcceptedSupervised"

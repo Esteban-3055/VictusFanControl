@@ -83,6 +83,10 @@ internal static partial class ProductGuiSelfTest
             Check(page.Reading.Percent==0&&page.Reading.Fresh(page.PresentedAt),"Valid estimated zero was treated as missing in the battery page");
             using(var lowBitmap=new Bitmap(form.Width,form.Height))
             {form.DrawToBitmap(lowBitmap,new(0,0,form.Width,form.Height));lowBitmap.Save(Path.Combine(dir,"hyperx-low-provisional.png"),ImageFormat.Png);}
+            page.UpdateReading(new(){ReceiverPresent=false,Status="Sin respuesta actual de los audífonos",LastKnownPercent=2,LastKnownSampledAt=now.AddHours(-1)},now);form.Canvas.Refresh();
+            Check(!page.Reading.Fresh(now)&&page.Reading.Percent is null&&page.Reading.LastKnownPercent==2,"Windows retained value became a live reading");
+            using(var retainedBitmap=new Bitmap(form.Width,form.Height))
+            {form.DrawToBitmap(retainedBitmap,new(0,0,form.Width,form.Height));retainedBitmap.Save(Path.Combine(dir,"hyperx-retained-pc.png"),ImageFormat.Png);}
             page.UpdateReading(reading with{SampledAt=now.AddSeconds(-180)},now);Check(!page.Reading.Fresh(page.PresentedAt),"Stale state rendered as live");
             form.HandleCommand("page-"+(int)ProductPage.ExternalCurve);Application.DoEvents();
             Check(!page.Selected&&runtime.Commands==0&&ProductProfilesStore.Serialize(form.Draft)==notebook,"HyperX editing/navigation changed notebook preferences or hardware authority");

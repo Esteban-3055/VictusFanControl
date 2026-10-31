@@ -12,9 +12,14 @@ internal sealed partial class ProductForm
     private async Task InitializeHyperXAsync()
     {
         if(_isolatedRuntime)return; // Fixtures never open USB or the user's settings.
-        var loaded=await Task.Run(()=>{var cfg=HyperXSettings.Load(HyperXSettings.DefaultPath,out var notice);return(Settings:cfg,Notice:notice);});
+        var loaded=await Task.Run(()=>{var cfg=HyperXSettings.Load(HyperXSettings.DefaultPath,out var notice);
+            var history=HyperXDisplayHistory.Load(HyperXDisplayHistory.DefaultPath,out var historyNotice);
+            return(Settings:cfg,Notice:notice??historyNotice,History:history);});
         if(_closing||IsDisposed)return;
-        _hyperXSettings=loaded.Settings;_hyperXNotice=loaded.Notice;_hyperX=new();_hyperX.Start();
+        _hyperXSettings=loaded.Settings;_hyperXNotice=loaded.Notice;
+        _hyperX=new((percent,at)=>new HyperXDisplayHistory(1,percent,at).Save(HyperXDisplayHistory.DefaultPath));
+        if(loaded.History is{} last)_hyperX.SeedDisplayHistory(last);
+        _hyperX.Start();
         _hyperXTimer.Tick+=(_,_)=>{if(!_closing&&!IsDisposed)PresentHyperX();};_hyperXTimer.Start();LayoutHyperXPage();
     }
     private async Task SaveHyperXAsync(HyperXSettings settings)

@@ -11,6 +11,9 @@ internal sealed record HyperXSnapshot
     internal int? Percent {get;init;}
     internal bool? Charging {get;init;}
     internal DateTimeOffset? SampledAt {get;init;}
+    // Display history only. Never used to make Windows notices or a live reading fresh.
+    internal int? LastKnownPercent {get;init;}
+    internal DateTimeOffset? LastKnownSampledAt {get;init;}
     internal bool? Muted {get;init;}
     internal long MuteEventVersion {get;init;}
     internal DateTimeOffset? MuteEventAt {get;init;}

@@ -11,6 +11,7 @@ internal static class HyperXSelfTest
         var decoded=HyperXSnapshot.Decode(Convert.FromHexString("21ff050ed3000000000000000000000000000000"));
         Check(decoded is{Millivolts:3795,Percent:56.25,Charging:null},"Voltage reply invented a charger state or changed its estimate");
         HyperXBatteryEstimatorSelfTest.Run(Check);
+        HyperXLcdRetentionSelfTest.Run(Check);
         Check(HyperXSnapshot.Decode(new byte[20]) is null&&HyperXSnapshot.Decode(new byte[5]) is null,"Unknown replies invented battery");
         Check(HyperXSnapshot.Decode(Convert.FromHexString("21ff051025000000000000000000000000000000")) is{Millivolts:4133,Percent:100,Charging:null},"Recorded high unplugged voltage hid the estimate or invented charging");
         Check(HyperXSnapshot.Decode(Convert.FromHexString("21ff051020000000000000000000000000000000")) is{Percent:100,Charging:null},"Historical charger threshold still hides a valid high-voltage estimate");
