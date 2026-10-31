@@ -51,7 +51,13 @@ public:
         if((active==1&&value>config.lowPercent)||(active==2&&value>config.criticalPercent))active=0;
     }
     double lastPercent() const {return percent;}
-    bool overlay(uint32_t now,char (&first)[17],char (&second)[17],bool pcConnected=true) {
+    // Presentation only: a missing headset does not erase the last accepted
+    // battery value while the PC link continues sending other fresh sensors.
+    double forDisplay(double fresh,bool& cached) const {
+        cached=!std::isfinite(fresh)&&std::isfinite(percent);
+        return std::isfinite(fresh)?fresh:percent;
+    }
+    bool overlay(uint32_t now,char (&first)[17],char (&second)[17],bool pcConnected=true,bool currentReading=true) {
         int kind=active;
         uint32_t elapsed=now-started;
         if(!pcConnected) {
@@ -73,7 +79,7 @@ public:
         std::memset(first,' ',16);std::memset(second,' ',16);first[16]=second[16]='\0';
         if(((elapsed*cycles*2)/duration)%2==0) {
             std::snprintf(first,17,"%s",kind==2?"HYP BAT. CRITICA":"HYP BATERIA BAJA");
-            std::snprintf(second,17,pcConnected?"Carga: %.0f%% aprox":"Ult: %.0f%% *",percent);
+            std::snprintf(second,17,pcConnected&&currentReading?"Carga: %.0f%% aprox":"Ult: %.0f%% *",percent);
             for(auto row:{first,second}) {auto n=std::strlen(row);while(n<16)row[n++]=' ';row[16]='\0';}
         }
         return true;

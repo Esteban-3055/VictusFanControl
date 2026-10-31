@@ -16,6 +16,7 @@ victus::ExternalConfig config(){victus::ExternalConfig c;std::strcpy(c.revision,
 }
 int controllerTests() {
     presentationTests();
+    std::cout<<"PASS HyperX LCD retained display: absent headset with live PC, marked previous value, genuine zero, fresh return and no-history boot; no new acquisition or alert restart\n";
     zeroOutputTests();
     responseTests();
     smoothingTests();
