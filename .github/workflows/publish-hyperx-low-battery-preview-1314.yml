@@ -22,13 +22,13 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      SOURCE_SHA: a15f8ca16ab4205eb925d2f707a731ae566b78f6
+      SOURCE_SHA: 7f2cd1b72b496bd19a3d9c83afb2312d5aba005a
       RELEASE_TAG: v1.3.14
-      BUILD_RUN: 41215468803
+      BUILD_RUN: 41218150439
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: a15f8ca16ab4205eb925d2f707a731ae566b78f6
+          ref: 7f2cd1b72b496bd19a3d9c83afb2312d5aba005a
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/checkout@v4
@@ -68,6 +68,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          git diff --quiet 7a006fdddb0a006440274315cd86d5e4d49621a4 "$SOURCE_SHA" -- firmware/esp32-c3
           gh api "repos/$GH_REPO/releases?per_page=100" > "$RUNNER_TEMP/releases.json"
           gh api "repos/$GH_REPO/git/matching-refs/tags/$RELEASE_TAG" > "$RUNNER_TEMP/tags.json"
           gh api "repos/$GH_REPO/actions/runs?head_sha=$SOURCE_SHA&per_page=100" > "$RUNNER_TEMP/checks.json"
@@ -89,22 +90,22 @@ jobs:
           PY
       - uses: actions/download-artifact@v4
         with:
-          name: VictusFanControl-1.3.14-win-x64-a15f8ca16ab4205eb925d2f707a731ae566b78f6
+          name: VictusFanControl-1.3.14-win-x64-7f2cd1b72b496bd19a3d9c83afb2312d5aba005a
           path: verified-payload
           github-token: ${{ github.token }}
-          run-id: 41215468803
+          run-id: 41218150439
       - uses: actions/download-artifact@v4
         with:
-          name: VictusFanControl-1.3.14-Setup-win-x64-a15f8ca16ab4205eb925d2f707a731ae566b78f6
+          name: VictusFanControl-1.3.14-Setup-win-x64-7f2cd1b72b496bd19a3d9c83afb2312d5aba005a
           path: installer-assets
           github-token: ${{ github.token }}
-          run-id: 41215468803
+          run-id: 41218150439
       - uses: actions/download-artifact@v4
         with:
-          name: external-cooling-validation-a15f8ca16ab4205eb925d2f707a731ae566b78f6
+          name: external-cooling-validation-7f2cd1b72b496bd19a3d9c83afb2312d5aba005a
           path: validation-evidence
           github-token: ${{ github.token }}
-          run-id: 41215468548
+          run-id: 41218150562
       - name: Verify original product archive, installer and 19 exact-commit fixtures
         shell: bash
         run: |
@@ -131,7 +132,9 @@ jobs:
           assert 'PASS HyperX:' in hyperx and 'PASS HyperX GUI:' in hyperx
           assert 'PASS HyperX continuous estimate:' in hyperx
           assert 'PASS HyperX provisional low range:' in hyperx
+          assert 'PASS HyperX PC LCD retention:' in hyperx
           assert Path('validation-evidence/hyperx-self-test/hyperx-low-provisional.png').is_file()
+          assert Path('validation-evidence/hyperx-self-test/hyperx-retained-pc.png').is_file()
           assert 'PASS shutdown cooling:' in hyperx and 'PASS Windows session end:' in hyperx
           assert 'PASS CPU power editor:' in hyperx
           assert 'PASS independent performance controls:' in hyperx
@@ -170,6 +173,7 @@ jobs:
           cp validation-evidence/hyperx-self-test/hyperx-info-1344.png release-assets/HYPERX-BATTERY-INFORMACION.png
           cp validation-evidence/hyperx-self-test/hyperx-lcd-1344.png release-assets/HYPERX-BATTERY-LCD.png
           cp validation-evidence/hyperx-self-test/hyperx-low-provisional.png release-assets/HYPERX-BATERIA-BAJA-PROVISIONAL.png
+          cp validation-evidence/hyperx-self-test/hyperx-retained-pc.png release-assets/HYPERX-ULTIMO-PORCENTAJE-PC.png
           cp firmware/esp32-c3/README.md release-assets/FIRMWARE-INSTALL.md
           cp firmware/esp32-c3/VALIDACIONES.md release-assets/FIRMWARE-VALIDACIONES.md
           git archive --format=zip --prefix=VictusBase-v1.3.14/ --output=release-assets/VictusBase-ESP32C3-v1.3.14-source.zip "$SOURCE_SHA" firmware/esp32-c3 docs/EXTERNAL-COOLING-PROTOCOL.md docs/EXTERNAL-COOLING-V1-VECTORS.json docs/EXTERNAL-CURVE-PROTOCOL.md docs/EXTERNAL-CURVE-ZERO-OUTPUT.md docs/ESP32-WORK04-AUDIT.md docs/AUTOMATIC-COORDINATION-REVIEW.md docs/EXTERNAL-BASE-RAMPED-LOCAL.md docs/ESP32-LCD-RESPONSE-REVIEW.md docs/ESP32-WIFI-RECOVERY.md docs/HYPERX-BATTERY-LCD.md
@@ -199,7 +203,7 @@ jobs:
               for file in Path('firmware/esp32-c3/lib/VictusProtocol').iterdir():
                   if file.suffix in ('.h','.cpp'): assert archive.read('VictusBaseESP32C3/'+file.name)==file.read_bytes()
           (root/'ESP32-SOURCE-PROVENANCE.json').write_text(json.dumps(dict(
-              sourceHead=os.environ['SOURCE_SHA'],firmwareRunId=41215468611,pwmEnabled=True,
+              sourceHead=os.environ['SOURCE_SHA'],firmwareRunId=41218150489,pwmEnabled=True,
               arduinoCore='3.3.2',arduinoJson='6.21.5',physicalEsp32Pass=False,
               file=sketch.name,sha256=hashlib.sha256(sketch.read_bytes()).hexdigest(),
               privateConfigurationIncluded=False,preservesExistingNvsWithoutFullFlashErase=True),indent=2)+'\n')
@@ -207,7 +211,7 @@ jobs:
           (root/(simulator.name+'.sha256')).write_text(hashlib.sha256(simulator.read_bytes()).hexdigest()+'  '+simulator.name+'\n')
           manifest=json.loads(Path('verified-payload/PRODUCT-GUI-MANIFEST.json').read_text(encoding='utf-8-sig'))
           assert manifest['version']=='1.3.14' and manifest['releaseChannel']=='preview'
-          record=dict(tag=os.environ['RELEASE_TAG'],version='1.3.14',prerelease=True,sourceHead=os.environ['SOURCE_SHA'],buildRunId=int(os.environ['BUILD_RUN']),externalCoolingRunId=41215468548,firmwareRunId=41215468611,
+          record=dict(tag=os.environ['RELEASE_TAG'],version='1.3.14',prerelease=True,sourceHead=os.environ['SOURCE_SHA'],buildRunId=int(os.environ['BUILD_RUN']),externalCoolingRunId=41218150562,firmwareRunId=41218150489,
               physicalEsp32Pass=False,physicalNotebookWrites=False,previousStableRelease='v1.3.6',updater129RequiresPreviewOptIn=True,
               assets={p.name:dict(size=p.stat().st_size,sha256=hashlib.sha256(p.read_bytes()).hexdigest()) for p in root.iterdir() if p.is_file()})
           (root/'RELEASE-PROVENANCE.json').write_text(json.dumps(record,indent=2)+'\n')
@@ -231,7 +235,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          gh release create "$RELEASE_TAG" release-assets/* --target "$SOURCE_SHA" --title 'VictusFanControl v1.3.14 · Preliminar · Batería HyperX muy baja visible' --notes-file "$RUNNER_TEMP/release-notes.md" --draft --prerelease --latest=false
+          gh release create "$RELEASE_TAG" release-assets/* --target "$SOURCE_SHA" --title 'VictusFanControl v1.3.14 · Preliminar · Batería HyperX baja y LCD desde Windows' --notes-file "$RUNNER_TEMP/release-notes.md" --draft --prerelease --latest=false
           gh api "repos/$GH_REPO/releases?per_page=100" > "$RUNNER_TEMP/staged-releases.json"
           python - <<'PY'
           import json,os,hashlib
@@ -268,14 +272,14 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
-      SOURCE_SHA: a15f8ca16ab4205eb925d2f707a731ae566b78f6
+      SOURCE_SHA: 7f2cd1b72b496bd19a3d9c83afb2312d5aba005a
       RELEASE_TAG: v1.3.14
       VERIFIED_INSTALLER_SIZE: ${{ needs.publish.outputs.installer-size }}
       VERIFIED_INSTALLER_SHA256: ${{ needs.publish.outputs.installer-sha256 }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: a15f8ca16ab4205eb925d2f707a731ae566b78f6
+          ref: 7f2cd1b72b496bd19a3d9c83afb2312d5aba005a
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/checkout@v4
