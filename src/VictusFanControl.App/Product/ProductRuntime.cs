@@ -427,6 +427,13 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
             }
             catch (Exception ex)
             {
+                if (_ctgpRequested)
+                {
+                    // An unreadable replacement may retain a recent Active observation.
+                    // Loss of the guardian itself still forbids unattended reactivation.
+                    try { _fanGuardian?.EnsureAlive(); }
+                    catch { _ctgpFaulted = true; }
+                }
                 if (_ctgpRequested && _ctgpSource == "Ac" && _fanGuardian?.Ctgp is not { Active: true, Failure: null })
                     _ctgpFaulted = true;
                 AppLog.WriteStructured("PRODUCT AUTOMATIC INTERRUPTION EVIDENCE",new
