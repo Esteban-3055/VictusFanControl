@@ -777,7 +777,7 @@ jobs:
 
       - name: HP 8C40 P14.4 upload retained RC artifact
         id: p14_artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: VictusFanControl-0.4.0-rc.1-win-x64-${{ github.sha }}
           path: ${{ runner.temp }}/VictusFanControl-P14.4-artifact
@@ -813,7 +813,7 @@ jobs:
 
       - name: HP 8C40 P14.5 upload final audit evidence
         id: p14_final_audit
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: VictusFanControl-P14.5-final-audit-${{ github.sha }}
           path: ${{ runner.temp }}/VictusFanControl-P14.5-audit
@@ -860,7 +860,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Public release asset verification failed.' }
 
       - name: Upload definitive GUI review package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: VictusFanControl-1.0.0-win-x64-${{ github.sha }}
           path: ${{ runner.temp }}/VictusFanControl-product-gui-review
@@ -868,14 +868,14 @@ jobs:
           retention-days: 30
 
       - name: HP 8C40 P17 upload curve editor render
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: curve-editor-ui
           path: curve-editor-ui.png
           if-no-files-found: error
 
       - name: Upload configurable dashboard renders
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dashboard-ui
           path: dashboard-*-ui.png
@@ -883,7 +883,7 @@ jobs:
 
       - name: Upload product GUI soak report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: product-gui-soak-${{ github.sha }}
           path: logs/product-gui-soak/report.json
@@ -891,7 +891,7 @@ jobs:
 
       - name: Upload definitive product GUI renders
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: product-gui-renders-${{ github.sha }}
           path: |
@@ -907,7 +907,7 @@ jobs:
       - name: Build unsigned KMDF source-only ACPI probe and validate native contracts
         shell: powershell
         run: .\scripts\Build-Victus-AcpiFieldProbe.ps1
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: acpi-field-probe-review-only
           path: |

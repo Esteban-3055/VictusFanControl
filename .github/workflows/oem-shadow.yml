@@ -60,7 +60,7 @@ jobs:
           & ./scripts/Start-OemShadow.ps1 -Mode Verify -RuntimeDirectory $root
           & ./scripts/Start-OemShadow.ps1 -Mode SelfTest -RuntimeDirectory $root
           Copy-Item scripts/Start-OemShadow.ps1 artifacts/Start-OemShadow.ps1
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: oem-shadow-${{ matrix.os }}
           path: |
