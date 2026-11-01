@@ -16,15 +16,16 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
     private readonly long _ownerStart;
     private bool _released;
     private readonly SemaphoreSlim _ctgpCommands = new(1, 1);
+    private volatile CtgpStatus? _lastCtgpStatus;
     internal CtgpStatus? Ctgp
     {
         get
         {
             var path = Path.Combine(SessionDirectory, "ctgp-status.json");
-            if (!File.Exists(path)) return null;
             try
             {
-                var status = CtgpPublication.Read<CtgpStatus>(path);
+                var status = CtgpPublication.TryRead<CtgpStatus>(path) ?? _lastCtgpStatus;
+                _lastCtgpStatus = status; // A failed read never refreshes the original timestamp.
                 return status is not null && (status.Failure is not null || DateTimeOffset.UtcNow >= status.Utc && DateTimeOffset.UtcNow - status.Utc <= TimeSpan.FromSeconds(5)) ? status : null;
             }
             catch (Exception ex) when (ex is IOException or JsonException) { return null; }
@@ -47,8 +48,8 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
                 EnsureAlive(); Heartbeat();
                 if (File.Exists(replyPath))
                 {
-                    var reply = CtgpPublication.Read<CtgpReply>(replyPath);
-                    if (reply.Id == command.Id)
+                    var reply = CtgpPublication.TryRead<CtgpReply>(replyPath);
+                    if (reply?.Id == command.Id)
                     {
                         var status = reply.Status;
                         if (status.Failure is not null || enabled && status.State is not ("Active" or "AcOnly") || !enabled && status.Active)

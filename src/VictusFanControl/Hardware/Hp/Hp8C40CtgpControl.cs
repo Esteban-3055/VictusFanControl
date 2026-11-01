@@ -12,11 +12,16 @@ internal sealed record CtgpCommand(Guid Id, int OwnerPid, long OwnerStartUtcTick
 internal sealed record CtgpReply(Guid Id, CtgpStatus Status);
 internal static class CtgpPublication
 {
-    internal static T Read<T>(string path)
+    internal static T? TryRead<T>(string path) where T : class
     {
         // Keep the complete old publication readable while ReplaceFile installs the next one.
-        using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
-        return JsonSerializer.Deserialize<T>(file) ?? throw new JsonException("Publicación cTGP vacía.");
+        try
+        {
+            using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+            return JsonSerializer.Deserialize<T>(file) ?? throw new JsonException("Publicación cTGP vacía.");
+        }
+        catch (FileNotFoundException) { return null; }
+        catch (IOException ex) when (WmiFanHeartbeatMonitor.IsSharingViolation(ex)) { return null; }
     }
 }
 internal sealed record CtgpStatus(string State, bool Active, bool Managed, string? Failure, DateTimeOffset Utc)

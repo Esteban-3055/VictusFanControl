@@ -108,9 +108,8 @@ internal static class WmiFanGuiGuardianHost
                 if (monitor.TimedOut(now)) { reason = "HEARTBEAT_EXPIRED"; break; }
                 if (!fixture && HasAcpiFault(baseline)) { reason = "ACPI_13_OR_15"; break; }
                 var commandPath = Path.Combine(directory, "ctgp-command.json");
-                if (File.Exists(commandPath))
+                if (CtgpPublication.TryRead<CtgpCommand>(commandPath) is { } command)
                 {
-                    var command = CtgpPublication.Read<CtgpCommand>(commandPath);
                     if (command.OwnerPid != ownerPid || command.OwnerStartUtcTicks != ownerStart || command.Id == Guid.Empty)
                         throw new InvalidDataException("Solicitud cTGP de otro propietario.");
                     if (command.Id != lastCtgpRequest)

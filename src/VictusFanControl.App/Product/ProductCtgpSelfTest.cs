@@ -2,6 +2,7 @@ using System.Drawing.Imaging;
 using System.Text.Json.Nodes;
 using VictusFanControl.Hardware.Hp;
 using VictusFanControl.Product;
+using VictusFanControl.Runtime;
 
 namespace VictusFanControl.App;
 
@@ -62,6 +63,14 @@ internal static class ProductCtgpSelfTest
         Require(ProductProfilesStore.Copy(defaults with { CtgpEnabled = true }).CtgpEnabled, "cTGP preference did not roundtrip.");
         var legacy = JsonNode.Parse(ProductProfilesStore.Serialize(defaults))!.AsObject(); legacy.Remove("ctgpEnabled");
         Require(!ProductProfilesStore.Parse(legacy.ToJsonString()).CtgpEnabled, "Legacy profile enabled cTGP.");
+        Directory.CreateDirectory("logs/ctgp-self-test");
+        var publication = Path.GetFullPath("logs/ctgp-self-test/publication.json");
+        var published = new CtgpReply(Guid.NewGuid(), CtgpStatus.Disabled);
+        WmiFanExperiment.WriteJson(publication, published);
+        using (var held = new FileStream(publication, FileMode.Open, FileAccess.Read, FileShare.None))
+            Require(CtgpPublication.TryRead<CtgpReply>(publication) is null, "Sharing conflict was not deferred.");
+        Require(CtgpPublication.TryRead<CtgpReply>(publication)?.Id == published.Id, "Deferred publication was lost.");
+        Require(CtgpPublication.TryRead<CtgpReply>(publication + ".missing") is null, "Unpublished response was not deferred.");
 
         using (var form = new ProductForm("fixture://modules", fixture: new ProductGuiSelfTest.RecordingRuntime(), fixtureProfiles: defaults))
         {
