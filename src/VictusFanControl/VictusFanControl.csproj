@@ -15,6 +15,6 @@
     <InternalsVisibleTo Include="VictusFanControl.OemShadowCapture" />
     <InternalsVisibleTo Include="VictusFanControl.PlatformThermalReplay" />
     <PackageReference Include="System.Management" Version="8.0.0" />
-    <PackageReference Include="System.Diagnostics.EventLog" Version="8.0.0" />
+    <PackageReference Include="System.Diagnostics.EventLog" Version="10.0.14" />
   </ItemGroup>
 </Project>
