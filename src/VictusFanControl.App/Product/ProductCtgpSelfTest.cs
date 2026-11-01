@@ -100,6 +100,11 @@ internal static class ProductCtgpSelfTest
         Require(guardian.Ctgp is { Active: false }, "Fixture IPC restoration not confirmed.");
         var released = await guardian.ReleaseAsync(timeout.Token).ConfigureAwait(false);
         Require(released.GuardianLeaseRetired, "cTGP fixture lease not retired.");
+        var statusPath = Path.Combine(folder, "ctgp-status.json");
+        WmiFanExperiment.WriteJson(statusPath, new CtgpStatus("Active", true, true, null, DateTimeOffset.UtcNow.AddMinutes(-1)));
+        Require(guardian.Ctgp is null, "Expired cTGP observation was accepted.");
+        using (var held = new FileStream(statusPath, FileMode.Open, FileAccess.Read, FileShare.None))
+            Require(guardian.Ctgp is null, "Sharing retry refreshed an expired observation.");
         Console.WriteLine("PASS: cTGP opt-in, fixed whitelist, AC-only lifecycle, external-policy rejection, failed restore retention, profile roundtrip, background UI renders and detached guardian fixture IPC. No hardware writes.");
     }
 

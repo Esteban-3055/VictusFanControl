@@ -54,6 +54,7 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
                         var status = reply.Status;
                         if (status.Failure is not null || enabled && status.State is not ("Active" or "AcOnly") || !enabled && status.Active)
                             throw new IOException(status.Failure ?? "cTGP no confirmó la selección.");
+                        _lastCtgpStatus = status;
                         return;
                     }
                 }
@@ -222,6 +223,7 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
                 releasedDirectory,
                 nextDirectory);
             SessionDirectory = nextDirectory;
+            _lastCtgpStatus = null;
             _clock.Restart();
             _released = false;
         }
