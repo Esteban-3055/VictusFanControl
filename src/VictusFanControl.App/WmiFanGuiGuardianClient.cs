@@ -24,7 +24,7 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
             if (!File.Exists(path)) return null;
             try
             {
-                var status = JsonSerializer.Deserialize<CtgpStatus>(File.ReadAllText(path));
+                var status = CtgpPublication.Read<CtgpStatus>(path);
                 return status is not null && (status.Failure is not null || DateTimeOffset.UtcNow >= status.Utc && DateTimeOffset.UtcNow - status.Utc <= TimeSpan.FromSeconds(5)) ? status : null;
             }
             catch (Exception ex) when (ex is IOException or JsonException) { return null; }
@@ -47,11 +47,10 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
                 EnsureAlive(); Heartbeat();
                 if (File.Exists(replyPath))
                 {
-                    using var reply = JsonDocument.Parse(File.ReadAllText(replyPath));
-                    if (reply.RootElement.GetProperty("Id").GetGuid() == command.Id)
+                    var reply = CtgpPublication.Read<CtgpReply>(replyPath);
+                    if (reply.Id == command.Id)
                     {
-                        var status = reply.RootElement.GetProperty("Status").Deserialize<CtgpStatus>()
-                            ?? throw new IOException("cTGP sin estado de respuesta.");
+                        var status = reply.Status;
                         if (status.Failure is not null || enabled && status.State is not ("Active" or "AcOnly") || !enabled && status.Active)
                             throw new IOException(status.Failure ?? "cTGP no confirmó la selección.");
                         return;

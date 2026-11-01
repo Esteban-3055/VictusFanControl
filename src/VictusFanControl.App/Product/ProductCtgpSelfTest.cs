@@ -35,6 +35,9 @@ internal static class ProductCtgpSelfTest
         fake = new(); control = fake.Create(); control.Apply(true); fake.RejectRestore = true;
         try { control.Restore(); throw new Exception("Expected failed restore."); } catch (HpBiosCallException) { }
         Require(control.NeedsRestore, "Failed restoration discarded its recovery obligation.");
+        fake = new() { ThrowAfterEnable = true }; control = fake.Create(); Reject(() => control.Apply(true));
+        Require(control.NeedsRestore && fake.Policy[0] == 1, "Ambiguous enable lost recovery obligation.");
+        control.Restore(); Require(!control.NeedsRestore && fake.Policy[0] == 0, "Ambiguous enable was not restored.");
         fake = new(); Hp8C40CtgpControl.RestoreRecorded(r =>
         {
             Require(r.CommandType != 0x22 || r.Payload[0] == 0, "Recorded recovery enabled cTGP.");
@@ -49,6 +52,12 @@ internal static class ProductCtgpSelfTest
         Require(!Hp8C40CtgpRequestScope.Qualified(new(0x20008, 0x22, [80, 1, 1, 0], 4)), "Numeric watts escaped whitelist.");
         Require(!Hp8C40CtgpRequestScope.Qualified(new(0x20008, 0x22, [1, 1, 1, 87], 4)), "Thermal byte modification admitted.");
         Require(!Hp8C40CtgpRequestScope.Qualified(new(0x20008, 0x2E, [50, 50, 0, 0], 0)), "cTGP scope authorized fans.");
+        Require(!Hp8C40CtgpRequestScope.Admit(new(0x20008, 0x22, [1, 1, 1, 0], 4)), "Unscoped policy write admitted.");
+        using (var scope = new Hp8C40CtgpRequestScope(() => throw new InvalidOperationException("fixture expired owner/AC")))
+        {
+            Reject(() => Hp8C40CtgpRequestScope.Admit(new(0x20008, 0x22, [1, 1, 1, 0], 4)));
+            Require(Hp8C40CtgpRequestScope.Admit(new(0x20008, 0x22, [0, 1, 1, 0], 4)), "Admission closure blocked restoration.");
+        }
         var defaults = new ProductProfiles(); Require(!defaults.CtgpEnabled, "cTGP default is not opt-in.");
         Require(ProductProfilesStore.Copy(defaults with { CtgpEnabled = true }).CtgpEnabled, "cTGP preference did not roundtrip.");
         var legacy = JsonNode.Parse(ProductProfilesStore.Serialize(defaults))!.AsObject(); legacy.Remove("ctgpEnabled");
@@ -87,7 +96,7 @@ internal static class ProductCtgpSelfTest
 
     private sealed class Fake
     {
-        internal bool Ac = true, RejectQualification, RejectIntent, RejectRestore;
+        internal bool Ac = true, RejectQualification, RejectIntent, RejectRestore, ThrowAfterEnable;
         internal byte[] Policy = [0, 1, 1, 0];
         internal int Qualifications, Intents;
         internal List<byte[]> Writes = [];
@@ -99,6 +108,7 @@ internal static class ProductCtgpSelfTest
                 Writes.Add(r.Payload.ToArray());
                 if (RejectRestore && r.Payload[0] == 0) return new(5, new byte[4]);
                 Policy = r.Payload.ToArray();
+                if (ThrowAfterEnable && r.Payload[0] == 1) throw new InvalidOperationException("Fixture ambiguous native return.");
             }
             return new(0, Policy.ToArray());
         }, () => Ac, () => { Qualifications++; if (RejectQualification) throw new InvalidOperationException("fixture qualification"); },

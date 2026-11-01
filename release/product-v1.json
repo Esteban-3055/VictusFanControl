@@ -35,7 +35,9 @@
     "definitive-session-recovery-current-target-without-windows-restart",
     "habitual-gpu-strictly-over95-and-post-candidate-ac-battery-reconciliation",
     "current-product-pl1-above45-up-to-pl2-thermal-load-and-firmware-enforcement",
-    "current-independent-cpu-gpu-toggle-with-retained-automatic-and-standby"
+    "current-independent-cpu-gpu-toggle-with-retained-automatic-and-standby",
+    "integrated-ctgp-ac-battery-lifecycle-and-sustained-load-observation",
+    "new-54-54-fan-response-and-sustained-automatic-load"
   ],
   "evidenceLimits": [
     "Prior thermal observations used the previous GUI 90C confirmation contract.",

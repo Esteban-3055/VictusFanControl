@@ -2,12 +2,23 @@ using System.Management;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using VictusFanControl.Hardware.Windows;
 using VictusFanControl.Runtime;
 
 namespace VictusFanControl.Hardware.Hp;
 
 internal sealed record CtgpCommand(Guid Id, int OwnerPid, long OwnerStartUtcTicks, bool Enabled);
+internal sealed record CtgpReply(Guid Id, CtgpStatus Status);
+internal static class CtgpPublication
+{
+    internal static T Read<T>(string path)
+    {
+        // Keep the complete old publication readable while ReplaceFile installs the next one.
+        using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+        return JsonSerializer.Deserialize<T>(file) ?? throw new JsonException("Publicación cTGP vacía.");
+    }
+}
 internal sealed record CtgpStatus(string State, bool Active, bool Managed, string? Failure, DateTimeOffset Utc)
 {
     internal static CtgpStatus Disabled => new("Disabled", false, false, null, DateTimeOffset.UtcNow);

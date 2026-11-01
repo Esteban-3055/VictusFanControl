@@ -53,6 +53,8 @@ internal static class WmiFanGuiGuardianHost
         string? failure = null;
         var reason = "STARTUP_FAILURE";
         var baseline = 0L;
+        var clock = Stopwatch.StartNew();
+        var monitor = new WmiFanHeartbeatMonitor(ownerPid);
         HpOmenBiosWmiClient? ctgpTransport = null;
         byte[] fixturePolicy = [0, 1, 1, 0];
         bool Ac() => fixture || new WindowsPerformancePowerSourceReader().Read().Source == PerformancePowerSourceKind.Ac;
@@ -68,7 +70,8 @@ internal static class WmiFanGuiGuardianHost
             using var scope = new Hp8C40CtgpRequestScope(() =>
             {
                 owner.Refresh();
-                if (owner.HasExited || !Ac() || File.Exists(Path.Combine(directory, "stop.signal")))
+                monitor.Observe(Path.Combine(directory, "heartbeat.json"), clock.Elapsed);
+                if (owner.HasExited || monitor.TimedOut(clock.Elapsed) || !Ac() || File.Exists(Path.Combine(directory, "stop.signal")))
                     throw new InvalidOperationException("cTGP: AC, propietario o sesión dejaron de estar disponibles.");
             });
             return (ctgpTransport ??= new HpOmenBiosWmiClient()).SendWithResponse(r);
@@ -92,8 +95,6 @@ internal static class WmiFanGuiGuardianHost
                 GuardianPid = current.Id, GuardianStartUtcTicks = current.StartTime.ToUniversalTime().Ticks,
                 DirectEcProhibited = true, LeasePath = leasePath
             });
-            var clock = Stopwatch.StartNew();
-            var monitor = new WmiFanHeartbeatMonitor(ownerPid);
             var previous = clock.Elapsed;
             while (true)
             {
@@ -109,8 +110,7 @@ internal static class WmiFanGuiGuardianHost
                 var commandPath = Path.Combine(directory, "ctgp-command.json");
                 if (File.Exists(commandPath))
                 {
-                    var command = JsonSerializer.Deserialize<CtgpCommand>(File.ReadAllText(commandPath))
-                        ?? throw new InvalidDataException("Solicitud cTGP vacía.");
+                    var command = CtgpPublication.Read<CtgpCommand>(commandPath);
                     if (command.OwnerPid != ownerPid || command.OwnerStartUtcTicks != ownerStart || command.Id == Guid.Empty)
                         throw new InvalidDataException("Solicitud cTGP de otro propietario.");
                     if (command.Id != lastCtgpRequest)
@@ -118,7 +118,7 @@ internal static class WmiFanGuiGuardianHost
                         lastCtgpRequest = command.Id;
                         try { ctgp.Apply(command.Enabled); PublishCtgp(); }
                         catch (Exception ex) { ctgp.Fail(ex); PublishCtgp(); throw; }
-                        WmiFanExperiment.WriteJson(Path.Combine(directory, "ctgp-reply.json"), new { command.Id, Status = ctgp.Status });
+                        WmiFanExperiment.WriteJson(Path.Combine(directory, "ctgp-reply.json"), new CtgpReply(command.Id, ctgp.Status));
                     }
                 }
                 if (now.TotalSeconds % 2 < 0.3)
