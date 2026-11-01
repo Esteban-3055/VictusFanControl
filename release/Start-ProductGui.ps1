@@ -51,8 +51,11 @@ if ($Mode -eq 'FinalCheck') {
     foreach ($check in @('SelfTest','Soak','RecoverySelfTest')) {
         & $PSCommandPath -Mode $check
     }
-    & (Join-Path $root 'app/VictusFanControl.App.exe') --ctgp-self-test
-    if ($LASTEXITCODE -ne 0) { throw 'Packaged cTGP fixtures failed.' }
+    $ctgpOutput = Join-Path ([IO.Path]::GetTempPath()) ('Victus-Product-Ctgp-' + [Guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $ctgpOutput | Out-Null
+    $ctgpFixture = Start-Process -FilePath (Join-Path $root 'app/VictusFanControl.App.exe') -ArgumentList '--ctgp-self-test' -WorkingDirectory $ctgpOutput -WindowStyle Hidden -Wait -PassThru
+    try { if ($ctgpFixture.ExitCode -ne 0) { throw 'Packaged cTGP fixtures failed.' } }
+    finally { $ctgpFixture.Dispose() }
     & $PSCommandPath -Mode Verify
     Write-Host 'v1.0 software checks: PASS. No hardware activation or physical qualification performed.'
     return
