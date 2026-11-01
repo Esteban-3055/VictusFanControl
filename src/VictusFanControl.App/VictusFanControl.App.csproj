@@ -12,6 +12,6 @@
     <ProjectReference Include="..\VictusFanControl\VictusFanControl.csproj" />
     <ProjectReference Include="../../tools/PlatformThermalReplay/PlatformThermalReplay.csproj" />
     <Compile Include="../../tools/OemShadowCapture/OemSources.cs" Link="Experimental/OemSources.cs" />
-    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.1" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="10.0.14" />
   </ItemGroup>
 </Project>
