@@ -185,13 +185,13 @@ internal static partial class ProductGuiSelfTest
             Require(canvas.Hits.All(h=>!h.Id.Contains("MaximumDownStep")&&!h.Id.Contains("MinimumLevel")),"Advanced settings expose controls ignored by the protected physical envelope.");
             canvas.Size=new(1040,660);for(int i=0;i<6;i++){canvas.AdvancedTab=i;Render("advanced-minimum-tab-"+i);}
             canvas.Size=new(1672,941);
-            canvas.Page=ProductPage.Performance;canvas.PerformanceTab=3;canvas.State=canvas.State with{PerformanceRecovery=new(true,"Fixture pending recovery",Guid.NewGuid(),Guid.NewGuid())};Render("recovery-pending");Require(canvas.Hits.Any(h=>h.Id=="recovery-details")&&canvas.Hits.Any(h=>h.Id=="recovery-run"&&h.Enabled),"Pending recovery has no actionable view.");
+            canvas.Page=ProductPage.Performance;canvas.PerformanceTab=4;canvas.State=canvas.State with{PerformanceRecovery=new(true,"Fixture pending recovery",Guid.NewGuid(),Guid.NewGuid())};Render("recovery-pending");Require(canvas.Hits.Any(h=>h.Id=="recovery-details")&&canvas.Hits.Any(h=>h.Id=="recovery-run"&&h.Enabled),"Pending recovery has no actionable view.");
             canvas.Size=new(1040,660);Render("recovery-pending-minimum");canvas.Page=ProductPage.Settings;Render("recovery-settings-minimum");canvas.Size=new(1672,941);canvas.State=canvas.State with{PerformanceRecovery=null};
             var beforeFanRecovery=canvas.State;
             canvas.State=canvas.State with{Runtime="RecoveryRequired",LifecycleBlocked=true,FanMode="RecoveryRequired",FanAuthority="Unknown",CpuState="Disabled",GpuState="Disabled",PerformanceActive=false,AppliedPerformance=null,CanApplyPerformance=false,
                 GuardianState="Recuperación pendiente",PerformanceRecovery=new(true,"Sesión de ventiladores pendiente",FanRecords:new[]{new VictusFanControl.Recovery.ProductRecoveryRecord("WmiFanGui/lease.json","FanGui",new string('a',64))})};
             canvas.Size=new(1040,660);canvas.Page=ProductPage.Settings;Render("recovery-fan-only-settings-minimum");Require(canvas.Hits.Any(h=>h.Id=="session-force-recovery"&&h.Enabled),"Fan-only pending lacks definitive recovery action.");
-            canvas.Page=ProductPage.Performance;canvas.PerformanceTab=3;Render("recovery-fan-only-guardian-minimum");canvas.State=beforeFanRecovery;canvas.Size=new(1672,941);
+            canvas.Page=ProductPage.Performance;canvas.PerformanceTab=4;Render("recovery-fan-only-guardian-minimum");canvas.State=beforeFanRecovery;canvas.Size=new(1672,941);
             canvas.Page=ProductPage.Fans;for(int i=1;i<=2;i++){canvas.FanTab=i;Render("fans-tab-"+i);}
             Require(canvas.Hits.All(h=>h.Id!="fan-tab-3")&&canvas.Hits.Count(h=>h.Id.StartsWith("fan-tab-"))==3,"Duplicate Curves tab remains in Fans.");
             canvas.Page=ProductPage.Performance;canvas.PerformanceTab=0;Render("performance-exact-CPU");Require(canvas.Hits.Any(h=>h.Id=="pl1-text")&&canvas.Hits.Any(h=>h.Id=="pl2-text"),"CPU numeric inputs inaccessible.");
@@ -819,7 +819,7 @@ internal static partial class ProductGuiSelfTest
         {runtime.Publish(blocked);form.HandleCommand("tuning-apply");require(runtime.Commands==1,"Blocked tuning apply dispatched.");}
         var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Advanced fixture exit did not drain.");exit.GetAwaiter().GetResult();
     }
-    private sealed class RecordingRuntime:IProductRuntime,IProductRecoveryHandoff
+    internal sealed class RecordingRuntime:IProductRuntime,IProductRecoveryHandoff
     {
         internal ProductPowerProfile? LastCurveSource;
         internal UnifiedFanDemand? LastCurve;

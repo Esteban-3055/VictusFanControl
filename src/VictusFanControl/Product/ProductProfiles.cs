@@ -65,7 +65,7 @@ public sealed record ProductProfile
             _ = LegacyFan.BuildPolicy();
         }
         if (Fan.Tuning.MinimumLevel is not (10 or 30) || Fan.Tuning.MaximumLevel != Hp8C40AutomaticPolicy.MaximumLevel)
-            throw new InvalidDataException("El editor admite niveles CPU 10–54; la GPU se limita a 52 en el backend de producto.");
+            throw new InvalidDataException("El editor admite niveles CPU/GPU 10–54; las RPM reales se verifican por telemetría.");
         if (GpuMaximumMHz < GpuProductPreferences.MinimumMHz || GpuMaximumMHz > GpuProductPreferences.Maximum(source))
             throw new InvalidDataException($"Límite GPU fuera del rango configurable {GpuProductPreferences.MinimumMHz}–{GpuProductPreferences.ConfigurableMaximumMHz} MHz.");
         foreach (var axis in Enum.GetValues<AdaptiveCurveAxis>())
@@ -96,6 +96,7 @@ public sealed record ProductProfiles
     public ProductProfile Battery { get; init; } = DefaultProfile(ProductPowerProfile.Battery);
     public bool CpuEnabled { get; init; } = true;
     public bool GpuEnabled { get; init; } = true;
+    public bool CtgpEnabled { get; init; }
     public bool StartMinimized { get; init; }
     public bool ActivateAutomaticOnStart { get; init; }
     public bool RecoverSessionsAutomatically { get; init; } = true;

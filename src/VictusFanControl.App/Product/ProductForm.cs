@@ -335,7 +335,7 @@ internal sealed partial class ProductForm : Form
         }
         if(id is "curve-influences" or "curve-points"){_canvas.ShowCurvePoints=id=="curve-points";_canvas.Invalidate();return;}
         if(id.StartsWith("fan-tab-")){_canvas.FanTab=Math.Clamp(int.Parse(id[8..]),0,2);_canvas.Invalidate();return;}
-        if(id.StartsWith("perf-tab-")){_canvas.PerformanceTab=int.Parse(id[9..]);_canvas.Invalidate();return;}
+        if(id.StartsWith("perf-tab-")){_canvas.PerformanceTab=Math.Clamp(int.Parse(id[9..]),0,4);_canvas.Invalidate();return;}
         if(id.StartsWith("monitor-tab-")){_canvas.MonitorTab=int.Parse(id[12..]);_canvas.Invalidate();return;}
         if(id is "node-previous" or "node-next")
         {
@@ -403,6 +403,9 @@ internal sealed partial class ProductForm : Form
             case "updates-page":_canvas.Page=ProductPage.Updates;break;
             case "startup-toggle":_ = ToggleStartupAsync();break;
             case "firmware":case "fan-mode-0":_ = RunAsync(()=>_runtime?.SelectFanModeAsync(AdaptiveFanProductionMode.Firmware,Draft)??Task.CompletedTask);break;
+            case "ctgp-toggle":
+                if(_canvas.State.FanMode!="Firmware"||_canvas.State.AutomaticPreparing||_canvas.State.LifecycleBlocked)break;
+                Change(_draft with{CtgpEnabled=!_draft.CtgpEnabled});break;
             case "fan-mode-1":_ = RunAsync(()=>_runtime?.SelectFanModeAsync(AdaptiveFanProductionMode.Manual,Draft)??Task.CompletedTask);break;
             case "fan-mode-2":
                 if(!_canvas.State.AutomaticAuthorized){_canvas.Notice="Automático no está disponible para este equipo.";break;}

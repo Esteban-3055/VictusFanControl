@@ -19,6 +19,7 @@ internal sealed class ProductAutomaticResumption
     }
     internal void Observe(ProductRuntimeState state, long now)
     {
+        if(state.CtgpFaulted) { Cancel(); return; }
         if(_suppressed||state.AutomaticReview)return;
         if(state.FanMode=="Automatic"&&!state.LifecycleBlocked)
         {
@@ -28,7 +29,7 @@ internal sealed class ProductAutomaticResumption
     }
     internal bool TakeRequest(ProductRuntimeState state, ProductProtectionSettings settings, DateTimeOffset utc, long now)
     {
-        if(!_wanted||!settings.ResumeAutomatic||!_interruptedAt.HasValue||
+        if(state.CtgpFaulted||!_wanted||!settings.ResumeAutomatic||!_interruptedAt.HasValue||
             now<_interruptedAt||now-_interruptedAt<_episode.DelayMilliseconds||
             !state.LifecycleBlocked||state.FanAuthority!="Firmware"||state.Runtime!="Healthy"||
             state.AutomaticPreparing||state.PerformanceUpdating||!state.AutomaticAuthorized)return false;

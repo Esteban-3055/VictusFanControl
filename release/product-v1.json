@@ -67,7 +67,7 @@
     "normalAutomaticPromoted": false,
     "auxiliaryFault": "not-applicable-no-acquisition"
   },
-  "version": "1.3.14",
+  "version": "1.3.15",
   "physicalPassClaimed": false,
   "manualAutomaticRetryPhysicalValidation": "pending-current-target-observation",
   "automaticProtectionControls": "independent-cpu-temperature-gpu-temperature-handoffs-clean-resume-10-30-60s-three-attempts",
@@ -179,22 +179,34 @@
   "upperRangePreview": {
     "entry": "--fan-upper-range-preview",
     "cpuMaximumCommandLevel": 54,
-    "gpuMaximumCommandLevel": 52,
+    "gpuMaximumCommandLevel": 54,
     "defaultNormalMaximumLevel": 54,
     "mode": "manual-only-explicit-apply",
-    "physicalQualification": "short-target-manual-response-observed-extended-checks-pending"
+    "physicalQualification": "prior-54-cpu-52-gpu-observed-new-54-54-physical-check-pending"
   },
   "fanCommandLimits": {
     "minimumLogicalLevel": 10,
     "cpuMaximumCommandLevel": 54,
-    "gpuMaximumCommandLevel": 52,
-    "mapping": "CPU=logical;GPU=min(logical,52)",
+    "gpuMaximumCommandLevel": 54,
+    "mapping": "CPU=logical;GPU=min(logical,54)",
     "normalModes": [
       "Manual",
       "Automatic"
     ],
     "existingCurvePoints": "preserved;50-to-54-final-point-editable",
-    "evidence": "product-fan-54-52-response-8c40-2026-10-13.json"
+    "evidence": "product-fan-54-52-response-8c40-2026-10-13.json",
+    "newGpu54PhysicalValidation": "pending",
+    "nominalRpmPerCommandLevel": 100
+  },
+  "ctgp": {
+    "defaultEnabled": false,
+    "activation": "opt-in-with-Automatic-on-AC-only",
+    "owner": "detached-wmi-fan-guardian",
+    "target": "8C40-F18-audited-DSDT-RTX4060-8C40103C-VBIOS95.07.2B.00.54-driver621.01-200W",
+    "maximumPowerWatts": 75,
+    "wattsInput": false,
+    "restoration": "original-policy-readback-twice-before-lease-retirement",
+    "integratedPhysicalValidation": "pending"
   },
   "sensorSources": {
     "cpu": "Intel-MSR/PawnIO-RAPL",

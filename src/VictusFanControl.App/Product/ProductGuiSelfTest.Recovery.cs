@@ -61,7 +61,7 @@ internal static partial class ProductGuiSelfTest
                 form.RecoveryRunner = s => { require(old.Disposals == 1 && s == selected, "Recovery bypassed old cleanup or exact session selection."); launches++; pending = new(Guid.Empty, Guid.Empty); return Task.FromResult(new ProductRecoveryResult(true, "fixture-evidence", "resolved")); };
                 form.RecoveryRuntimeFactory = p => { created++; require(p.Ac.CpuPl1Watts == 38, "Recovery lost unsaved profile."); return Task.FromResult<IProductRuntime>(next); };
                 form.Show(); Application.DoEvents(); form.EditValue("pl1", 38); var draft = ProductProfilesStore.Serialize(form.Draft); old.Publish(Pending());
-                form.Canvas.Page = ProductPage.Performance; form.Canvas.PerformanceTab = 3; form.Canvas.Refresh();
+                form.Canvas.Page = ProductPage.Performance; form.Canvas.PerformanceTab = 4; form.Canvas.Refresh();
                 require(form.Canvas.Hits.Single(h => h.Id == "recovery-run").Enabled, "Pending recovery is not actionable in Guardian.");
                 form.Canvas.Page = ProductPage.Settings; form.Canvas.Refresh(); require(form.Canvas.Hits.Count(h => h.Id is "session-force-recovery" or "recovery-run") == 1, "Settings must have exactly one definitive recovery action.");
                 var task = form.RecoverPerformanceAsync(confirmed: true); require(ReferenceEquals(task, form.RecoverPerformanceAsync(true)), "Double click duplicated recovery.");

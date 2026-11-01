@@ -106,6 +106,9 @@ internal static class WmiFanExperimentBoundary
 
     internal static void EnsureRequestAllowed(HpBiosRequest request)
     {
+        // Qualified GPU-policy commands are owned by the detached guardian,
+        // never admitted by the GUI's fan or investigation whitelist.
+        if (!_gui && Control && Recovering && Hp8C40CtgpRequestScope.Admit(request)) return;
         if (_gui && (Recovering || File.Exists(StopPath)) && request.CommandType == Hp8C40BiosFanControl.GetFanLevelCommandType)
             throw new WmiFanReadAdmissionPausedException(PlannedGuiRelease?.Invoke()==true);
         if (!IsAllowed(request, Control, Recovering, File.Exists(StopPath), gui: _gui, productUpperRange: _productUpperRange))
@@ -247,6 +250,7 @@ internal static class WmiFanExperimentBoundary
             // Durable tracking can itself be slow. Check scoped AC/lifecycle/
             // deadline admission again after it, immediately before native IO.
             VictusFanControl.Control.FanDispatchAdmissionScope.EnsureNativeRequestAllowed(request);
+            if (Enabled) Hp8C40CtgpRequestScope.BeforeNative(request);
         }
         catch
         {

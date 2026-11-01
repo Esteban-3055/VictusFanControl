@@ -11,7 +11,7 @@ import shutil
 import zipfile
 
 
-VERSION = "1.3.14"
+VERSION = "1.3.15"
 TARGET = "HP-8C40-9D0R1LA-F18"
 MANIFEST = "PRODUCT-GUI-MANIFEST.json"
 
@@ -55,8 +55,11 @@ def main():
     require(manifest["fanCommandLimits"] == contract["fanCommandLimits"] and
             contract["fanCommandLimits"]["minimumLogicalLevel"] == 10 and
             contract["fanCommandLimits"]["cpuMaximumCommandLevel"] == 54 and
-            contract["fanCommandLimits"]["gpuMaximumCommandLevel"] == 52 and
-            contract["fanCommandLimits"]["mapping"] == "CPU=logical;GPU=min(logical,52)", "Wrong product fan limits")
+            contract["fanCommandLimits"]["gpuMaximumCommandLevel"] == 54 and
+            contract["fanCommandLimits"]["mapping"] == "CPU=logical;GPU=min(logical,54)", "Wrong product fan limits")
+    require(manifest["ctgp"] == contract["ctgp"] and contract["ctgp"]["defaultEnabled"] is False
+            and contract["ctgp"]["maximumPowerWatts"] == 75 and contract["ctgp"]["wattsInput"] is False,
+            "Wrong qualified cTGP contract")
     require(manifest["performanceControlSelection"] == contract["performanceControlSelection"] == {
         "automaticActivation": "selected-domains", "domains": "cpu-gpu-independent-live-apply",
         "bothOffAllowed": True, "fanModeOnLimitRelease": "unchanged",

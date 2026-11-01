@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.3.15 (preview)
+
+- Add opt-in AC-only cTGP coupled to Automatic for the qualified HP 8C40/F.18 configuration, with detached guardian restoration and readback. Default off; no watts input or VBIOS modification.
+- Allow nominal 54/54 fan targets in Manual and Automatic, preserving saved curve points. New GPU 54 physical validation remains pending.
+- Add policy, IPC, background UI and failed-recovery regression checks.
+
 ## v1.1.8
 
 - Filter brief CPU temperature rises for two seconds in habitual exact-target Automatic and its simulator; preserve immediate raw ≥99 °C response and all raw safety/handoff thresholds. Retained CPU acquisitions cannot confirm heat. Keep GPU, power and load contributions unchanged.

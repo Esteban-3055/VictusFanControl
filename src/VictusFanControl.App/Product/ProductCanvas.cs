@@ -259,7 +259,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         }
         DrawText(g,"Control manual",331,562,25,null,490,true);
         Slider(g,"manual","Nivel CPU / GPU",new(331,613,490,86),ManualLevel,10,State.ManualMaximumLevel,"",true);
-        DrawText(g,$"CPU {ManualLevel} / GPU {Math.Min(ManualLevel,52)} · requiere Aplicar",331,705,17,Muted,490,height:30);
+        DrawText(g,$"CPU {ManualLevel} / GPU {Math.Min(ManualLevel,54)} · requiere Aplicar",331,705,17,Muted,490,height:30);
         Button(g,"manual-apply","Aplicar nivel",new(331,761,219,50),true,State.ManualAuthorized&&State.FanMode=="Manual"&&State.Runtime=="Healthy"&&!State.LifecycleBlocked);
         Button(g,"firmware","Volver a Firmware",new(565,761,258,50));
         DrawText(g,"Curva del perfil · "+ProfileName,889,201,27,null,735,true);
@@ -296,8 +296,8 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
     private void Performance(Graphics g)
     {
         DrawText(g,"Rendimiento · "+ProfileName,320,137,29,null,1200,true);
-        string[] tabs=["CPU RAPL","GPU NVML","Fuente de energía","Guardián"];
-        for(int i=0;i<4;i++){Button(g,"perf-tab-"+i,tabs[i],new(320+i*270,183,252,52),PerformanceTab==i);}
+        string[] tabs=["CPU RAPL","GPU NVML","cTGP","Fuente de energía","Guardián"];
+        for(int i=0;i<tabs.Length;i++){Button(g,"perf-tab-"+i,tabs[i],new(320+i*266,183,250,52),PerformanceTab==i);}
         if(PerformanceTab==0)
         {
             Card(g,new(320,253,807,570));DrawText(g,"Límites de CPU (Intel RAPL)",350,276,29,null,740,true);
@@ -316,16 +316,27 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
             DrawText(g,"ActiveUnverified significa Set aceptado. El rango locked completo no es observable en este driver.",350,687,21,Muted,735);
             DrawText(g,$"Rango configurable {GpuProductPreferences.MinimumMHz}–{GpuProductPreferences.Maximum(Editing)} MHz; el driver puede rechazar el valor.",350,768,19,Yellow,735);
         }
+        else if(PerformanceTab==2)
+        {
+            Card(g,new(320,253,807,570));DrawText(g,"Potencia GPU · cTGP de HP",350,276,29,null,740,true);
+            Button(g,"ctgp-toggle",Profiles.CtgpEnabled?"✓  Activar cTGP con Automático":"○  cTGP desactivado",new(350,337,735,60),Profiles.CtgpEnabled,
+                !State.AutomaticPreparing&&!State.LifecycleBlocked&&State.FanMode=="Firmware");
+            DrawText(g,"Se activa con Automático y el cargador conectado.",350,430,23,null,735);
+            DrawText(g,"En batería se restaura. Volver a Firmware también libera cTGP.",350,487,22,Muted,735,height:64);
+            DrawText(g,"Selecciona esta opción antes de iniciar Automático. Guardar conserva la preferencia; no cambia la potencia.",350,570,22,Muted,735,height:90);
+            DrawText(g,"Estado: "+CtgpDisplay(),350,688,25,State.CtgpState=="Active"?Green:Muted,735);
+            DrawText(g,State.CtgpFailure??"HP 8C40 / F.18 · máximo validado 75 W. No es un límite de frecuencia NVML.",350,748,19,State.CtgpFailure is null?Muted:Yellow,735,height:65);
+        }
         else
         {
-            Card(g,new(320,253,807,570));DrawText(g,PerformanceTab==2?"Fuente real y perfil aplicado":"Autoridad independiente",350,276,29,null,740,true);
-            string[] lines=PerformanceTab==2?["Fuente real: "+SourceText(),"Perfil que editas: "+ProfileName,"Perfil CPU/GPU aplicado: "+(State.AppliedPerformance is null?"Ninguno":State.AppliedPerformanceSource),"CPU: "+AppliedCpu(),"GPU: "+AppliedGpu(),"La pestaña AC/Batería solo cambia la edición."]:
+            Card(g,new(320,253,807,570));DrawText(g,PerformanceTab==3?"Fuente real y perfil aplicado":"Autoridad independiente",350,276,29,null,740,true);
+            string[] lines=PerformanceTab==3?["Fuente real: "+SourceText(),"Perfil que editas: "+ProfileName,"Perfil CPU/GPU aplicado: "+(State.AppliedPerformance is null?"Ninguno":State.AppliedPerformanceSource),"CPU: "+AppliedCpu(),"GPU: "+AppliedGpu(),"La pestaña AC/Batería solo cambia la edición."]:
                 ["Performance Guardian: "+State.GuardianState,"CPU: "+State.CpuState,"GPU: "+State.GpuState,"Fan authority: "+State.FanAuthority,"Journal y recuperación pertenecen al backend.","Fan Control y CPU/GPU no forman una transacción atómica."];
-            var lineCount=PerformanceTab==3&&State.PerformanceRecovery is {Pending:true}?4:lines.Length;
+            var lineCount=PerformanceTab==4&&State.PerformanceRecovery is {Pending:true}?4:lines.Length;
             for(int i=0;i<lineCount;i++)DrawText(g,lines[i],350,359+i*64,24,i<3?Ink:Muted,735);
         }
         Card(g,new(1148,253,500,570));DrawText(g,"Estado y aplicación",1178,276,28,null,438,true);
-        if(PerformanceTab==3 && State.PerformanceRecovery is {Pending:true})
+        if(PerformanceTab==4 && State.PerformanceRecovery is {Pending:true})
         {
             DrawText(g,"Sesión pendiente. Recuperar libera los controles, guarda respaldos y vuelve a Firmware.",350,676,20,Yellow,735,height:55);
             Button(g,"recovery-run","Recuperar sesión definitiva",new(350,745,443,48),true,State.PerformanceRecovery.Actionable);
@@ -340,6 +351,15 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         Button(g,"performance-apply",State.PerformanceProcessPresent?"Aplicar cambios":"Aplicar CPU / GPU",new(1178,714,438,48),true,CanApplyPerformance);
         Button(g,"performance-release","Desactivar límites CPU / GPU",new(1178,773,438,48),false,State.PerformanceProcessPresent);
     }
+    private string CtgpDisplay() => State.CtgpState switch
+    {
+        "Active" => "Activo · confirmado por HP",
+        "AcOnly" => "En espera de corriente AC",
+        "RecoveryRequired" => "Restauración pendiente",
+        "Unknown" => "Sin confirmación vigente",
+        "Restored" => "Restaurado",
+        _ => Profiles.CtgpEnabled ? "Seleccionado · pendiente de Automático" : "Desactivado"
+    };
     private void ProfilePage(Graphics g)
     {
         DrawText(g,"Perfiles",320,140,30,null,800,true);DrawText(g,"Dos configuraciones independientes para ventilación y rendimiento",320,186,23,Muted,1240);
@@ -445,7 +465,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         var applied=markers.FirstOrDefault(m=>m.IsApplied);var preview=markers.FirstOrDefault(m=>!m.IsApplied);
         var cpuSpike=editable&&applied is not null&&State.AutomaticDecision?.CpuThermalDemand is {SpikeSuppressed:true};
         DrawText(g,markerCaption??((simulated is not null?"● Simulado":applied is null?"● Solicitud: —":$"● Solicitud: {applied.Level:0}")+" · ○ Objetivo"+(preview is null?"":$" {preview.Input:0.0} %")+(preview?.Observation.ThermalProtection==true?" · Protección térmica":cpuSpike?" · Filtro CPU":"")),plot.Left,plot.Top-18,15,applied is null?Muted:Green,plot.Width);
-        DrawText(g,"Demanda (%)",plot.Left+plot.Width*.32f,plot.Bottom+46,20,Muted,300,height:26);DrawText(g,"CPU 10–54 · GPU hasta 52",plot.Left,plot.Top-41,19,Muted,275);
+        DrawText(g,"Demanda (%)",plot.Left+plot.Width*.32f,plot.Bottom+46,20,Muted,300,height:26);DrawText(g,"CPU / GPU 10–54",plot.Left,plot.Top-41,19,Muted,275);
         if(editable){DrawText(g,"● Curva editable",plot.Left+275,plot.Top-41,16,Accent,170);DrawText(g,"┄ Preset inicial",plot.Left+449,plot.Top-41,16,Muted,185);}
     }
     private void TelemetryPage(Graphics g)
@@ -464,7 +484,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         Card(g,new(310,157,1337,666));DrawText(g,"Reglas de seguridad",332,177,30,null,1250,true);
         DrawText(g,"Protecciones del backend · solo lectura",332,225,23,Muted,1240);
         string[] titles=["Respuesta térmica de demanda","SafetyGate independiente","Límites reales de ventiladores","Telemetría fresca y completa","Guardian y recuperación"];
-        string[] details=["CPU habitual: confirma subidas 2 s; ≥99 °C responde de inmediato. Sensores y protecciones conservan lecturas reales.","Inicio CPU ≤90 °C; activo ≥95 °C confirma hasta 2 s; ≥99 °C vuelve a Firmware. GPU >95 °C interrumpe en uso habitual.","Manual WMI y Automático: CPU 10–54, GPU hasta 52. Nivel no equivale a porcentaje ni a RPM exactas.","Una pérdida de admisión cancela comandos y solicita liberación.","Recuperar CPU/GPU guarda respaldos y libera la sesión; no activa Automático."];
+        string[] details=["CPU habitual: confirma subidas 2 s; ≥99 °C responde de inmediato. Sensores y protecciones conservan lecturas reales.","Inicio CPU ≤90 °C; activo ≥95 °C confirma hasta 2 s; ≥99 °C vuelve a Firmware. GPU >95 °C interrumpe en uso habitual.","Manual WMI y Automático: CPU/GPU 10–54. Nivel no equivale a porcentaje ni a RPM exactas.","Una pérdida de admisión cancela comandos y solicita liberación.","Recuperar CPU/GPU guarda respaldos y libera la sesión; no activa Automático."];
         for(int i=0;i<5;i++){var r=new RectangleF(331,282+i*103,1293,87);Card(g,r);Icon(g,i==4?"profiles":"fan",r.X+24,r.Y+24,37);DrawText(g,titles[i],r.X+99,r.Y+12,23,null,1100,true);DrawText(g,details[i],r.X+99,r.Y+47,19,Muted,1100);}
     }
     private void Monitoring(Graphics g)

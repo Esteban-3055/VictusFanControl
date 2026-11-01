@@ -15,6 +15,53 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
     private readonly int _ownerPid = Environment.ProcessId;
     private readonly long _ownerStart;
     private bool _released;
+    private readonly SemaphoreSlim _ctgpCommands = new(1, 1);
+    internal CtgpStatus? Ctgp
+    {
+        get
+        {
+            var path = Path.Combine(SessionDirectory, "ctgp-status.json");
+            if (!File.Exists(path)) return null;
+            try
+            {
+                var status = JsonSerializer.Deserialize<CtgpStatus>(File.ReadAllText(path));
+                return status is not null && (status.Failure is not null || DateTimeOffset.UtcNow >= status.Utc && DateTimeOffset.UtcNow - status.Utc <= TimeSpan.FromSeconds(5)) ? status : null;
+            }
+            catch (Exception ex) when (ex is IOException or JsonException) { return null; }
+        }
+    }
+
+    public async Task SetCtgpAsync(bool enabled, CancellationToken token)
+    {
+        await _ctgpCommands.WaitAsync(token).ConfigureAwait(false);
+        try
+        {
+            EnsureAlive(); Heartbeat();
+            var command = new CtgpCommand(Guid.NewGuid(), _ownerPid, _ownerStart, enabled);
+            WmiFanExperiment.WriteJson(Path.Combine(SessionDirectory, "ctgp-command.json"), command);
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+            deadline.CancelAfter(TimeSpan.FromSeconds(10));
+            var replyPath = Path.Combine(SessionDirectory, "ctgp-reply.json");
+            while (true)
+            {
+                EnsureAlive(); Heartbeat();
+                if (File.Exists(replyPath))
+                {
+                    using var reply = JsonDocument.Parse(File.ReadAllText(replyPath));
+                    if (reply.RootElement.GetProperty("Id").GetGuid() == command.Id)
+                    {
+                        var status = reply.RootElement.GetProperty("Status").Deserialize<CtgpStatus>()
+                            ?? throw new IOException("cTGP sin estado de respuesta.");
+                        if (status.Failure is not null || enabled && status.State is not ("Active" or "AcOnly") || !enabled && status.Active)
+                            throw new IOException(status.Failure ?? "cTGP no confirmó la selección.");
+                        return;
+                    }
+                }
+                await Task.Delay(50, deadline.Token).ConfigureAwait(false);
+            }
+        }
+        finally { _ctgpCommands.Release(); }
+    }
     private string LeasePath => _fixture ? Path.Combine(SessionDirectory, "fixture-lease.json") : WmiFanGuiGuardianHost.LeasePath;
     public string SessionDirectory { get; private set; }
     public string ReportPath => Path.Combine(SessionDirectory, "guardian-report.json");
@@ -154,6 +201,8 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
             (File.Exists(Path.Combine(releasedDirectory, "write-intent.json")) &&
                 (!r.GetProperty("ReleaseRequestAccepted").GetBoolean() || !r.GetProperty("LegacyDefaultRequestAccepted").GetBoolean())) ||
             r.GetProperty("Failure").ValueKind != JsonValueKind.Null ||
+            (File.Exists(Path.Combine(releasedDirectory, "ctgp-intent.json")) &&
+                (!r.TryGetProperty("CtgpRestored", out var ctgpRestored) || !ctgpRestored.GetBoolean())) ||
             _child.ExitCode != 0 ||
             File.Exists(releasedLeasePath))
             throw new IOException("WMI release report failed identity/completion checks; review retained lease.");

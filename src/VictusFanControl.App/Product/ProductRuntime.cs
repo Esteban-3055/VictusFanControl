@@ -50,6 +50,9 @@ internal sealed record ProductRuntimeState
     internal VictusFanControl.PlatformThermalReplay.ProductRetentionState? PlatformRetention { get; init; }
     internal string CpuState { get; init; } = "Disabled";
     internal string GpuState { get; init; } = "Disabled";
+    internal string CtgpState { get; init; } = "Disabled";
+    internal string? CtgpFailure { get; init; }
+    internal bool CtgpFaulted { get; init; }
     internal string GuardianState { get; init; } = "Sin sesión";
     internal string? CpuStatus { get; init; }
     internal string? GpuStatus { get; init; }
@@ -110,6 +113,9 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
     private readonly PerformanceGuardianClient _performance;
     private readonly RecoveryPreviewCache _recoveryPreview = new();
     private readonly WmiFanGuiGuardianClient? _fanGuardian;
+    private bool _ctgpRequested;
+    private bool _ctgpFaulted;
+    private string? _ctgpSource;
     private bool _releaseCompleted;
     private Guid? _drainedGpuSession;
     public Guid? DrainedGpuSession => _drainedGpuSession;
@@ -382,11 +388,18 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
                         await _controller.ApplyUnifiedDemandAsync(profile.UnifiedDemand ?? throw new InvalidOperationException("Falta curva única de destino."),
                             () => AdmitSource(true), token, sourceConfiguration: profile);
                     _selectedFanProfile = expected;
+                    await ConfigureCtgpAsync(_automaticProfiles.CtgpEnabled, expected!, token);
                     _sourceTransition.Reset(); _automaticDecision = null; _automaticDecisionSnapshot = null;
                     AppLog.Write("PRODUCT AUTOMATIC SOURCE TRANSITION CONFIRMED: " + System.Text.Json.JsonSerializer.Serialize(new
                     { automaticSessionId = _automaticSessionId, from, to = expected, snapshotTimestamp = snapshot.Timestamp,
                         guardian = _performance.LastStatus, performance = _automaticPerformance, fan = _controller.AutomaticConfiguration,
                         remainingSeconds = _automaticReview?.RemainingSeconds }));
+                }
+                if (_ctgpRequested && _ctgpSource == "Ac" && expected == "Ac" &&
+                    _fanGuardian?.Ctgp is not { Active: true, Failure: null })
+                {
+                    _ctgpFaulted = true;
+                    throw new InvalidOperationException("cTGP perdió su confirmación vigente; volver a Firmware.");
                 }
                 var decision = await _controller.ProcessAutomaticAsync(snapshot,raw,token, refreshRawSafetyProvider: () =>
                 {
@@ -414,6 +427,8 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
             }
             catch (Exception ex)
             {
+                if (_ctgpRequested && _ctgpSource == "Ac" && _fanGuardian?.Ctgp is not { Active: true, Failure: null })
+                    _ctgpFaulted = true;
                 AppLog.WriteStructured("PRODUCT AUTOMATIC INTERRUPTION EVIDENCE",new
                 {
                     automaticSessionId=_automaticSessionId,selectedProfile=_selectedFanProfile,
@@ -502,6 +517,13 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
                         _activeAutomaticTicket = ticket;
                         _automaticProfiles = ProductProfilesStore.Copy(ticket.Profiles); _sourceTransition.Reset();
                         await SetFanModeAsync(AdaptiveFanProductionMode.Automatic);
+                        try { await ConfigureCtgpAsync(ticket.Profiles.CtgpEnabled, current.ToString(), CancellationToken.None); }
+                        catch
+                        {
+                            _ctgpFaulted = true;
+                            await SetFanModeAsync(AdaptiveFanProductionMode.Firmware);
+                            throw;
+                        }
                         if (!_automaticActivation.IsCurrent(ticket))
                         {
                             await SetFanModeAsync(AdaptiveFanProductionMode.Firmware);
@@ -552,6 +574,12 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
     }
     private async Task SetFanModeAsync(AdaptiveFanProductionMode mode)
     {
+        Exception? ctgpReleaseFailure = null;
+        if (mode != AdaptiveFanProductionMode.Automatic && _ctgpRequested && _wmi is not null)
+        {
+            try { await _wmi.SetCtgpAsync(false, CancellationToken.None); _ctgpRequested = false; _ctgpSource = null; }
+            catch (Exception ex) { ctgpReleaseFailure = ex; } // Fan restoration must still be attempted.
+        }
         if(mode!=_controller.Mode)
         {
             _manualAppliedLevel=-1;
@@ -567,6 +595,17 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
         if (!result.ExecutionAuthorized) throw new InvalidOperationException(result.Detail);
         if (mode != AdaptiveFanProductionMode.Automatic) { _selectedFanProfile = null; _automaticPerformance = null; _activeAutomaticTicket = null; _automaticProfiles = null; _sourceTransition.Reset(); _automaticGuard.Stop(); }
         Publish(FanDecisionMessage(result));
+        if (ctgpReleaseFailure is not null) throw new IOException("cTGP no confirmó su liberación; se intentó también restaurar ventiladores.", ctgpReleaseFailure);
+    }
+    private async Task ConfigureCtgpAsync(bool selected, string source, CancellationToken token)
+    {
+        if (!selected && !_ctgpRequested) return;
+        if (_wmi is null || _fanGuardian is null || _controller.Mode != AdaptiveFanProductionMode.Automatic)
+            throw new InvalidOperationException("cTGP requiere Automático y el guardián WMI del HP 8C40.");
+        try { await _wmi.SetCtgpAsync(selected && source == "Ac", token); }
+        catch { _ctgpFaulted = true; throw; }
+        _ctgpRequested = selected; _ctgpSource = source;
+        AppLog.WriteStructured("PRODUCT CTGP SELECTION", new { selected, source, status = _fanGuardian.Ctgp });
     }
     public Task ApplyFanCurveAsync(ProductPowerProfile source, UnifiedFanDemand demand)
     {
@@ -842,6 +881,7 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
         var source = "Unknown";
         try { var reading = new WindowsPerformancePowerSourceReader().Read(); if (reading.Succeeded) source = reading.Source.ToString(); } catch { }
         var p = _performance.LastStatusFresh ? _performance.LastStatus : null;
+        var ctgp = _fanGuardian?.Ctgp;
         var recovery=_performance.HasProcess&&!_performance.HasFailedProcess ? null : _recoveryPreview.Get();
         ProductRuntimeState state;
         lock (_stateSync)
@@ -860,7 +900,7 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
                 AutomaticReview = _automaticReview is not null, AutomaticReviewMaximumSeconds = _automaticReview?.MaximumDurationSeconds, AutomaticReviewRemainingSeconds = _controller.Mode == AdaptiveFanProductionMode.Automatic ? _automaticReview?.RemainingSeconds : null,
                 AutomaticCpuSpikeRemainingMilliseconds = _automaticGuard.RemainingCpuSpikeMilliseconds,
                 AppliedProtections = _automaticProfiles is null ? null : _automaticReview is null ? _automaticProfiles.Protections : new ProductProtectionSettings { ResumeAutomatic = false },
-                AutomaticResumeProfiles = _automaticProfiles,
+                AutomaticResumeProfiles = _ctgpFaulted ? null : _automaticProfiles,
                 AutomaticPreparing = _automaticActivation.Pending, AutomaticSessionId = _automaticSessionId, AutomaticDecisionSnapshot = _automaticDecisionSnapshot, AutomaticInterruptionSnapshot = _automaticInterruptionSnapshot,
                 AutomaticSourceTransition = _sourceTransition.Pending ? _sourceTransition.Candidate : null,
                 AutomaticDecision = _controller.Mode == AdaptiveFanProductionMode.Automatic && ReferenceEquals(_automaticDecision,_controller.LastAutomaticResult) ? _automaticDecision : null,
@@ -873,6 +913,9 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
                 PerformanceUpdating = _performanceUpdating,
                 PlatformRetention = null,
                 CpuState = p?.CpuState ?? (_performance.HasProcess || recovery?.Pending==true ? "Recovering" : "Disabled"), GpuState = p?.GpuState ?? (_performance.HasProcess || recovery?.Pending==true ? "Recovering" : "Disabled"),
+                CtgpState = ctgp?.Failure is not null ? "RecoveryRequired" : _controller.Mode != AdaptiveFanProductionMode.Automatic || !_ctgpRequested ? "Disabled" : source != "Ac" ? "AcOnly" : ctgp?.State ?? "Unknown",
+                CtgpFailure = ctgp?.Failure,
+                CtgpFaulted = _ctgpFaulted,
                 CpuStatus = p?.CpuStatus, GpuStatus = p?.GpuStatus, AppliedPerformanceSource = p?.PowerSource ?? "Unknown", AppliedPerformance = _performance.AppliedConfiguration ?? (p is { CpuState: "Active" } or { GpuState: "ActiveUnverified" } ? _requestedPerformance : null),
                 GuardianState = recovery?.Pending==true ? "Recuperación pendiente" : p?.RuntimeFailure is not null ? "Failed" : _performance.HasProcess ? p?.Phase ?? "Recovering" : "Sin sesión",
                 AppliedFanProfile = _fans.Authority == FanAuthority.Custom ? _selectedFanProfile : null,

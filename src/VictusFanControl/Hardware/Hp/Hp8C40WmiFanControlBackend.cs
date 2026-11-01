@@ -18,6 +18,8 @@ internal interface IWmiFanGuiGuardian : IAsyncDisposable
     void Heartbeat();
     Task<FanWmiReleaseEvidence> ReleaseAsync(CancellationToken token);
     Task<FanWmiReleaseEvidence> ConfirmCompletedReleaseAsync(CancellationToken token);
+    Task SetCtgpAsync(bool enabled, CancellationToken token) => enabled
+        ? Task.FromException(new NotSupportedException("cTGP no disponible en este guardián.")) : Task.CompletedTask;
 }
 
 /// <summary>
@@ -41,6 +43,12 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
     internal int? LastAcceptedLevel => _session.LastAcceptedLevel;
     internal (int Cpu,int Gpu)? LastAcceptedTargets => _session.LastAcceptedLevel is {} level ? (_productUpperRange ? Hp8C40ProductFanTargets.FromLogical(level) : (level,level)) : null;
     internal Func<TelemetrySnapshot?>? ProductTelemetryProvider { get; set; }
+    internal async Task SetCtgpAsync(bool enabled, CancellationToken token)
+    {
+        if (!enabled && !_active) return;
+        await EnterCustomModeAsync(token).ConfigureAwait(false);
+        await _guardian.SetCtgpAsync(enabled, token).ConfigureAwait(false);
+    }
     public event EventHandler<string>? CommandAccepted;
     public string Name => "HP 8C40 WMI-only / supervised requests; hardware ownership unverified";
     public bool CanWrite => true;

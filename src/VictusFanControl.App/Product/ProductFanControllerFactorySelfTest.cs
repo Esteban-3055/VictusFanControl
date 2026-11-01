@@ -93,14 +93,14 @@ internal static class ProductFanControllerFactorySelfTest
             clock+=1000;var sample=Sample(i==0?45:90);
             controller.ProcessAutomaticAsync(sample,Raw(sample),default).AsTask().GetAwaiter().GetResult();
         }
-        require(backend.Requests.Skip(before).Any(r=>r.Payload.SequenceEqual(new byte[]{54,52,0,0})),"Product Automatic did not reach 54/52.");
-        require(backend.Requests.Where(r=>r.CommandType==0x2E && r.Payload[0]!=255).All(r=>r.Payload[0]<=54 && r.Payload[1]<=52),"Product control exceeded fan limits.");
+        require(backend.Requests.Skip(before).Any(r=>r.Payload.SequenceEqual(new byte[]{54,54,0,0})),"Product Automatic did not reach 54/54.");
+        require(backend.Requests.Where(r=>r.CommandType==0x2E && r.Payload[0]!=255).All(r=>r.Payload[0]<=54 && r.Payload[1]<=54),"Product control exceeded fan limits.");
         // A newly applied curve is used without resetting authority or losing the upper range.
         controller.ApplyUnifiedDemandAsync(profiles.Ac.Fan.UnifiedDemand!,()=>{},default).AsTask().GetAwaiter().GetResult();
         clock+=1000;var critical=Sample(99);var released=controller.ProcessAutomaticAsync(critical,Raw(critical),default).AsTask().GetAwaiter().GetResult();
-        require(released.Action==AdaptiveFanProductionActionKind.RestoreFirmware && fans.Authority==FanAuthority.Firmware,"54/52 Automatic lost immediate 99 C release.");
+        require(released.Action==AdaptiveFanProductionActionKind.RestoreFirmware && fans.Authority==FanAuthority.Firmware,"54/54 Automatic lost immediate 99 C release.");
         fans.DisposeAsync().AsTask().GetAwaiter().GetResult();
-        Console.WriteLine("Product 54/52 control: PASS (real factory/controller/session, Manual 51..54, Automatic and live curve at 54/52, persisted AC curve/unchanged Battery, GPU cap, immediate 99 C release; fake IO).");
+        Console.WriteLine("Product 54/54 control: PASS (real factory/controller/session, Manual 51..54, Automatic and live curve at 54/54, persisted AC curve/unchanged Battery, equal CPU/GPU targets, immediate 99 C release; fake IO).");
     }
     private static void TestSourceRoundTrips(Action<bool,string> require,HardwareIdentity hardware)
     {

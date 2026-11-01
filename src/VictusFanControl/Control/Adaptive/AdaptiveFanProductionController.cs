@@ -121,7 +121,7 @@ public sealed class AdaptiveFanProductionController
         if (automaticMaximumLevel is not (50 or 54) || automaticMaximumLevel == 54 &&
             (automaticMinimumLevel != 10 || automaticHardware is null ||
              coordinator.BackendCanWrite && coordinator.BackendCapabilities.MaximumLevel < 54))
-            throw new ArgumentException("Product 54/52 Automatic requires exact-target telemetry and a 54-level backend.",nameof(automaticMaximumLevel));
+            throw new ArgumentException("Product 54/54 Automatic requires exact-target telemetry and a 54-level backend.",nameof(automaticMaximumLevel));
         _automaticMaximumLevel = automaticMaximumLevel;
         _useRawCpuThermalResponse = useRawCpuThermalResponse;
         if (experimentalPolicy is not null && (!automaticExecutionAuthorized || automaticHardware is null ||
