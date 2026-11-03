@@ -9,6 +9,12 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if(args.SequenceEqual(new[]{"--heartbeat-publication-self-test"}))
+        {
+            try { WmiFanHeartbeatPublicationSelfTest.RunAsync().GetAwaiter().GetResult(); }
+            catch(Exception error) { Console.Error.WriteLine(error); Environment.ExitCode=1; }
+            return;
+        }
         if(args.SequenceEqual(new[]{"--ctgp-readonly-preflight"}))
         {
             try { Hp8C40CtgpQualification.Verify(); Console.WriteLine("PASS: exact cTGP board, firmware, PCI, driver, VBIOS and 75 W ceiling; read-only, no HP policy requests or setters."); }

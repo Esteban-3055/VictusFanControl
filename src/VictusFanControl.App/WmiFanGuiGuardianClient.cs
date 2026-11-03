@@ -16,6 +16,7 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
     private readonly long _ownerStart;
     private bool _released;
     private readonly SemaphoreSlim _ctgpCommands = new(1, 1);
+    private readonly object _heartbeatPublication = new();
     private volatile CtgpStatus? _lastCtgpStatus;
     internal CtgpStatus? Ctgp
     {
@@ -138,8 +139,15 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
             File.Exists(Path.Combine(SessionDirectory, "stop.signal")))
             throw new IOException("WMI fan guardian session is closed or unavailable.");
     }
-    public void Heartbeat() => WmiFanExperiment.WriteJson(Path.Combine(SessionDirectory, "heartbeat.json"),
-        new { Pid = _ownerPid, ElapsedMs = _clock.ElapsedMilliseconds });
+    public void Heartbeat()
+    {
+        // cTGP reply polling and fan safety supervision can publish concurrently.
+        // Serialize the timestamp capture too, so a queued writer cannot install
+        // an older heartbeat after a newer one. Real I/O errors still propagate.
+        lock (_heartbeatPublication)
+            WmiFanExperiment.WriteJson(Path.Combine(SessionDirectory, "heartbeat.json"),
+                new { Pid = _ownerPid, ElapsedMs = _clock.ElapsedMilliseconds });
+    }
     public void PersistIntent(int level)
     {
         if (level < Hp8C40TargetProfile.MinimumValidatedFanLevel || level > (_productUpperRange ? Hp8C40ProductFanTargets.MaximumLogicalLevel : Hp8C40TargetProfile.MaximumPhysicallyQualifiedFanLevel))
