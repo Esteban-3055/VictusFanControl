@@ -83,7 +83,10 @@ internal static partial class ProductGuiSelfTest
             Require(DestroyTimingBlockReason(form.Handle),"Native Windows shutdown reason removal failed.");
             long lastStatus=-1000,unpluggedAt=-1;
             var coolingSource=PerformancePowerSourceKind.Ac;
-            form.SetSessionCoolingFixture(()=>coolingSource,()=>Environment.TickCount64,()=>
+            // Measure the injected cooling deadline and the assertions on the
+            // same monotonic stopwatch. TickCount64 has a different resolution
+            // on Windows and can reach its 20s delta before this stopwatch does.
+            form.SetSessionCoolingFixture(()=>coolingSource,()=>timer.ElapsedMilliseconds,()=>
             {
                 if(unpluggedAt<0&&timer.ElapsedMilliseconds>=3000)
                 {unpluggedAt=timer.ElapsedMilliseconds;coolingSource=PerformancePowerSourceKind.Battery;runtime.StateOverride=runtime.State with{Source="Battery"};}
@@ -102,7 +105,8 @@ internal static partial class ProductGuiSelfTest
             // ExitWindowsEx, shutdown command, or installed-program handle is used.
             var query=SendTimingMessage(form.Handle,0x11,IntPtr.Zero,IntPtr.Zero);
             var cooledAt=timer.ElapsedMilliseconds;
-            Require(query==(IntPtr)1&&cooledAt>=20_000&&cooledAt<30_000,"Native query did not hold 20 real seconds.");
+            Require(query==(IntPtr)1&&cooledAt>=20_000&&cooledAt<30_000,
+                $"Native query did not hold 20 real seconds: query={query}, elapsedMs={cooledAt}, targetAtMs={targetAt}, statusChecks={statuses}, unpluggedAtMs={unpluggedAt}.");
             Require(targetAt>=0&&targetAt<2000&&runtime.Disposals==0&&statuses>=10,"Target or dependency monitoring incomplete.");
             Require(unpluggedAt is >=3000 and <5000&&coolingSource==PerformancePowerSourceKind.Battery,"Timing test did not exercise unplugging during cooling.");
             var ended=SendTimingMessage(form.Handle,0x16,(IntPtr)1,IntPtr.Zero);
