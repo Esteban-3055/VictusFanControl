@@ -30,7 +30,7 @@ if(await ProductUpdates.ConfirmPublishedInstallerAsync(preview,oldest,true,deadl
 var hash=Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(path,deadline.Token))).ToLowerInvariant();
 if(hash!=preview.Sha256)throw new Exception("Installer hash changed.");
 var record=new{schemaVersion=1,baseline="1.2.9",baselineSource="e8a58a5cb01eb673114a8dca0c5c0e925f55fddc",
-    sourceHead="944fc4f4f1f63be523648c91110ffc53806c1042",version=preview.Version.ToString(),preview.IsPrerelease,
+    sourceHead="b42e66b1bf756d8476ec8c2d14becf3276da937c",version=preview.Version.ToString(),preview.IsPrerelease,
     previewOptInRequired=true,stableReleaseUnchanged=stable.Version.ToString(),testedCurrentVersions=versions.Select(v=>v.ToString()).ToArray(),
     url=preview.Download.ToString(),preview.Size,preview.Sha256,verifiedSha256=hash,installerExecuted=false};
 await File.WriteAllTextAsync(Path.Combine(root,"compatibility.json"),JsonSerializer.Serialize(record,new JsonSerializerOptions{WriteIndented=true}),deadline.Token);
