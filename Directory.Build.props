@@ -13,6 +13,7 @@
   </PropertyGroup>
   <!-- P14 historical audit builds retain their original version. Product release publishing opts in.
        Preview 1.3.16 serializes guardian heartbeat publication across cTGP and fan supervision;
+       recovery presentation consumes a completed inventory scan before scheduling another;
        historical thermal qualification keeps its original thresholds and separate regression checks. -->
   <PropertyGroup Condition="'$(VictusProductRelease)' == 'true'">
     <Version>1.3.16</Version>

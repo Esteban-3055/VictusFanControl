@@ -72,6 +72,34 @@ internal static class ProductSchedulingSelfTest
         }
         finally { release.Set(); cache.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
 
+        // Complete the worker precisely after Get checked completion but before
+        // it decides whether to start another scan. The result must be consumed.
+        using var raceEntered=new ManualResetEventSlim();using var raceRelease=new ManualResetEventSlim();
+        RecoveryPreviewCache? race=null;int raceCalls=0;bool finishDuringClock=false;
+        var ownerThread=Environment.CurrentManagedThreadId;
+        race=new RecoveryPreviewCache(()=>
+        {
+            Interlocked.Increment(ref raceCalls);raceEntered.Set();
+            if(!raceRelease.Wait(TimeSpan.FromSeconds(5)))throw new TimeoutException("Race fixture was not released.");
+            return new(false,"completed between Get checks");
+        },()=>
+        {
+            if(Environment.CurrentManagedThreadId==ownerThread&&finishDuringClock)
+            {
+                finishDuringClock=false;raceRelease.Set();
+                var pending=(Task?)typeof(RecoveryPreviewCache).GetField("_scan",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Instance)!.GetValue(race);
+                require(pending is not null&&pending.Wait(5000),"Race worker did not finish during the clock callback.");
+            }
+            return 100;
+        });
+        try
+        {
+            race.Get();require(raceEntered.Wait(5000),"Race worker did not enter.");
+            finishDuringClock=true;race.Get();
+            require(!race.Get().Pending&&raceCalls==1,"A just-completed inventory result was discarded and scanned twice.");
+        }
+        finally{raceRelease.Set();race.DisposeAsync().AsTask().GetAwaiter().GetResult();}
+
         var cpu = Guid.NewGuid(); var gpu = Guid.NewGuid();
         var exact = new RecoveryPreviewCache(() => new(true, "pending fixture", cpu, gpu));
         try

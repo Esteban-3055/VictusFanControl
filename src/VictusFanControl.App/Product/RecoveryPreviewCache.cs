@@ -40,7 +40,9 @@ internal sealed class RecoveryPreviewCache : IAsyncDisposable
             if(_scan is {IsCompletedSuccessfully:true} completed&&!ReferenceEquals(_observed,completed))
             {_observed=completed;_value=completed.Result.Value;_completedAt=completed.Result.CompletedAt;}
             var age=_clock()-_completedAt;
-            if((_value is null||age>=_maximumAge/2)&&(_scan is null||_scan.IsCompleted))_scan=StartScan();
+            // A scan can complete between the observation above and this test.
+            // Never replace that result until Get has consumed it.
+            if((_value is null||age>=_maximumAge/2)&&(_scan is null||ReferenceEquals(_observed,_scan)))_scan=StartScan();
             return _value is not null&&age>=0&&age<_maximumAge?_value:Unknown;
         }
     }
