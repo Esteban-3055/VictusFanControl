@@ -11,6 +11,7 @@ internal static class ProductCtgpSelfTest
     internal static async Task RunAsync()
     {
         await WmiFanHeartbeatPublicationSelfTest.RunAsync();
+        await WmiFanGuardianTimingSelfTest.RunAsync();
         static void Require(bool value, string detail) { if (!value) throw new InvalidOperationException(detail); }
         static void Reject(Action action) { try { action(); } catch (InvalidOperationException) { return; } throw new Exception("Expected rejection."); }
         var fake = new Fake(); var control = fake.Create();

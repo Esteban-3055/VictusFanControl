@@ -27,9 +27,10 @@ internal static class WmiFanGuiGuardianHost
     internal static string LegacyLeasePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
         "VictusFanControl", "WatchdogM4", "state", "lease.json");
 
-    internal static async Task<int> RunAsync(string[] args, bool fixture = false)
+    internal static async Task<int> RunAsync(string[] args, bool fixture = false, Action? fixtureBeforeObservation = null)
     {
         // Separate explicit fixture entry point never initializes hardware.
+        if (!fixture && fixtureBeforeObservation is not null) throw new ArgumentException("Observation injection requires fixture mode.");
         if (args.Length != 7 || args[1] != "--session-dir" || args[3] != "--owner-pid" || args[5] != "--owner-start")
             throw new ArgumentException("Invalid WMI GUI guardian arguments.");
         var directory = Path.GetFullPath(args[2]);
@@ -55,6 +56,16 @@ internal static class WmiFanGuiGuardianHost
         var baseline = 0L;
         var clock = Stopwatch.StartNew();
         var monitor = new WmiFanHeartbeatMonitor(ownerPid);
+        var timing = new WmiFanGuardianTiming();
+        void CheckLifecycle()
+        {
+            timing.Check(clock.Elapsed, WmiFanGuardianClockSample.Read());
+            if (timing.Status.StopReason is { } stop)
+            {
+                reason = stop;
+                throw new InvalidOperationException("Supervisión WMI interrumpida: " + stop);
+            }
+        }
         HpOmenBiosWmiClient? ctgpTransport = null;
         byte[] fixturePolicy = [0, 1, 1, 0];
         bool Ac() => fixture || new WindowsPerformancePowerSourceReader().Read().Source == PerformancePowerSourceKind.Ac;
@@ -69,6 +80,7 @@ internal static class WmiFanGuiGuardianHost
             }
             using var scope = new Hp8C40CtgpRequestScope(() =>
             {
+                CheckLifecycle(); // Includes suspend during qualification or native-slot admission.
                 owner.Refresh();
                 monitor.Observe(Path.Combine(directory, "heartbeat.json"), clock.Elapsed);
                 if (owner.HasExited || monitor.TimedOut(clock.Elapsed) || !Ac() || File.Exists(Path.Combine(directory, "stop.signal")))
@@ -79,6 +91,7 @@ internal static class WmiFanGuiGuardianHost
             WmiFanExperiment.WriteJson(Path.Combine(directory, "ctgp-intent.json"), new
             { OwnerPid = ownerPid, OwnerStartUtcTicks = ownerStart, Original = new byte[] { 0, 1, 1, 0 }, Utc = DateTimeOffset.UtcNow }));
         Guid lastCtgpRequest = Guid.Empty;
+        var nextCtgpObservation = TimeSpan.Zero;
         void PublishCtgp() => WmiFanExperiment.WriteJson(Path.Combine(directory, "ctgp-status.json"), ctgp.Status);
         try
         {
@@ -95,18 +108,19 @@ internal static class WmiFanGuiGuardianHost
                 GuardianPid = current.Id, GuardianStartUtcTicks = current.StartTime.ToUniversalTime().Ticks,
                 DirectEcProhibited = true, LeasePath = leasePath
             });
-            var previous = clock.Elapsed;
+            timing.Check(clock.Elapsed, WmiFanGuardianClockSample.Read());
             while (true)
             {
+                timing.BeginWork(clock.Elapsed, WmiFanGuardianClockSample.Read());
                 var now = clock.Elapsed;
                 if (File.Exists(Path.Combine(directory, "stop.signal"))) { reason = "CLIENT_RELEASE"; break; }
                 owner.Refresh();
                 if (owner.HasExited) { reason = "OWNER_EXITED"; break; }
-                if (now - previous > TimeSpan.FromSeconds(3)) { reason = "LIFECYCLE_GAP"; break; }
-                previous = now;
+                if (timing.Status.StopReason is { } stop) { reason = stop; break; }
                 monitor.Observe(Path.Combine(directory, "heartbeat.json"), now);
                 if (monitor.TimedOut(now)) { reason = "HEARTBEAT_EXPIRED"; break; }
                 if (!fixture && HasAcpiFault(baseline)) { reason = "ACPI_13_OR_15"; break; }
+                CheckLifecycle();
                 var commandPath = Path.Combine(directory, "ctgp-command.json");
                 if (CtgpPublication.TryRead<CtgpCommand>(commandPath) is { } command)
                 {
@@ -115,16 +129,28 @@ internal static class WmiFanGuiGuardianHost
                     if (command.Id != lastCtgpRequest)
                     {
                         lastCtgpRequest = command.Id;
-                        try { ctgp.Apply(command.Enabled); PublishCtgp(); }
+                        try { ctgp.Apply(command.Enabled); CheckLifecycle(); PublishCtgp(); }
                         catch (Exception ex) { ctgp.Fail(ex); PublishCtgp(); throw; }
                         WmiFanExperiment.WriteJson(Path.Combine(directory, "ctgp-reply.json"), new CtgpReply(command.Id, ctgp.Status));
                     }
                 }
-                if (now.TotalSeconds % 2 < 0.3)
+                // A due time cannot be skipped when a slow iteration misses a
+                // narrow modulo window. Never replay missed observations.
+                if (clock.Elapsed >= nextCtgpObservation)
                 {
-                    try { ctgp.Observe(); PublishCtgp(); }
+                    try { fixtureBeforeObservation?.Invoke(); ctgp.Observe(); CheckLifecycle(); PublishCtgp(); }
                     catch (Exception ex) { ctgp.Fail(ex); PublishCtgp(); throw; }
+                    nextCtgpObservation = clock.Elapsed + TimeSpan.FromSeconds(2);
                 }
+                // Work may legitimately include mutex admission and a slow,
+                // completed WMI call. It is not the following idle interval.
+                // The existing heartbeat deadline and cTGP freshness still apply.
+                timing.CompleteWork(clock.Elapsed, WmiFanGuardianClockSample.Read());
+                if (timing.Status.StopReason is { } completedStop) { reason = completedStop; break; }
+                if (timing.Status.WorkMs > 1000)
+                    Console.WriteLine("WMI GUARDIAN SLOW WORK: " + JsonSerializer.Serialize(timing.Status));
+                // Include diagnostic output in work, never in idle-gap accounting.
+                timing.CompleteWork(clock.Elapsed, WmiFanGuardianClockSample.Read());
                 await Task.Delay(250).ConfigureAwait(false);
             }
         }
@@ -176,7 +202,7 @@ internal static class WmiFanGuiGuardianHost
                 ReleaseRequestAccepted = releaseAccepted, LegacyDefaultRequestAccepted = legacyAccepted,
                 GuardianLeaseRetired = retired, IndependentFirmwareOwnershipVerified = false,
                 DirectEcProhibited = true, Failure = failure
-                , CtgpRestored = !ctgp.NeedsRestore, Ctgp = ctgp.Status
+                , CtgpRestored = !ctgp.NeedsRestore, Ctgp = ctgp.Status, Timing = timing.Status
             });
         }
         return retired && failure is null ? 0 : 1;

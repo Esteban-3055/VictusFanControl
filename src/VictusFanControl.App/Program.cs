@@ -9,6 +9,12 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        if(args.SequenceEqual(new[]{"--guardian-timing-self-test"}))
+        {
+            try { WmiFanGuardianTimingSelfTest.RunAsync().GetAwaiter().GetResult(); }
+            catch(Exception error) { Console.Error.WriteLine(error); Environment.ExitCode=1; }
+            return;
+        }
         if(args.SequenceEqual(new[]{"--heartbeat-publication-self-test"}))
         {
             try { WmiFanHeartbeatPublicationSelfTest.RunAsync().GetAwaiter().GetResult(); }

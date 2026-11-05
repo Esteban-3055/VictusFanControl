@@ -12,13 +12,12 @@
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
   <!-- P14 historical audit builds retain their original version. Product release publishing opts in.
-       Preview 1.3.16 serializes guardian heartbeat publication across cTGP and fan supervision;
-       recovery presentation consumes a completed inventory scan before scheduling another;
+       Preview 1.3.17 separates supervisor work from idle gaps and verifies sleep with Windows clocks;
        historical thermal qualification keeps its original thresholds and separate regression checks. -->
   <PropertyGroup Condition="'$(VictusProductRelease)' == 'true'">
-    <Version>1.3.16</Version>
-    <AssemblyVersion>1.3.16.0</AssemblyVersion>
-    <FileVersion>1.3.16.0</FileVersion>
-    <InformationalVersion>1.3.16</InformationalVersion>
+    <Version>1.3.17</Version>
+    <AssemblyVersion>1.3.17.0</AssemblyVersion>
+    <FileVersion>1.3.17.0</FileVersion>
+    <InformationalVersion>1.3.17</InformationalVersion>
   </PropertyGroup>
 </Project>
