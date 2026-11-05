@@ -11,8 +11,13 @@ internal static class AppLog
     internal const int ExtendedReviewTailBytes = 16 * 1024 * 1024;
     private static long _maxFileBytes = 5 * 1024 * 1024;
     private static int _exportTailBytes = DefaultTailBytes;
-    private static readonly object Gate = new();
+    private static readonly OptionalWorkQueue Writer = new();
+    private const int MaximumEntryCharacters = 31*1024;
+    internal static object WriterStatus => Writer.Status;
+    internal static Task<bool> FlushAsync(TimeSpan budget) => Writer.FlushAsync(budget);
     private static bool _initialized;
+    private static long _initializationRetryAt;
+    internal static string? InitializationFailure { get; private set; }
     internal static bool QualificationCompatibilityLogEnabled { get; private set; }
     internal static DateTimeOffset SessionStartedUtc { get; } = DateTimeOffset.UtcNow;
     internal static string SessionId { get; } = SessionStartedUtc.ToString("yyyyMMddTHHmmssfffZ") + "-" + Guid.NewGuid().ToString("N");
@@ -36,7 +41,7 @@ internal static class AppLog
     // Explicit long review only. Bounded retention remains isolated to this process.
     internal static void EnableExtendedReviewDiagnostics()
     {
-        lock (Gate)
+        Writer.TryEnqueue(() =>
         {
             _maxFileBytes = ExtendedReviewTailBytes / 2;
             _exportTailBytes = ExtendedReviewTailBytes;
@@ -46,65 +51,80 @@ internal static class AppLog
                     File.WriteAllText(Path.Combine(SessionDirectory, "session.json"), JsonSerializer.Serialize(SessionIdentity));
             }
             catch { /* Logging failures must not change control admission. */ }
-        }
+        },65536);
     }
 
     public static void Initialize()
+        => Writer.TryEnqueue(InitializeOnWriter,65536);
+    private static void InitializeOnWriter()
     {
-        lock (Gate)
-        {
-            if (_initialized) return;
-            Directory.CreateDirectory(SessionDirectory);
-            File.WriteAllText(Path.Combine(SessionDirectory, "session.json"), JsonSerializer.Serialize(SessionIdentity));
+            if (_initialized || Environment.TickCount64 < _initializationRetryAt) return;
+            InitializationFailure = TryInitializeSessionFiles(SessionDirectory, SessionIdentity);
+            if (InitializationFailure is not null)
+            {
+                _initializationRetryAt = Environment.TickCount64 + 30000;
+                return; // Optional logs cannot prevent the GUI from opening.
+            }
             _initialized = true;
-            Write("VictusFanControl application session opened: " + SessionId);
+            Append(CurrentLogPath,$"{DateTimeOffset.Now:O}  VictusFanControl application session opened: {SessionId}{Environment.NewLine}");
+    }
+
+    internal static string? TryInitializeSessionFiles(string directory, object identity)
+    {
+        try
+        {
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(Path.Combine(directory, "session.json"), JsonSerializer.Serialize(identity));
+            return null;
         }
+        catch(Exception ex) when(ex is IOException or UnauthorizedAccessException)
+        { return "El registro de diagnóstico no está disponible; revisa espacio y permisos. " + ex.Message; }
     }
 
     // Explicit legacy hardware harnesses retain their existing daily-log collector contract.
     // Product GUI never opts in; its exports always use the primary session path.
     internal static void EnableQualificationCompatibilityLog()
     {
-        lock (Gate)
+        Writer.TryEnqueue(() =>
         {
             QualificationCompatibilityLogEnabled = true;
-            Write("Qualification daily-log compatibility enabled for session: " + SessionId);
-        }
+            WriteOnWriter("Qualification daily-log compatibility enabled for session: " + SessionId);
+        },65536);
     }
 
     public static void Write(string message)
     {
-        try
-        {
-            lock (Gate)
-            {
-                Initialize();
-                var line = $"{DateTimeOffset.Now:O}  {message}{Environment.NewLine}";
-                Append(CurrentLogPath, line);
-                if (QualificationCompatibilityLogEnabled)
-                    Append(Path.Combine(LogDirectory, $"events-{DateTime.Now:yyyy-MM-dd}.log"), line);
-            }
-        }
-        catch { /* Diagnostics must never crash monitoring. */ }
+        var captured=DateTimeOffset.Now;
+        var bounded=message.Length>MaximumEntryCharacters?message[..MaximumEntryCharacters]+" [truncated]":message;
+        Writer.TryEnqueue(()=>WriteOnWriter(bounded,captured),Math.Min(65536,bounded.Length*2+128));
+    }
+
+    private static void WriteOnWriter(string message,DateTimeOffset? captured=null)
+    {
+        InitializeOnWriter();if(!_initialized)return;
+        var bounded=message.Length>MaximumEntryCharacters?message[..MaximumEntryCharacters]+" [truncated]":message;
+        var line=$"{captured??DateTimeOffset.Now:O}  {bounded}{Environment.NewLine}";
+        Append(CurrentLogPath,line);
+        if(QualificationCompatibilityLogEnabled)Append(Path.Combine(LogDirectory,$"events-{DateTime.Now:yyyy-MM-dd}.log"),line);
     }
 
     internal static void WriteTelemetry(TelemetrySnapshot snapshot)
     {
-        try
+        Writer.TryEnqueue(() =>
         {
-            lock (Gate)
-            {
-                Initialize();
-                Append(TelemetryLogPath, JsonSerializer.Serialize(new { sessionId = SessionId, snapshot }, Json) + Environment.NewLine);
-            }
-        }
-        catch { /* Preserve control even if the diagnostic disk is unavailable. */ }
+                InitializeOnWriter();
+                if (!_initialized) return;
+                var text=JsonSerializer.Serialize(new { sessionId = SessionId, snapshot }, Json);
+                // Do not write a truncated JSON row. Oversize optional payload is dropped.
+                if(text.Length<=MaximumEntryCharacters)Append(TelemetryLogPath,text+Environment.NewLine);
+                else Writer.RecordDrop();
+        },65536);
     }
 
     internal static void WriteStructured(string eventName, object data)
     {
-        try { Write(eventName + ": " + JsonSerializer.Serialize(data, Json)); }
-        catch { /* Serialization and disk failures must never alter control admission. */ }
+        var captured=DateTimeOffset.Now;
+        Writer.TryEnqueue(()=>WriteOnWriter(eventName+": "+JsonSerializer.Serialize(data,Json),captured),65536);
     }
 
     private static void Append(string path, string text)
@@ -118,8 +138,9 @@ internal static class AppLog
     // No discovery of other sessions, recovery files, leases or journals.
     internal static string ReadTail(string path, int maximumBytes = DefaultTailBytes)
     {
-        lock (Gate)
-        {
+        // Export only: allow a short best-effort flush, never an unlimited wait.
+        Writer.FlushAsync(TimeSpan.FromMilliseconds(100)).GetAwaiter().GetResult();
+        // Optional export has its own IO. Never take the writer's lock or stop acquisition.
             var segments = new[] { path + ".1", path }.Where(File.Exists).ToArray();
             var chunks = new List<byte[]>(); var remaining = maximumBytes; var truncated = false;
             foreach (var segment in Enumerable.Reverse(segments))
@@ -138,6 +159,5 @@ internal static class AppLog
             if (truncated && start == 0) return "";
             var end = Array.LastIndexOf(merged, (byte)'\n') + 1;
             return end > start ? Encoding.UTF8.GetString(merged, start, end - start) : "";
-        }
     }
 }

@@ -33,7 +33,8 @@ internal sealed class QualifiedCpuGuardianDomainLifecycle :
         ICpuPowerLimitBackend backend,
         ICpuPowerSessionJournal journal,
         CpuPowerPresetSet presets,
-        PerformancePowerSourceKind? requiredInitialSource = null)
+        PerformancePowerSourceKind? requiredInitialSource = null,
+        CpuPowerExecutionPolicy executionPolicy = CpuPowerExecutionPolicy.DownwardOnly)
     {
         _backend =
             new CountingCpuPowerLimitBackend(
@@ -46,7 +47,7 @@ internal sealed class QualifiedCpuGuardianDomainLifecycle :
                 _backend,
                 journal ??
                 throw new ArgumentNullException(
-                    nameof(journal)));
+                    nameof(journal)),executionPolicy:executionPolicy);
 
         _policy =
             new CpuPowerPresetPolicy(

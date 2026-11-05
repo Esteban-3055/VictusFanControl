@@ -16,6 +16,7 @@ internal static class GpuClockSessionControllerSelfTest
             SamePresetSwitchIsNoop(output);
             ReleaseArmsBeforeSingleReset(output);
             ReleaseArmFailurePreventsReset(output);
+            ReleaseFailureEvidence(output);
             StaleJournalRequiresRecoveryWithoutWrite(output);
             AuthorityLossPersistsRecoveryWithoutWrite(output);
             DisposeNeverResets(output);
@@ -426,6 +427,27 @@ internal static class GpuClockSessionControllerSelfTest
             "PASS disposing GPU controller performs zero implicit reset writes");
     }
 
+    private static void ReleaseFailureEvidence(TextWriter output)
+    {
+        foreach(var kind in new[]{"returned-999","no-native-result","native-exception","journal-arm"})
+        {
+            var journal=new FakeJournal();
+            var backend=new FakeBackend(journal);
+            using var controller=new GpuClockSessionController(backend,journal);
+            Require(controller.Apply(new(210,600)),"fixture apply failed");
+            var session=journal.Record!.SessionId;
+            backend.ResetResult=new(false,GpuClockBackendFailureKind.Unknown,kind=="returned-999"?999:null,"FAKE_RESET_FAILED");
+            backend.ThrowOnReset=kind=="native-exception";
+            journal.FailNextStore=kind=="journal-arm";
+            try { Require(!controller.Release(),"failed release reported success"); }
+            catch(IOException) when(kind=="native-exception") { }
+            Require(controller.ReturnedReleaseFailureSession==(kind=="returned-999"?session:null),"unknown or unarmed write fabricated returned-error proof");
+            Require(journal.Record is not null&&backend.ResetCalls==(kind=="journal-arm"?0:1),"failure deleted journal or repeated reset");
+            controller.Dispose();Require(backend.ResetCalls==(kind=="journal-arm"?0:1),"dispose retried reset");
+        }
+        output.WriteLine("PASS GPU release failure distinguishes returned NVML 999 from missing result/native exception/journal failure; retains evidence; no implicit Reset");
+    }
+
     private static void Require(
         bool condition,
         string label)
@@ -458,6 +480,8 @@ internal static class GpuClockSessionControllerSelfTest
 
         internal int SetCalls;
         internal int ResetCalls;
+        internal GpuClockBackendWriteResult? ResetResult;
+        internal bool ThrowOnReset;
 
         internal GpuClockJournalPhase?
             PhaseObservedAtSet;
@@ -483,11 +507,12 @@ internal static class GpuClockSessionControllerSelfTest
         public GpuClockBackendWriteResult ResetLockedGraphicsClocks()
         {
             ResetCalls++;
+            if(ThrowOnReset)throw new IOException("Synthetic native exception without returned result.");
 
             PhaseObservedAtReset =
                 _journal.Record?.Phase;
 
-            return new GpuClockBackendWriteResult(
+            return ResetResult ?? new GpuClockBackendWriteResult(
                 true,
                 GpuClockBackendFailureKind.None,
                 0,

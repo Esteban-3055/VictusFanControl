@@ -5,23 +5,40 @@ namespace VictusFanControl.App;
 
 internal sealed partial class ProductForm
 {
-    private readonly ProductAutomaticRecovery _automaticRecovery = new();
+    private readonly ProductAutomaticRecovery _automaticRecovery;
     private bool _recoveryAtStartup, _recoveryResumeCancelled, _automaticRecoveryResumeSuppressed;
 
     internal void TryAutomaticRecovery(long? clock = null)
     {
+        if(_systemSuspended){_automaticRecovery.Pause();_recoveryEpisode.Observe(new(){Runtime="Suspended"},DateTimeOffset.UtcNow);return;}
         var now = clock ?? Environment.TickCount64;
         _automaticRecovery.Observe(_canvas.State, now);
         if (ProductFanRangePreview.Enabled || _closing || _exitRequested || _restarting || IsDisposed || _canvas.Busy || _displayOff || _checkingUpdate || _canvas.UpdateBusy ||
-            _automaticReview is not null || !Draft.RecoverSessionsAutomatically ||
+            _automaticReview is not null || !_draft.RecoverSessionsAutomatically ||
             _isolatedRuntime && RecoveryRunner is null)
         { _automaticRecovery.Pause(); return; }
-        if (!_automaticRecovery.TakeRequest(_canvas.State, now)) return;
-        var resume = !_automaticRecoveryResumeSuppressed && Draft.Protections.ResumeAutomatic &&
+        var resume = !_automaticRecoveryResumeSuppressed && _draft.Protections.ResumeAutomatic &&
             (_automaticResumption.Wanted && _resumptionProfiles?.Protections.ResumeAutomatic == true ||
              _recoveryAtStartup && !_restartOpening && _saved.ActivateAutomaticOnStart && _saved.Protections.ResumeAutomatic);
-        var preferences = ProductProfilesStore.Copy(_automaticResumption.Wanted && _resumptionProfiles is not null
-            ? _resumptionProfiles : _recoveryAtStartup ? _saved : Draft);
+        var preferences = _automaticResumption.Wanted && _resumptionProfiles is not null
+            ? _resumptionProfiles : _recoveryAtStartup ? _saved : _draft;
+        if (TryRefreshStartupInventory(now)) return;
+        if (_startupInventoryAbsenceConfirmed && _runtime is null && _recoveryAtStartup)
+        {
+            _startupInventoryAbsenceConfirmed=false;
+            _recoveryResumeCancelled = _automaticRecoveryResumeSuppressed;
+            _recoveryTask = ForceSessionRecoveryCoreAsync(preferences, resume, new(Guid.Empty,Guid.Empty));
+            return;
+        }
+        if (_canvas.State.PerformanceRecovery?.Pending != true)
+        {
+            if (_runtime is null || _isolatedRuntime && RecoveryRuntimeFactory is null ||
+                !_automaticRecovery.TakeSessionRequest(_canvas.State, now)) return;
+            _recoveryResumeCancelled = _automaticRecoveryResumeSuppressed;
+            _recoveryTask = ForceSessionRecoveryCoreAsync(preferences, resume);
+            return;
+        }
+        if (!_automaticRecovery.TakeRequest(_canvas.State, now)) return;
         _recoveryResumeCancelled = _automaticRecoveryResumeSuppressed;
         _restarting = true; _restartLifecycleInterrupted = false; _canvas.Busy = true;
         // Reserve the operation before the first background inventory read; exit drains this same task.
@@ -48,16 +65,26 @@ internal sealed partial class ProductForm
                 return;
             }
             if (ProductFanRangePreview.Enabled || _closing || _exitRequested || _displayOff || _restartLifecycleInterrupted) return;
-            if (!selected.Pending) return; // Normal cleanup won the race; no recovery writes.
+            if (!selected.Pending)
+            {
+                // Another normal cleanup can resolve the startup records while
+                // waiting. Still drain our owner and verify absence again before
+                // opening a fresh runtime; never call the recovery writer here.
+                await ForceSessionRecoveryCoreAsync(preferences, resume, selected);
+                return;
+            }
             if (selected.CpuSession != (expected.CpuSession ?? Guid.Empty) || selected.GpuSession != (expected.GpuSession ?? Guid.Empty) ||
                 !ProductRecoveryInventory.AllowsRemaining(expected.FanRecords, selected.Fans))
                 throw new IOException("Los registros cambiaron durante la espera; no se recuperó otra sesión.");
             if (selected.Fans?.Any(r => !r.Recoverable) == true)
                 throw new IOException("Registro inválido o de propiedad incierta; conserva el diagnóstico.");
-            await RecoverPerformanceCoreAsync(selected, preferences, resume);
+            await ForceSessionRecoveryCoreAsync(preferences, resume, selected);
         }
         catch (Exception ex)
         {
+            // A malformed or changed exact inventory is not a transient read.
+            // Retain it for diagnosis; only a different inventory can qualify anew.
+            _automaticRecovery.RejectInventoryRead(expected);
             AppLog.Write("PRODUCT BACKGROUND RECOVERY BLOCKED: " + ex);
             await RecoveryUiAsync(() =>
             {
@@ -70,6 +97,7 @@ internal sealed partial class ProductForm
             await RecoveryUiAsync(() =>
             {
                 _restarting = false; _recoveryTask = null; _canvas.Busy = _pendingCommands > 0;
+                _automaticRecovery.AbandonInventoryRead();
                 if (!_closing) { _presentationTimer.Start(); TryStartupAutomatic(); }
                 _canvas.Invalidate();
             });

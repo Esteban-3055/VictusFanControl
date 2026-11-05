@@ -11,7 +11,8 @@ namespace VictusFanControl.Safety;
 /// On the validated HP 8C40 target only, CPU readings from 95 C through
 /// 98.x C require five unique consecutive fresh telemetry snapshots before
 /// they are promoted to an effective thermal emergency. GPU >= 87 C and
-/// CPU >= 99 C remain immediate.
+/// CPU >= 99 C remain immediate in the historical default. Habitual product
+/// explicitly selects a strictly-greater-than-95 GPU handoff in memory.
 ///
 /// Re-evaluating the same telemetry timestamp never advances the streak.
 /// Any unsafe non-thermal state, a below-threshold CPU sample, a lifecycle
@@ -27,8 +28,15 @@ public sealed class Hp8C40ThermalEmergencyConfirmation
 
     private readonly object _gate = new();
     private readonly bool _cpuThermalHandoff, _gpuThermalHandoff;
-    public Hp8C40ThermalEmergencyConfirmation(bool cpuThermalHandoff = true, bool gpuThermalHandoff = true)
-    { _cpuThermalHandoff = cpuThermalHandoff; _gpuThermalHandoff = gpuThermalHandoff; }
+    private readonly double _gpuHandoffC;
+    private readonly bool _gpuStrictlyGreater;
+    public Hp8C40ThermalEmergencyConfirmation(bool cpuThermalHandoff = true, bool gpuThermalHandoff = true,
+        double gpuHandoffC = SafetyGate.GpuEmergencyC, bool gpuStrictlyGreater = false)
+    {
+        if (!double.IsFinite(gpuHandoffC) || gpuHandoffC < SafetyGate.GpuEmergencyC || gpuHandoffC > 95) throw new ArgumentOutOfRangeException(nameof(gpuHandoffC));
+        _cpuThermalHandoff = cpuThermalHandoff; _gpuThermalHandoff = gpuThermalHandoff;
+        _gpuHandoffC = gpuHandoffC; _gpuStrictlyGreater = gpuStrictlyGreater;
+    }
 
     private DateTimeOffset? _lastCountedHighTimestamp;
     private DateTimeOffset? _lastObservedSnapshotTimestamp;
@@ -142,7 +150,7 @@ public sealed class Hp8C40ThermalEmergencyConfirmation
             return raw;
         }
 
-        if (_gpuThermalHandoff && gpuTemperature.Value >= SafetyGate.GpuEmergencyC)
+        if (_gpuThermalHandoff && (_gpuStrictlyGreater ? gpuTemperature.Value > _gpuHandoffC : gpuTemperature.Value >= _gpuHandoffC))
         {
             if (mutate)
             {
@@ -151,7 +159,7 @@ public sealed class Hp8C40ThermalEmergencyConfirmation
 
             return AddReason(
                 raw,
-                $"HP 8C40 immediate GPU thermal handoff: {gpuTemperature.Value:0.0} C >= {SafetyGate.GpuEmergencyC:0} C.");
+                $"HP 8C40 immediate GPU thermal handoff: {gpuTemperature.Value:0.0} C {(_gpuStrictlyGreater ? ">" : ">=")} {_gpuHandoffC:0} C.");
         }
 
         if (_cpuThermalHandoff && effectiveCpu.Value >= CpuHardEmergencyC)

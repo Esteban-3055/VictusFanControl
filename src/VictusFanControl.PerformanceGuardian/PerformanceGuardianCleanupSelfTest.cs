@@ -14,6 +14,22 @@ internal static class PerformanceGuardianCleanupSelfTest
 
             BothFailuresAreAggregated(
                 output);
+            var cleanup=new PerformanceGuardianHost.SessionCleanupResult(true,true,new IOException("Returned failure"),true);
+            var snapshot=new RecordingGuardianDomainLifecycle().Snapshot with
+            { CpuState="Disabled",GpuState="RecoveryRequired",RecoveryGpuSession=Guid.NewGuid() };
+            bool Allowed(PerformanceGuardianHost.SessionCleanupResult c,GuardianDomainLifecycleSnapshot s,string request=PerformanceGuardianProtocol.Shutdown,bool gpu=true) =>
+                PerformanceGuardianHost.CanDrainForRecovery(request,true,gpu,c,s);
+            Require(Allowed(cleanup,snapshot),"returned GPU failure cannot drain");
+            Require(!Allowed(cleanup with{SourceStopSucceeded=false},snapshot)&&
+                !Allowed(cleanup with{Failure=null},snapshot)&&
+                !Allowed(cleanup,snapshot with{CpuState="Active"})&&
+                !Allowed(cleanup,snapshot with{CpuState=null})&&
+                !Allowed(cleanup,snapshot with{GpuState="Releasing"})&&
+                !Allowed(cleanup,snapshot with{RecoveryGpuSession=null})&&
+                !Allowed(cleanup,snapshot with{RecoveryGpuSession=Guid.Empty})&&
+                !Allowed(cleanup,snapshot,PerformanceGuardianProtocol.DisableSession)&&
+                !Allowed(cleanup,snapshot,gpu:false),"uncertain cleanup acquired recovery handoff");
+            output.WriteLine("PASS recovery handoff rejects active/unknown CPU, running GPU mutation, absent proof, failed source Stop, successful release and non-shutdown requests");
 
             output.WriteLine(
                 "Performance Guardian cleanup self-test: PASS (domain release is attempted even when source Stop fails; no hardware I/O).");
@@ -60,6 +76,7 @@ internal static class PerformanceGuardianCleanupSelfTest
 
         Require(
             result.SourceStopAttempted &&
+            !result.SourceStopSucceeded &&
             result.ReleaseAttempted &&
             result.Failure is InvalidOperationException,
             "single source failure is surfaced after release attempt");

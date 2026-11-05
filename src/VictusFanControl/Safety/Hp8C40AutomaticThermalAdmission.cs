@@ -51,8 +51,8 @@ public class Hp8C40AutomaticThermalAdmission
     {
         if (!Hp8C40TargetProfile.Matches(hardware, out _))
             throw new ArgumentException("Thermal admission requires exact HP 8C40/F.18.", nameof(hardware));
-        _protections = protections ?? new();
-        _confirmation = new(_protections.CpuThermalHandoff, _protections.GpuThermalHandoff);
+        _protections = protections ?? new(){HistoricalGpuThermalPolicy=true};
+        _confirmation = new(_protections.CpuThermalHandoff, _protections.GpuThermalHandoff, _protections.GpuHandoffC, !_protections.HistoricalGpuThermalPolicy);
         _hardware = hardware;
         _milliseconds = milliseconds ?? (() => Environment.TickCount64);
     }
@@ -78,9 +78,9 @@ public class Hp8C40AutomaticThermalAdmission
             _latest = snapshot;
 
             if (_protections.CpuThermalHandoff && snapshot.CpuControlTemperatureC >= Settings.CpuImmediateHandoffC ||
-                _protections.GpuThermalHandoff && snapshot.GpuTemperatureC >= Settings.GpuImmediateHandoffC)
+                _protections.IsGpuThermalEmergency(snapshot.GpuTemperatureC))
             {
-                CloseLocked("Immediate thermal handoff: CPU >=99 C or GPU >=87 C.", true);
+                CloseLocked($"Immediate thermal handoff: CPU >=99 C or GPU {(_protections.HistoricalGpuThermalPolicy ? ">=" : ">")} {_protections.GpuHandoffC:0} C.", true);
                 return Decision(raw, raw, elapsed);
             }
 

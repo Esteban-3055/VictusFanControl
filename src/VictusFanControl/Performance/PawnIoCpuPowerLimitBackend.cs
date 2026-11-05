@@ -29,12 +29,16 @@ internal sealed class PawnIoCpuPowerLimitBackend :
     private readonly IntelMsrReader _reader;
     private readonly PawnIoModuleSession? _writer;
     private readonly bool _hardwareWritesAuthorized;
+    private readonly CpuPowerExecutionPolicy _executionPolicy;
     private bool _disposed;
 
     internal PawnIoCpuPowerLimitBackend(
         string modulePath,
-        bool hardwareWritesAuthorized)
+        bool hardwareWritesAuthorized,
+        CpuPowerExecutionPolicy executionPolicy = CpuPowerExecutionPolicy.DownwardOnly)
     {
+        if(!Enum.IsDefined(executionPolicy))throw new ArgumentOutOfRangeException(nameof(executionPolicy));
+        _executionPolicy=executionPolicy;
         _reader =
             new IntelMsrReader(
                 modulePath);
@@ -116,7 +120,7 @@ internal sealed class PawnIoCpuPowerLimitBackend :
             baseline,
             request,
             PowerUnitWatts,
-            PowerInfo);
+            PowerInfo,_executionPolicy);
     }
 
     public CpuPowerLimitApplyPlan BuildReacquirePlan(
@@ -131,7 +135,7 @@ internal sealed class PawnIoCpuPowerLimitBackend :
             current,
             request,
             PowerUnitWatts,
-            PowerInfo);
+            PowerInfo,_executionPolicy);
     }
 
     public CpuPowerLimitApplyPlan BuildOwnedTransitionPlan(
@@ -146,7 +150,7 @@ internal sealed class PawnIoCpuPowerLimitBackend :
             current,
             request,
             PowerUnitWatts,
-            PowerInfo);
+            PowerInfo,_executionPolicy);
     }
 
     public CpuPowerLimitRestorePlan PlanRestore(
@@ -312,7 +316,8 @@ internal static class CpuRaplPowerLimitCodec
         CpuPowerLimitSnapshot current,
         CpuPowerLimitRequest request,
         double powerUnitWatts,
-        CpuRaplPowerInfo powerInfo)
+        CpuRaplPowerInfo powerInfo,
+        CpuPowerExecutionPolicy executionPolicy = CpuPowerExecutionPolicy.DownwardOnly)
     {
         ValidateUnit(
             powerUnitWatts);
@@ -324,14 +329,7 @@ internal static class CpuRaplPowerLimitCodec
                 "CPU_POWER_BACKEND_LOCKED");
         }
 
-        if (!double.IsFinite(
-                request.Pl1Watts) ||
-            !double.IsFinite(
-                request.Pl2Watts) ||
-            request.Pl1Watts <
-                CpuPowerProductDefaults.MinimumPl1Watts ||
-            request.Pl2Watts <
-                request.Pl1Watts)
+        if (!CpuPowerExecutionRules.ValidRequest(request,executionPolicy))
         {
             throw new InvalidOperationException(
                 "CPU_POWER_BACKEND_INVALID_REQUEST");
@@ -368,17 +366,11 @@ internal static class CpuRaplPowerLimitCodec
             pl2Raw *
             powerUnitWatts;
 
-        if (appliedPl1 <
-                CpuPowerProductDefaults.MinimumPl1Watts ||
-            appliedPl2 <
-                appliedPl1 ||
-            appliedPl1 >=
-                originalBaseline.Pl1Watts ||
-            appliedPl2 >=
-                originalBaseline.Pl2Watts)
+        if (!CpuPowerExecutionRules.ValidPlan(appliedPl1,appliedPl2,originalBaseline,executionPolicy))
         {
             throw new InvalidOperationException(
-                "CPU_POWER_BACKEND_REQUEST_NOT_DOWNWARD_FROM_BASELINE");
+                executionPolicy==CpuPowerExecutionPolicy.DownwardOnly?
+                    "CPU_POWER_BACKEND_REQUEST_NOT_DOWNWARD_FROM_BASELINE":"CPU_POWER_BACKEND_REQUEST_OUTSIDE_PRODUCT_PL2_ENVELOPE");
         }
 
         if (powerInfo.MinimumWatts >

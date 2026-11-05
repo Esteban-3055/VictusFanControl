@@ -39,17 +39,20 @@ internal sealed class IntelMsrReader : IDisposable
     public IntelMsrReader(string modulePath)
     {
         _session = new PawnIoModuleSession(modulePath);
-
+        var initialized=Runtime.InitializationCleanup.Run(()=>
+        {
         var raplUnits = ReadMsr(MsrRaplPowerUnit);
         var energyUnitExponent = (int)((raplUnits >> 8) & 0x1F);
-        _energyUnitJoules = Math.Pow(0.5, energyUnitExponent);
+        var energyUnitJoules = Math.Pow(0.5, energyUnitExponent);
 
-        if (!double.IsFinite(_energyUnitJoules) || _energyUnitJoules <= 0)
+        if (!double.IsFinite(energyUnitJoules) || energyUnitJoules <= 0)
         {
             throw new InvalidDataException("Invalid Intel RAPL energy unit.");
         }
 
-        _coreTargets = DiscoverPhysicalCoreTargets();
+        return (Energy:energyUnitJoules,Targets:DiscoverPhysicalCoreTargets());
+        },_session.Dispose);
+        _energyUnitJoules=initialized.Energy;_coreTargets=initialized.Targets;
     }
 
     public Version PawnIoVersion => _session.DriverVersion;

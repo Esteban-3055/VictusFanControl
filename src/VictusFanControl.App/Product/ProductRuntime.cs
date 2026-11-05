@@ -12,6 +12,7 @@ namespace VictusFanControl.App;
 
 internal sealed record ProductRuntimeState
 {
+    internal long PublicationSequence { get; init; }
     internal string Hardware { get; init; } = "Detectando equipo…";
     internal string Target { get; init; } = "Sin destino validado";
     internal string Source { get; init; } = "Unknown";
@@ -49,6 +50,9 @@ internal sealed record ProductRuntimeState
     internal VictusFanControl.PlatformThermalReplay.ProductRetentionState? PlatformRetention { get; init; }
     internal string CpuState { get; init; } = "Disabled";
     internal string GpuState { get; init; } = "Disabled";
+    internal string CtgpState { get; init; } = "Disabled";
+    internal string? CtgpFailure { get; init; }
+    internal bool CtgpFaulted { get; init; }
     internal string GuardianState { get; init; } = "Sin sesión";
     internal string? CpuStatus { get; init; }
     internal string? GpuStatus { get; init; }
@@ -74,6 +78,7 @@ internal interface IProductRuntime : IAsyncDisposable
     event Action<ProductRuntimeState>? Changed;
     ProductRuntimeState State { get; }
     void Start();
+    void RequestAutomaticTelemetry();
     Task SelectFanModeAsync(AdaptiveFanProductionMode mode, ProductProfiles profiles);
     Task ApplyFanCurveAsync(ProductPowerProfile source, UnifiedFanDemand demand);
     Task ApplyFanTuningAsync(AdaptiveFanTuning tuning);
@@ -85,8 +90,14 @@ internal interface IProductRuntime : IAsyncDisposable
     void ResumeTelemetry(string reason);
 }
 
+internal interface IProductRecoveryHandoff
+{
+    Guid? DrainedGpuSession { get; }
+    void CompleteRecovery(Guid session);
+}
+
 /// <summary>Presentation adapter. Owns no raw hardware commands; uses the existing controllers and IPC.</summary>
-internal sealed class ProductRuntime : IProductRuntime
+internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
 {
     private readonly ProductAutomaticReview? _automaticReview;
     private readonly ProductAutomaticReview _automaticGuard;
@@ -100,14 +111,29 @@ internal sealed class ProductRuntime : IProductRuntime
     private readonly Hp8C40ThermalEmergencyConfirmation _thermal = new();
     private readonly TelemetryWorker _worker;
     private readonly PerformanceGuardianClient _performance;
+    private readonly RecoveryPreviewCache _recoveryPreview = new();
     private readonly WmiFanGuiGuardianClient? _fanGuardian;
+    private bool _ctgpRequested;
+    private bool _ctgpFaulted;
+    private string? _ctgpSource;
     private bool _releaseCompleted;
+    private Guid? _drainedGpuSession;
+    public Guid? DrainedGpuSession => _drainedGpuSession;
+    public void CompleteRecovery(Guid session)
+    {
+        if (session == Guid.Empty || _drainedGpuSession != session)
+            throw new IOException("No existe un cierre exclusivo de esa sesión GPU.");
+        _releaseCompleted = true;
+        _drainedGpuSession = null;
+    }
     private int _retryBoundaryClaimed;
     private readonly SemaphoreSlim _commands = new(1,1);
     private readonly SemaphoreSlim _fanCommands = new(1,1);
     private readonly CancellationTokenSource _lifetime = new();
     private readonly object _stateSync = new();
     private ProductRuntimeState _state = new();
+    private readonly LatestValuePump<ProductRuntimeState> _presentation;
+    private long _publicationSequence;
     private TelemetrySnapshot? _snapshot;
     private string? _selectedFanProfile;
     private int _manualAppliedLevel=-1;
@@ -118,7 +144,12 @@ internal sealed class ProductRuntime : IProductRuntime
     private string? _automaticSessionId;
     private PerformanceGuiSessionConfiguration? _automaticPerformance;
     private ProductAutomaticActivation.Ticket? _activeAutomaticTicket;
-    private ProductProfiles? _automaticProfiles;
+    private ProductProfiles? _frozenProfiles;
+    private ProductProfiles? _automaticProfiles
+    {
+        get=>Volatile.Read(ref _frozenProfiles);
+        set=>Volatile.Write(ref _frozenProfiles,value is null?null:ProductProfilesStore.Freeze(value));
+    }
     private DateTimeOffset _automaticStartedUtc;
     private volatile bool _plannedFanRelease;
     private PerformanceGuiSessionConfiguration? _requestedPerformance;
@@ -133,10 +164,16 @@ internal sealed class ProductRuntime : IProductRuntime
     internal ProductRuntime(string modules, ProductProfiles profiles, ProductAutomaticReviewMode? automaticReview = null,
         VictusFanControl.PlatformThermalReplay.PhysicalPlatformExperiment? platformExperiment = null, ProductRuntime? releasedRuntime = null)
     {
+        _presentation=new(state=>
+        {
+            if(_closing)return;
+            var observers=Changed;if(observers is null)return;
+            foreach(Action<ProductRuntimeState> observer in observers.GetInvocationList())
+                try{if(!_closing)observer(state);}catch(Exception error){AppLog.Write("Presentation observer failed: "+error.GetType().Name);}
+        },state=>state.PublicationSequence);
         // Reject the retired physical entry before identity reads, IPC or hardware construction.
         if(platformExperiment is not null)
             throw new NotSupportedException("TZ01/DTT3 y la retención térmica experimental se han retirado del producto.");
-        var releasedBoundary=releasedRuntime?.ClaimReleasedBoundary();
         WmiOnlyInvestigationPolicy.Enable(); // Product telemetry never opens an EC session.
         _hardware = HardwareIdentityReader.ReadCurrent();
         _target = HpHardwareTargetResolver.Resolve(_hardware,out _);
@@ -152,17 +189,16 @@ internal sealed class ProductRuntime : IProductRuntime
         {
             if (_target == Hp8C40TargetProfile.Instance)
             {
-                _fanGuardian=new WmiFanGuiGuardianClient(releasedBoundaryDirectory:releasedBoundary,productUpperRange:true);
+                _fanGuardian=new WmiFanGuiGuardianClient(productUpperRange:true,deferBoundary:true);
                 _wmi = new(_fanGuardian,productUpperRange:true); backend = _wmi;
                 _wmi.CommandAccepted += (_, message) => AppLog.Write("PRODUCT WMI REQUEST ACCEPTED: " + message);
             }
             else backend = new DisabledFanControlBackend();
         }
-        catch (Exception ex) { if(releasedBoundary is not null)throw;backend = new DisabledFanControlBackend(); AppLog.Write("Product backend unavailable: " + ex); }
+        catch (Exception ex) { if(releasedRuntime is not null)throw;backend = new DisabledFanControlBackend(); AppLog.Write("Product backend unavailable: " + ex); }
         _fans = new(backend);
         _controller = ProductFanControllerFactory.Create(_fans,profiles,_hardware,_target,
             _automaticReview is not null,ProductFanRangePreview.Enabled);
-        WmiFanExperimentBoundary.PlannedGuiRelease = () => _plannedFanRelease;
         _performance = new(modules);
         _worker = new(modules)
         {
@@ -175,7 +211,7 @@ internal sealed class ProductRuntime : IProductRuntime
         };
         if (_wmi is not null && automaticReview is null) _wmi.ProductTelemetryProvider = () => _snapshot;
         _fans.AuthorityChanged += (_, e) => { AppLog.Write("Product fan authority: " + e); Publish(e.Reason); };
-        _worker.SnapshotAvailable += (_, snapshot) => { AppLog.WriteTelemetry(snapshot); _snapshot = snapshot; _ = EnforceAsync(); Publish(); };
+        _worker.SnapshotAvailable += (_, snapshot) => { if(!ObserveSnapshot(snapshot))return; AppLog.WriteTelemetry(snapshot); _ = EnforceAsync(); Publish(); };
         _worker.StateMachine.StateChanged += (_, e) =>
         {
             if (!_closing && e.Current != SystemState.Healthy && (_automaticActivation.Pending || _fans.Authority == FanAuthority.Custom || _controller.Mode == AdaptiveFanProductionMode.Automatic))
@@ -184,14 +220,31 @@ internal sealed class ProductRuntime : IProductRuntime
                 var reason = _automaticGuard.RemainingCpuSpikeMilliseconds == 0
                     ? ProductAutomaticReview.CpuSpikeDeadlineFailure : "Telemetría no disponible: " + e.Reason;
                 _automaticInterruptionSnapshot = _snapshot;
-                AppLog.Write("PRODUCT AUTOMATIC INTERRUPTED: " + _automaticSessionId + " · " + reason);
                 _lifecycleBlocked = true; _lifecycleBlockReason = reason; _fans.CloseCustomAdmissionForLifecycleBoundary();
                 _ = ResetInterruptedFanAsync(reason);
+                AppLog.Write("PRODUCT AUTOMATIC INTERRUPTED: " + _automaticSessionId + " · " + reason);
             }
             _ = EnforceAsync(); Publish(e.Reason);
         };
         _worker.EventLogged += (_, e) => AppLog.Write(e);
         Publish();
+        // Commit process-local WMI ownership only after all preparation that
+        // may fail. No controller/telemetry/native worker has started yet.
+        if(_fanGuardian is not null)CommitReleasedBoundary(releasedRuntime,_fanGuardian.ActivateBoundary);
+        WmiFanExperimentBoundary.PlannedGuiRelease = () => _plannedFanRelease;
+    }
+    internal static void CommitReleasedBoundary(ProductRuntime? releasedRuntime,Action<string?> activate,Func<string?>? currentBoundaryFixture=null)
+    {
+        var releasedBoundary=releasedRuntime?.ClaimReleasedBoundary();
+        try { activate(releasedBoundary); }
+        catch
+        {
+            // Retry only before ownership changed; never reset a committed or
+            // uncertain boundary just because a constructor threw.
+            if(releasedRuntime is not null && string.Equals(releasedBoundary,currentBoundaryFixture?.Invoke()??WmiFanExperimentBoundary.SessionDirectory,StringComparison.OrdinalIgnoreCase))
+                Interlocked.CompareExchange(ref releasedRuntime._retryBoundaryClaimed,0,1);
+            throw;
+        }
     }
     private string ClaimReleasedBoundary()
     {
@@ -200,6 +253,19 @@ internal sealed class ProductRuntime : IProductRuntime
         return _fanGuardian.SessionDirectory;
     }
     public void Start() { _worker.Start(); _poll = PollAsync(); _thermalDeadline = MonitorThermalDeadlineAsync(); }
+    public void RequestAutomaticTelemetry() => _worker.RequestAutomaticTelemetry();
+    private bool ObserveSnapshot(TelemetrySnapshot snapshot)
+    {
+        while(true)
+        {
+            var previous=Volatile.Read(ref _snapshot);
+            var now=DateTimeOffset.UtcNow;
+            if(snapshot.Timestamp>now)return false;
+            // A corrected wall clock must not pin the previous future timestamp.
+            if(previous is not null&&previous.Timestamp<=now&&snapshot.Timestamp<previous.Timestamp)return false;
+            if(ReferenceEquals(Interlocked.CompareExchange(ref _snapshot,snapshot,previous),previous))return true;
+        }
+    }
     private SafetyGateResult Safety()
     {
         var s = SafetyGate.Evaluate(_hardware, _worker.StateMachine.State, _snapshot, DateTimeOffset.UtcNow, _fans.BackendCanWrite);
@@ -219,7 +285,7 @@ internal sealed class ProductRuntime : IProductRuntime
         await _fanCommands.WaitAsync(token);
         try
         {
-            _snapshot = snapshot;
+            if(!ObserveSnapshot(snapshot))return;
             if (_closing || _lifecycleBlocked || _controller.Mode != AdaptiveFanProductionMode.Automatic || snapshot.Timestamp <= _automaticStartedUtc) return;
             if (_activeAutomaticTicket is null || !_automaticActivation.IsCurrent(_activeAutomaticTicket)) return;
             try
@@ -304,7 +370,7 @@ internal sealed class ProductRuntime : IProductRuntime
                 }
                 if (!reconciled)
                 {
-                    if (snapshot.CpuControlTemperatureC >= 85 || snapshot.GpuTemperatureC >= 78)
+                    if (snapshot.CpuControlTemperatureC >= 85 || snapshot.GpuTemperatureC > ProductProtectionSettings.HabitualGpuHandoffC)
                         throw new InvalidOperationException("Transición pendiente con demanda térmica urgente; volver a Firmware.");
                     await _controller.ObserveAutomaticSourceWaitAsync(snapshot, () => AdmitSource(false), token);
                     _automaticDecision = null; _automaticDecisionSnapshot = null;
@@ -322,11 +388,18 @@ internal sealed class ProductRuntime : IProductRuntime
                         await _controller.ApplyUnifiedDemandAsync(profile.UnifiedDemand ?? throw new InvalidOperationException("Falta curva única de destino."),
                             () => AdmitSource(true), token, sourceConfiguration: profile);
                     _selectedFanProfile = expected;
+                    await ConfigureCtgpAsync(_automaticProfiles.CtgpEnabled, expected!, token);
                     _sourceTransition.Reset(); _automaticDecision = null; _automaticDecisionSnapshot = null;
                     AppLog.Write("PRODUCT AUTOMATIC SOURCE TRANSITION CONFIRMED: " + System.Text.Json.JsonSerializer.Serialize(new
                     { automaticSessionId = _automaticSessionId, from, to = expected, snapshotTimestamp = snapshot.Timestamp,
                         guardian = _performance.LastStatus, performance = _automaticPerformance, fan = _controller.AutomaticConfiguration,
                         remainingSeconds = _automaticReview?.RemainingSeconds }));
+                }
+                if (_ctgpRequested && _ctgpSource == "Ac" && expected == "Ac" &&
+                    _fanGuardian?.Ctgp is not { Active: true, Failure: null })
+                {
+                    _ctgpFaulted = true;
+                    throw new InvalidOperationException("cTGP perdió su confirmación vigente; volver a Firmware.");
                 }
                 var decision = await _controller.ProcessAutomaticAsync(snapshot,raw,token, refreshRawSafetyProvider: () =>
                 {
@@ -354,6 +427,22 @@ internal sealed class ProductRuntime : IProductRuntime
             }
             catch (Exception ex)
             {
+                if (_ctgpRequested)
+                {
+                    // An unreadable replacement may retain a recent Active observation.
+                    // Loss of the guardian itself still forbids unattended reactivation.
+                    try { _fanGuardian?.EnsureAlive(); }
+                    catch { _ctgpFaulted = true; }
+                }
+                if (_ctgpRequested && _ctgpSource == "Ac" && _fanGuardian?.Ctgp is not { Active: true, Failure: null })
+                    _ctgpFaulted = true;
+                AppLog.WriteStructured("PRODUCT AUTOMATIC INTERRUPTION EVIDENCE",new
+                {
+                    automaticSessionId=_automaticSessionId,selectedProfile=_selectedFanProfile,
+                    transitionCandidate=_sourceTransition.Candidate,transitionPending=_sourceTransition.Pending,
+                    guardianFresh=_performance.LastStatusFresh,guardian=_performance.LastStatus,
+                    performance=_performance.AppliedConfiguration,snapshot,error=ex.Message
+                });
                 _automaticInterruptionSnapshot = snapshot; AppLog.Write("PRODUCT AUTOMATIC INTERRUPTED: " + _automaticSessionId + " · " + ex.Message); _automaticActivation.Cancel();
                 _lifecycleBlocked = true; _lifecycleBlockReason = ex.Message; _fans.CloseCustomAdmissionForLifecycleBoundary();
                 _automaticGuard.Stop();
@@ -382,7 +471,9 @@ internal sealed class ProductRuntime : IProductRuntime
             return Task.CompletedTask;
         }
         // Reject unavailable modes before a new generation could supersede a running session.
-        AutomaticAdmission(_automaticReview is null ? profiles.Protections : new());
+        if(_closing||_lifecycleBlocked||!_controller.AutomaticExecutionAuthorized||
+            _controller.Mode!=AdaptiveFanProductionMode.Firmware||_fans.Authority!=FanAuthority.Firmware)
+            AutomaticAdmission(_automaticReview is null ? profiles.Protections : new());
         var ticket = _automaticActivation.Begin(profiles);
         ProductPowerProfile? slot = null;
         Publish("Preparando Automatic: primero CPU/GPU, después la curva. Firmware cancela la entrada.");
@@ -391,12 +482,12 @@ internal sealed class ProductRuntime : IProductRuntime
             try
             {
                 await _automaticActivation.RunAsync(ticket,
-                    () => FanCommandAsync(() =>
+                    () => FanCommandAsync(async () =>
                     {
-                        _automaticActivation.EnsureCurrent(ticket); slot = AutomaticAdmission(_automaticReview is null ? ticket.Profiles.Protections : new());
-                        var protections = _automaticReview is null ? ticket.Profiles.Protections : new ProductProtectionSettings();
+                        await RefreshAutomaticAdmissionAsync(ticket);
+                        slot = AutomaticAdmission(_automaticReview is null ? ticket.Profiles.Protections : new());
+                        var protections = _automaticReview is null ? ticket.Profiles.Protections : new ProductProtectionSettings{HistoricalGpuThermalPolicy=true};
                         _controller.ConfigureAutomaticProtections(protections); _automaticGuard.Configure(protections);
-                        return Task.CompletedTask;
                     }),
                     async () =>
                     {
@@ -404,19 +495,28 @@ internal sealed class ProductRuntime : IProductRuntime
                         var configuration = ticket.Performance;
                         await ProductAutomaticActivation.PreparePerformanceAsync(configuration, _performance.HasProcess,
                             _performance.AppliedConfiguration, async () => { await _performance.StatusAsync(); },
-                            async () => { _requestedPerformance = configuration; await _performance.EnableAsync(configuration); });
+                            async () => { _requestedPerformance = configuration; await _performance.EnableAsync(configuration); },
+                            async () =>
+                            {
+                                await _performance.UpdateAsync(configuration,token=>FanCommandAsync(async()=>
+                                {
+                                    token.ThrowIfCancellationRequested();await RefreshAutomaticAdmissionAsync(ticket);
+                                    AutomaticAdmission(_automaticReview is null?ticket.Profiles.Protections:new());
+                                }));
+                                _requestedPerformance=_performance.AppliedConfiguration;
+                            });
                     },
                     () => FanCommandAsync(async () =>
                     {
-                        _automaticActivation.EnsureCurrent(ticket);
+                        await RefreshAutomaticAdmissionAsync(ticket);
                         var current = AutomaticAdmission(_automaticReview is null ? ticket.Profiles.Protections : new());
                         if (current != slot) throw new InvalidOperationException("La fuente cambió durante la preparación; selecciona Automatic de nuevo con la fuente estable.");
                         if (!ProductAutomaticActivation.PerformanceReady(ticket.Performance, _performance.AppliedConfiguration,
                             _performance.LastStatus, _performance.LastStatusFresh, current.ToString()))
-                            throw new InvalidOperationException("CPU/GPU no confirmaron ambos límites para la fuente real; Automatic permanece en Firmware.");
+                            throw new InvalidOperationException("CPU/GPU no confirmaron la selección solicitada para la fuente real; Automatic permanece en Firmware.");
                         await _controller.ConfigureAutomaticAsync(ticket.Profiles.Get(current).Fan, CancellationToken.None);
                         // Configuration may await a controller lock; recheck cancellation before committing.
-                        _automaticActivation.EnsureCurrent(ticket);
+                        await RefreshAutomaticAdmissionAsync(ticket,onlyIfExpired:true);
                         if (AutomaticAdmission(_automaticReview is null ? ticket.Profiles.Protections : new()) != current || !ProductAutomaticActivation.PerformanceReady(ticket.Performance,
                             _performance.AppliedConfiguration, _performance.LastStatus, _performance.LastStatusFresh, current.ToString()))
                             throw new InvalidOperationException("Fuente o estado CPU/GPU cambiaron durante la preparación; Automatic permanece en Firmware.");
@@ -424,6 +524,13 @@ internal sealed class ProductRuntime : IProductRuntime
                         _activeAutomaticTicket = ticket;
                         _automaticProfiles = ProductProfilesStore.Copy(ticket.Profiles); _sourceTransition.Reset();
                         await SetFanModeAsync(AdaptiveFanProductionMode.Automatic);
+                        try { await ConfigureCtgpAsync(ticket.Profiles.CtgpEnabled, current.ToString(), CancellationToken.None); }
+                        catch
+                        {
+                            _ctgpFaulted = true;
+                            await SetFanModeAsync(AdaptiveFanProductionMode.Firmware);
+                            throw;
+                        }
                         if (!_automaticActivation.IsCurrent(ticket))
                         {
                             await SetFanModeAsync(AdaptiveFanProductionMode.Firmware);
@@ -434,6 +541,17 @@ internal sealed class ProductRuntime : IProductRuntime
             }
             finally { Publish(); }
         });
+    }
+    private async Task RefreshAutomaticAdmissionAsync(ProductAutomaticActivation.Ticket ticket,bool onlyIfExpired=false)
+    {
+        _automaticActivation.EnsureCurrent(ticket);
+        if(!onlyIfExpired||_snapshot is null||!TelemetryWorker.FreshForAutomaticAdmission(_snapshot,DateTimeOffset.UtcNow))
+        {
+            var snapshot=await _worker.RefreshForAutomaticAdmissionAsync(_lifetime.Token);
+            _automaticActivation.EnsureCurrent(ticket);
+            ObserveSnapshot(snapshot);
+        }
+        _automaticActivation.EnsureCurrent(ticket);
     }
     private ProductPowerProfile AutomaticAdmission(ProductProtectionSettings? protections = null)
     {
@@ -463,6 +581,12 @@ internal sealed class ProductRuntime : IProductRuntime
     }
     private async Task SetFanModeAsync(AdaptiveFanProductionMode mode)
     {
+        Exception? ctgpReleaseFailure = null;
+        if (mode != AdaptiveFanProductionMode.Automatic && _ctgpRequested && _wmi is not null)
+        {
+            try { await _wmi.SetCtgpAsync(false, CancellationToken.None); _ctgpRequested = false; _ctgpSource = null; }
+            catch (Exception ex) { ctgpReleaseFailure = ex; } // Fan restoration must still be attempted.
+        }
         if(mode!=_controller.Mode)
         {
             _manualAppliedLevel=-1;
@@ -478,6 +602,17 @@ internal sealed class ProductRuntime : IProductRuntime
         if (!result.ExecutionAuthorized) throw new InvalidOperationException(result.Detail);
         if (mode != AdaptiveFanProductionMode.Automatic) { _selectedFanProfile = null; _automaticPerformance = null; _activeAutomaticTicket = null; _automaticProfiles = null; _sourceTransition.Reset(); _automaticGuard.Stop(); }
         Publish(FanDecisionMessage(result));
+        if (ctgpReleaseFailure is not null) throw new IOException("cTGP no confirmó su liberación; se intentó también restaurar ventiladores.", ctgpReleaseFailure);
+    }
+    private async Task ConfigureCtgpAsync(bool selected, string source, CancellationToken token)
+    {
+        if (!selected && !_ctgpRequested) return;
+        if (_wmi is null || _fanGuardian is null || _controller.Mode != AdaptiveFanProductionMode.Automatic)
+            throw new InvalidOperationException("cTGP requiere Automático y el guardián WMI del HP 8C40.");
+        try { await _wmi.SetCtgpAsync(selected && source == "Ac", token); }
+        catch { _ctgpFaulted = true; throw; }
+        _ctgpRequested = selected; _ctgpSource = source;
+        AppLog.WriteStructured("PRODUCT CTGP SELECTION", new { selected, source, status = _fanGuardian.Ctgp });
     }
     public Task ApplyFanCurveAsync(ProductPowerProfile source, UnifiedFanDemand demand)
     {
@@ -592,31 +727,30 @@ internal sealed class ProductRuntime : IProductRuntime
     private async Task UpdatePerformanceAsync(PerformanceGuiSessionConfiguration configuration)
     {
         var started=false;
-        await FanCommandAsync(() =>
-        {
-            var source=new WindowsPerformancePowerSourceReader().Read().Source.ToString();
-            if (!CanUpdatePerformance(source) || _performance.AppliedConfiguration is not { } old ||
-                old.CpuEnabled!=configuration.CpuEnabled || old.GpuEnabled!=configuration.GpuEnabled)
-                throw new InvalidOperationException("Actualizar requiere datos vigentes, sesión CPU/GPU activa y la misma selección de dominios. Espera una fuente estable.");
-            if (old==configuration) return Task.CompletedTask;
-            if (_controller.Mode==AdaptiveFanProductionMode.Automatic)
-            {
-                if (_activeAutomaticTicket is null) throw new InvalidOperationException("Falta la activación Automatic.");
-                _automaticActivation.EnsureCurrent(_activeAutomaticTicket);
-                _automaticGuard.EnsureDispatchAllowed(_snapshot!);
-                if (_snapshot!.CpuControlTemperatureC>=85 || _snapshot.GpuTemperatureC>=78)
-                    throw new InvalidOperationException("Espera a que termine la respuesta térmica urgente antes de actualizar límites.");
-            }
-            _performanceUpdateStarted=Environment.TickCount64;_performanceUpdating=true;started=true;
-            AppLog.Write("PRODUCT PERFORMANCE UPDATE STARTED: "+System.Text.Json.JsonSerializer.Serialize(new
-                {automaticSessionId=_automaticSessionId,previous=old,requested=configuration,remainingSeconds=_automaticReview?.RemainingSeconds}));
-            Publish("Actualizando CPU/GPU en la misma sesión…");
-            return Task.CompletedTask;
-        });
-        if(!started)return;
         try
         {
-            await _performance.UpdateAsync(configuration);
+            await _performance.UpdateAsync(configuration, admissionToken=>FanCommandAsync(() =>
+            {
+                admissionToken.ThrowIfCancellationRequested();
+                var source=new WindowsPerformancePowerSourceReader().Read().Source.ToString();
+                if (!CanUpdatePerformance(source) || _performance.AppliedConfiguration is not { } old)
+                    throw new InvalidOperationException("Actualizar requiere datos vigentes y una sesión CPU/GPU confirmada. Espera una fuente estable.");
+                if (old==configuration) return Task.CompletedTask;
+                if (_controller.Mode==AdaptiveFanProductionMode.Automatic)
+                {
+                    if (_activeAutomaticTicket is null) throw new InvalidOperationException("Falta la activación Automatic.");
+                    _automaticActivation.EnsureCurrent(_activeAutomaticTicket);
+                    _automaticGuard.EnsureDispatchAllowed(_snapshot!);
+                    if (_snapshot!.CpuControlTemperatureC>=85 || _snapshot.GpuTemperatureC>ProductProtectionSettings.HabitualGpuHandoffC)
+                        throw new InvalidOperationException("Espera a que termine la respuesta térmica urgente antes de actualizar límites.");
+                }
+                _performanceUpdateStarted=Environment.TickCount64;_performanceUpdating=true;started=true;
+                AppLog.Write("PRODUCT PERFORMANCE UPDATE STARTED: "+System.Text.Json.JsonSerializer.Serialize(new
+                    {automaticSessionId=_automaticSessionId,previous=old,requested=configuration,remainingSeconds=_automaticReview?.RemainingSeconds}));
+                Publish("Actualizando CPU/GPU en la misma sesión…");
+                return Task.CompletedTask;
+            }));
+            if(!started)return;
             await FanCommandAsync(() =>
             {
                 _requestedPerformance=_performance.AppliedConfiguration;
@@ -642,6 +776,11 @@ internal sealed class ProductRuntime : IProductRuntime
         }
         catch(Exception ex)
         {
+            if(!started)
+            {
+                Publish("No se inició la actualización CPU/GPU; la sesión anterior se conserva.",ex.Message);
+                throw;
+            }
             // Keep journals and independently committed values. Never fabricate rollback or renew Automatic.
             _requestedPerformance=_performance.AppliedConfiguration;
             await FanCommandAsync(async () =>
@@ -666,13 +805,13 @@ internal sealed class ProductRuntime : IProductRuntime
         _worker.StateMachine.State==SystemState.Healthy&&_performance.LimitsActive&&_performance.LastStatus?.PowerSource==source&&
         source is "Ac" or "Battery"&&_fans.Authority is not (FanAuthority.Restoring or FanAuthority.Faulted)&&
         ProductPerformanceUpdate.HasCurrentTelemetry(_snapshot,DateTimeOffset.UtcNow);
-    public Task ReleasePerformanceAsync() => _automaticActivation.ReleaseLimitsAsync(
-        // Restore fans before removing the prerequisite limits; do not hold the Performance queue while releasing WMI.
-        () => FanCommandAsync(async () =>
-        {
-            if (_controller.Mode == AdaptiveFanProductionMode.Automatic) await SetFanModeAsync(AdaptiveFanProductionMode.Firmware);
-        }),
-        () => CommandAsync(async () => { await _performance.CloseAsync(); Publish("CPU/GPU liberados mediante Performance Guardian."); }));
+    public Task ReleasePerformanceAsync()=>CommandAsync(async()=>
+    {
+        if(!_performance.HasProcess)return;
+        var applied=_performance.AppliedConfiguration??throw new InvalidOperationException("Falta la selección CPU/GPU confirmada.");
+        await UpdatePerformanceAsync(applied with{CpuEnabled=false,GpuEnabled=false});
+        Publish("Límites CPU/GPU desactivados. Se conserva el modo de ventiladores.");
+    });
     private Task CommandAsync(Func<Task> command) => RunCommandAsync(_commands,command);
     private Task FanCommandAsync(Func<Task> command) => RunCommandAsync(_fanCommands,command);
     private Task RunCommandAsync(SemaphoreSlim domain,Func<Task> command) => Task.Run(async () =>
@@ -694,7 +833,7 @@ internal sealed class ProductRuntime : IProductRuntime
             await _fans.BlockCustomAdmissionAndRestoreAsync(reason,DateTimeOffset.UtcNow,CancellationToken.None);
             await _controller.ReleaseToFirmwareAsync(reason,CancellationToken.None); Publish(reason);
         }
-        catch (Exception ex) { Publish("Liberación lifecycle no resuelta",ex.Message); }
+        catch (Exception ex) { Publish("Liberación lifecycle no resuelta",ex.Message);throw; }
     }
     private async Task ResetInterruptedFanAsync(string reason)
     {
@@ -749,12 +888,14 @@ internal sealed class ProductRuntime : IProductRuntime
         var source = "Unknown";
         try { var reading = new WindowsPerformancePowerSourceReader().Read(); if (reading.Succeeded) source = reading.Source.ToString(); } catch { }
         var p = _performance.LastStatusFresh ? _performance.LastStatus : null;
-        var recovery=_performance.HasProcess&&!_performance.HasFailedProcess ? null : PerformanceRecoveryPreview.Read();
+        var ctgp = _fanGuardian?.Ctgp;
+        var recovery=_performance.HasProcess&&!_performance.HasFailedProcess ? null : _recoveryPreview.Get();
         ProductRuntimeState state;
         lock (_stateSync)
         {
             _state = _state with
             {
+                PublicationSequence=++_publicationSequence,
                 Hardware = _hardware.SystemProductName + " (" + _hardware.BoardProduct + ")", Target = _target?.Id ?? "Unsupported",
                 Source = source, Runtime = _worker.StateMachine.State.ToString(), Snapshot = _snapshot,
                 FanMode = _controller.Mode.ToString(), FanAuthority = _fans.Authority.ToString(), FanLevel = _fans.Authority == FanAuthority.Custom ? _wmi?.LastAcceptedLevel : null,
@@ -766,39 +907,61 @@ internal sealed class ProductRuntime : IProductRuntime
                 AutomaticReview = _automaticReview is not null, AutomaticReviewMaximumSeconds = _automaticReview?.MaximumDurationSeconds, AutomaticReviewRemainingSeconds = _controller.Mode == AdaptiveFanProductionMode.Automatic ? _automaticReview?.RemainingSeconds : null,
                 AutomaticCpuSpikeRemainingMilliseconds = _automaticGuard.RemainingCpuSpikeMilliseconds,
                 AppliedProtections = _automaticProfiles is null ? null : _automaticReview is null ? _automaticProfiles.Protections : new ProductProtectionSettings { ResumeAutomatic = false },
-                AutomaticResumeProfiles = _automaticProfiles is null ? null : ProductProfilesStore.Copy(_automaticProfiles),
+                AutomaticResumeProfiles = _ctgpFaulted ? null : _automaticProfiles,
                 AutomaticPreparing = _automaticActivation.Pending, AutomaticSessionId = _automaticSessionId, AutomaticDecisionSnapshot = _automaticDecisionSnapshot, AutomaticInterruptionSnapshot = _automaticInterruptionSnapshot,
                 AutomaticSourceTransition = _sourceTransition.Pending ? _sourceTransition.Candidate : null,
                 AutomaticDecision = _controller.Mode == AdaptiveFanProductionMode.Automatic && ReferenceEquals(_automaticDecision,_controller.LastAutomaticResult) ? _automaticDecision : null,
-                AppliedAutomaticConfiguration = _controller.Mode == AdaptiveFanProductionMode.Automatic ? _controller.AutomaticConfiguration : null,
+                AppliedAutomaticConfiguration = _controller.Mode == AdaptiveFanProductionMode.Automatic ? _controller.AppliedConfigurationSnapshot : null,
                 PerformanceSupported = _target == Hp8C40TargetProfile.Instance,
                 PerformanceRecovery = recovery,
                 CanApplyPerformance = recovery?.Pending!=true&&!_performanceUpdating&&!_automaticActivation.Pending&&!_sourceTransition.Pending&&
                     (_target == Hp8C40TargetProfile.Instance && PerformanceAdmissionPermitted(_closing,_lifecycleBlocked,_performance.HasProcess,_worker.StateMachine.State,_fans.Authority) || CanUpdatePerformance(source)),
-                PerformanceActive = _performance.LimitsActive, PerformanceProcessPresent = _performance.HasProcess,
+                PerformanceActive = _performance.LimitsActive&&_performance.AppliedConfiguration is{ } limits&&(limits.CpuEnabled||limits.GpuEnabled), PerformanceProcessPresent = _performance.HasProcess,
                 PerformanceUpdating = _performanceUpdating,
                 PlatformRetention = null,
                 CpuState = p?.CpuState ?? (_performance.HasProcess || recovery?.Pending==true ? "Recovering" : "Disabled"), GpuState = p?.GpuState ?? (_performance.HasProcess || recovery?.Pending==true ? "Recovering" : "Disabled"),
+                CtgpState = ctgp?.Failure is not null ? "RecoveryRequired" : _controller.Mode != AdaptiveFanProductionMode.Automatic || !_ctgpRequested ? "Disabled" : source != "Ac" ? "AcOnly" : ctgp?.State ?? "Unknown",
+                CtgpFailure = ctgp?.Failure,
+                CtgpFaulted = _ctgpFaulted,
                 CpuStatus = p?.CpuStatus, GpuStatus = p?.GpuStatus, AppliedPerformanceSource = p?.PowerSource ?? "Unknown", AppliedPerformance = _performance.AppliedConfiguration ?? (p is { CpuState: "Active" } or { GpuState: "ActiveUnverified" } ? _requestedPerformance : null),
                 GuardianState = recovery?.Pending==true ? "Recuperación pendiente" : p?.RuntimeFailure is not null ? "Failed" : _performance.HasProcess ? p?.Phase ?? "Recovering" : "Sin sesión",
                 AppliedFanProfile = _fans.Authority == FanAuthority.Custom ? _selectedFanProfile : null,
                 LifecycleBlocked = _lifecycleBlocked, LifecycleBlockReason = _lifecycleBlockReason, Message = message ?? _state.Message, Failure = failure ?? (clearFailure ? null : _state.Failure)
             }; state = _state;
         }
-        Changed?.Invoke(state);
+        RuntimeProgressJournal.Record("Control.Publication",state.AutomaticSessionId,state.PublicationSequence,state.Snapshot?.Timestamp);
+        _presentation.Post(state);
     }
     public async ValueTask DisposeAsync()
     {
         _automaticActivation.Cancel();
         _closing = true; _lifetime.Cancel(); _fans.CloseCustomAdmissionForLifecycleBoundary();
+        _presentation.Dispose();
         var failures = new List<Exception>();
         // Each domain cleanup is attempted even if a preceding domain fails; retained journals are never deleted here.
         try { await _fanCommands.WaitAsync(); try { await _fans.DisposeAsync(); } finally { _fanCommands.Release(); } } catch (Exception ex) { failures.Add(ex); }
-        try { await _performance.CloseAsync(); } catch (Exception ex) { failures.Add(ex); }
-        try { await _worker.DisposeAsync(); } catch (Exception ex) { failures.Add(ex); }
-        if (_poll is not null) try { await _poll; } catch (OperationCanceledException) { }
-        if (_thermalDeadline is not null) try { await _thermalDeadline; } catch (OperationCanceledException) { }
+        Exception? performanceFailure = null;
+        try { await _performance.CloseAsync(); } catch (Exception ex) { performanceFailure = ex; }
+        try { await _worker.DisposeAsync(); }
+        catch (Exception ex) when (_worker.ShutdownReport is { ResourcesDrained:true, CleanupFailures.Count:0 })
+        {
+            // A completed task fault remains diagnostic evidence. The explicit
+            // local cleanup receipt, not the exception itself, proves drainage.
+            // Fan/CPU/GPU release is still independently required below.
+            AppLog.Write("Telemetry task fault retained after confirmed local cleanup: " + ex);
+        }
+        catch (Exception ex) { failures.Add(ex); }
+        if (_poll is not null) try { await _poll; } catch (OperationCanceledException) { } catch (Exception ex) { failures.Add(ex); }
+        if (_thermalDeadline is not null) try { await _thermalDeadline; } catch (OperationCanceledException) { } catch (Exception ex) { failures.Add(ex); }
+        try { await _recoveryPreview.DisposeAsync(); } catch (Exception ex) { failures.Add(ex); }
         _lifetime.Dispose();
+        // Only performance release may be unresolved. Fan release, telemetry
+        // and every local callback must have drained successfully first.
+        if (performanceFailure is not null)
+        {
+            if (failures.Count == 0) _drainedGpuSession = _performance.DrainedGpuSession;
+            failures.Add(performanceFailure);
+        }
         if (failures.Count > 0) throw new AggregateException("Liberación incompleta. Conserva los journals y revisa los informes.",failures);
         _releaseCompleted=true;
     }

@@ -94,7 +94,7 @@ Require ($launcher.Contains('explicit-only-2700s-10-to-50-16MiB-diagnostics') -a
 Require ($launcher.Contains("'FinalCheck'") -and $launcher.Contains("@('SelfTest','Soak','RecoverySelfTest')")) 'final candidate must check packaged software with zero-hardware fixture entries'
 Require ($launcher.Contains('$start.WorkingDirectory = $fixtureOutput') -and $launcher.Contains('No hardware activation or physical qualification performed.')) 'packaged fixture outputs must remain outside the verified payload'
 $candidate = Get-Content (Join-Path $repoRoot 'release/product-v1.json') -Raw | ConvertFrom-Json
-Require ($candidate.stableReleaseAuthorized -eq $true -and $candidate.normalAutomatic -eq 'authorized-exact-target' -and $candidate.physicalPassClaimed -eq $false) 'target release must distinguish user authorization from physical qualification'
+Require ($candidate.stableReleaseAuthorized -eq $false -and $candidate.previewReleaseAuthorized -eq $true -and $candidate.channel -eq 'preview' -and $candidate.normalAutomatic -eq 'authorized-exact-target' -and $candidate.physicalPassClaimed -eq $false) 'user-authorized preview release must retain exact-target authority and physical evidence limits'
 foreach ($pending in @('representative-use-of-95C-contract-and-stable-presets-ac-battery-idle-return',
     'current-gui-suspend-resume-without-fan-reentry','current-gui-clean-exit-and-session-restart-release-and-open-in-firmware',
     'sensor-isolation-without-tz01-dtt3-under-comparable-load')) {
@@ -105,7 +105,7 @@ Require ($candidate.experimentalPlatformRetention.defaultEnabled -eq $false -and
     $candidate.experimentalPlatformRetention.maximumExtraRawLevels -eq 0 -and $candidate.experimentalPlatformRetention.maximumSupplementSeconds -eq 0) 'retired retention must not be available to product control'
 Require ($launcher.Contains('removed-no-platform-sensor-acquisition') -and $package.Contains('removed-no-platform-sensor-acquisition')) 'launcher and package must bind the retired platform sensor contract'
 Require ($candidate.sessionRestart -eq 'explicit-drain-release-check-records-new-process-firmware-retain-draft-and-diagnostics') 'candidate restart must retain clean-release and explicit Firmware reentry'
-Require ($candidate.automaticThermalContract -eq 'cpu-start90-active95-confirm2000ms-cpu99-immediate-raw-response') 'candidate thermal contract drifted'
+Require ($candidate.automaticThermalContract -eq 'cpu-start90-active95-confirm2000ms-cpu99-immediate-gpu-strictly-over95') 'candidate thermal contract drifted'
 Require ($launcher.Contains($candidate.automaticThermalContract) -and $package.Contains($candidate.automaticThermalContract)) 'launcher and package must bind the current thermal contract'
 foreach ($evidence in $candidate.physicalEvidence) {
     Require ([IO.Path]::GetFileName($evidence) -eq $evidence -and (Test-Path -LiteralPath (Join-Path $repoRoot ('release/' + $evidence)))) 'candidate physical evidence reference missing or invalid'

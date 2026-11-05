@@ -88,13 +88,28 @@ internal static class ProductAutomaticActivationSelfTest
     {
         TestExtendedReview(require);
         TestSharedThermalContract(require);
+        TestHabitualGpuCore(require);
         TestSourceTransitions(require);
         TestRetentionSourceTransitions(require);
         var activation = new ProductAutomaticActivation();
-        var profiles = new ProductProfiles { CpuEnabled = false, GpuEnabled = false };
+        foreach(var selection in new[]{(true,true),(true,false),(false,true),(false,false)})
+        {
+            var chooser=new ProductAutomaticActivation();
+            var selected=chooser.Begin(new ProductProfiles{CpuEnabled=selection.Item1,GpuEnabled=selection.Item2});
+            require(selected.Performance.CpuEnabled==selection.Item1&&selected.Performance.GpuEnabled==selection.Item2,
+                "Automatic ignored the selected CPU/GPU domains.");
+            foreach(var source in new[]{"Ac","Battery"})
+            {
+                var selectedStatus=new PerformanceGuardianResponse(1,Guid.NewGuid(),selected.Performance.TargetProfileId,true,"OK","fixture","SessionEnabled",true,
+                    selection.Item1,selection.Item2,selection.Item1?"Active":"Disabled",selection.Item2?"ActiveUnverified":"Disabled",PowerSource:source);
+                require(ProductAutomaticActivation.PerformanceReady(selected.Performance,selected.Performance,selectedStatus,true,source),
+                    "CPU-only/GPU-only/no-limit Automatic admission was rejected.");
+            }
+        }
+        var profiles = new ProductProfiles { CpuEnabled = true, GpuEnabled = true };
         var ticket = activation.Begin(profiles);
-        require(ticket.Performance.CpuEnabled && ticket.Performance.GpuEnabled && !profiles.CpuEnabled && !profiles.GpuEnabled,
-            "Automatic did not freeze both enabled domains independently of the saved toggles.");
+        require(ticket.Performance.CpuEnabled && ticket.Performance.GpuEnabled && profiles.CpuEnabled && profiles.GpuEnabled,
+            "Automatic did not freeze the selected enabled domains.");
         require(!ReferenceEquals(ticket.Profiles.Ac.Fan, profiles.Ac.Fan) && ticket.Performance.AcPl1Watts == profiles.Ac.CpuPl1Watts &&
             ticket.Performance.BatteryGpuMaximumMHz == profiles.Battery.GpuMaximumMHz, "Automatic lost the frozen AC/Battery preferences.");
         bool duplicate = false; try { activation.Begin(profiles); } catch (InvalidOperationException) { duplicate = true; }
@@ -162,6 +177,26 @@ internal static class ProductAutomaticActivationSelfTest
         require(order.Count == 0, "CPU/GPU were released after an unresolved fan restore.");
         Console.WriteLine("PASS: Automatic coupled activation order, frozen preferences, Guardian reuse/partial failure, source/freshness fences and late cancellation.");
     }
+    private static void TestHabitualGpuCore(Action<bool,string> require)
+    {
+        var h=new VictusFanControl.Hardware.Windows.HardwareIdentity(
+            VictusFanControl.Hardware.Hp.Hp8C40TargetProfile.BoardManufacturer,VictusFanControl.Hardware.Hp.Hp8C40TargetProfile.BoardProduct,
+            VictusFanControl.Hardware.Hp.Hp8C40TargetProfile.BoardVersion,VictusFanControl.Hardware.Hp.Hp8C40TargetProfile.SystemManufacturer,
+            VictusFanControl.Hardware.Hp.Hp8C40TargetProfile.SystemProductName,VictusFanControl.Hardware.Hp.Hp8C40TargetProfile.SystemSkuPrefix,
+            VictusFanControl.Hardware.Hp.Hp8C40TargetProfile.ValidatedBiosVersion);
+        foreach(var temperature in new[]{82d,87,95,95.001})
+        {
+            var at=DateTimeOffset.UtcNow;
+            var s=new TelemetrySnapshot(at,"Intel Core i7-13700H",55,30,50,VictusFanControl.Hardware.Hp.Hp8C40TargetProfile.ExpectedGpuName,temperature,60,70,4900,4900)
+            {CpuExpectedPhysicalCoreCount=14,CpuCoreTemperatures=Enumerable.Range(0,14).Select(i=>new CpuCoreTemperatureSample(i,i,i<6?"Performance":"Efficiency",55)).ToArray()};
+            var core=new VictusFanControl.Safety.Hp8C40AutomaticThermalAdmission(h,()=>0,new ProductProtectionSettings());
+            var result=core.Observe(s,at);
+            require(result.Closed==(temperature>95)&&result.EffectiveSafety.CustomControlPermitted==(temperature<=95),"Actual core disagrees with habitual strict GPU >95 threshold.");
+            var legacy=new VictusFanControl.Safety.Hp8C40AutomaticThermalAdmission(h,()=>0);
+            require(legacy.Observe(s,at).Closed==(temperature>=87),"Bare historical core threshold changed.");
+        }
+        Console.WriteLine("PASS actual thermal core: habitual GPU exact95 admitted, 95.001 closed; historical raw87 preserved.");
+    }
     private static void TestSourceTransitions(Action<bool,string> require)
     {
         long clock = 0;
@@ -186,10 +221,10 @@ internal static class ProductAutomaticActivationSelfTest
         require(!Observe("Battery", "Ac", status), "Bounce fixture unexpectedly admitted.");
         clock = 3000; require(!Observe("Ac", "Ac", status with { RequestId = Guid.NewGuid() }), "First bounce back did not require stability.");
         clock = 4000; require(!Observe("Battery", "Ac", status), "Bounce did not reset stability.");
-        clock = 6000;
+        clock = 10000;
         bool rejected = false;
         try { Observe("Ac", "Ac", status with { RequestId = Guid.NewGuid() }); } catch (InvalidOperationException) { rejected = true; }
-        require(rejected, "Repeated source bounce renewed the four-second deadline.");
+        require(rejected, "Repeated source bounce renewed the eight-second deadline.");
         foreach (var bad in new[] { status with { RuntimeFailure = "failed" }, status with { GpuState = "Failed" },
             status with { CpuState = "Recovering" }, status with { Ok = false }, status with { SessionEnabled = false } })
         {
@@ -203,6 +238,17 @@ internal static class ProductAutomaticActivationSelfTest
             try { Observe(source, "Ac", status, fresh: false); } catch (InvalidOperationException) { rejected = true; }
             require(rejected, "Unknown source or stale status admitted.");
         }
+        gate.Reset();clock=0;Observe("Battery","Ac",status);
+        clock=1000;status=status with{RequestId=Guid.NewGuid(),PowerSource="Ac"};
+        require(!Observe("Ac","Ac",status),"Source bounce skipped stabilization.");
+        clock=2000;require(!Observe("Ac","Ac",status),"Cached pre-bounce Guardian response was accepted.");
+        status=status with{RequestId=Guid.NewGuid()};require(Observe("Ac","Ac",status),"New post-bounce reply did not reconcile.");
+        gate.Reset();clock=0;Observe("Battery","Ac",status);clock=5000;
+        status=status with{RequestId=Guid.NewGuid(),PowerSource="Battery"};
+        require(Observe("Battery","Ac",status),"Fresh slow handoff before eight seconds was rejected.");
+        gate.Reset();clock=0;Observe("Ac","Battery",status);clock=8000;rejected=false;
+        try{Observe("Ac","Battery",status with{RequestId=Guid.NewGuid(),PowerSource="Ac"});}catch(InvalidOperationException){rejected=true;}
+        require(rejected,"Exact eight-second source deadline admitted a late reply.");
         gate.Reset(); clock = 7000; Observe("Battery", "Ac", status); clock = 6999; rejected = false;
         try { Observe("Battery", "Ac", status); } catch (InvalidOperationException) { rejected = true; }
         require(rejected, "Clock regression extended source reconciliation.");

@@ -6,6 +6,7 @@ internal sealed partial class ProductForm
 {
     private bool _restarting,_restartLifecycleInterrupted;
     private Task? _restartTask,_runtimeShutdown;
+    private IProductRuntime? _shutdownRuntimeOwner;
     private readonly string? _restartDirectory;
     private readonly bool _isolatedRuntime;
     private readonly bool _restartOpening;
@@ -27,8 +28,7 @@ internal sealed partial class ProductForm
             try{_runtime?.FenceLifecycle("Reinicio explícito de sesión");}
             catch(Exception ex){preparationFailure=ex;}
             _canvas.Notice="Guardando diagnóstico y liberando ventiladores, CPU/GPU y telemetría…";_canvas.Invalidate();
-            try{await Task.Run(()=>ProductDiagnostics.Export(diagnostic,before,ProductProfilesStore.Parse(checkpoint.DraftJson),AppLog.CurrentLogPath));}
-            catch(Exception ex){preparationFailure??=ex;}
+            _ = ProductDiagnostics.TryExportAsync(diagnostic,before,ProductProfilesStore.Parse(checkpoint.DraftJson),AppLog.CurrentLogPath);
             // Even a full diagnostic disk must not skip hardware cleanup.
             await ShutdownRuntimeAsync();
             // Save/import operations that were already pending may have completed while draining.
@@ -65,9 +65,21 @@ internal sealed partial class ProductForm
     private async Task ShutdownRuntimeCoreAsync()
     {
         _externalCooling?.Suspend();
-        await _startup;
+        Exception? startupFailure = null;
+        // File-only startup can finish late but checks the lifecycle before
+        // constructing anything. Native construction, once begun, must drain.
+        try { if(_startupResourcesAcquired)await _startup; }
+        catch(Exception ex) { startupFailure=ex;AppLog.Write("Product startup task failed; attempting known runtime cleanup: "+ex); }
         if(_commandsDrained is not null)await _commandsDrained.Task;
-        await _lifecycleRelease;
-        if(_runtime is not null)await Task.Run(async()=>await _runtime.DisposeAsync());
+        Exception? previousReleaseFailure = null;
+        try { await _lifecycleRelease; }
+        catch(Exception ex)
+        {
+            previousReleaseFailure = ex;
+            AppLog.Write("Product earlier lifecycle release failed; awaiting final runtime cleanup: "+ex);
+        }
+        _shutdownRuntimeOwner = _runtime;
+        if(_shutdownRuntimeOwner is { } owner)await Task.Run(async()=>await owner.DisposeAsync());
+        else if(previousReleaseFailure is not null || startupFailure is not null)throw new IOException("No hay controlador disponible para confirmar la liberación anterior.",previousReleaseFailure??startupFailure);
     }
 }

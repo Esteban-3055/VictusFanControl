@@ -8,15 +8,25 @@ internal static class NvmlTelemetryWorkerHost
 {
     private static readonly HashSet<string> Fixtures = new(StringComparer.Ordinal)
     { "healthy", "exit", "fatal", "hang", "malformed", "oversize", "partial", "wrong-session", "wrong-sequence",
-        "wrong-version", "stale", "future", "invalid-temperature", "invalid-power", "invalid-load", "error", "replay", "stderr-flood" };
+        "wrong-version", "stale", "future", "invalid-temperature", "invalid-power", "invalid-load", "error", "replay", "stderr-flood",
+        "init-progress","init-hang","init-progress-flood" };
 
     internal static int Run(string[] args)
     {
+        try{return RunOwned(args);}
+        catch(Exception error) when(error is not AccessViolationException)
+        {Console.Error.WriteLine("NVML read-only helper cleanup failed: "+error.GetType().Name);return 193;}
+    }
+    private static int RunOwned(string[] args)
+    {
+        if (args.Length == 0 || args[0] is not ("--nvml-telemetry-worker" or "--nvml-telemetry-fixture")) return 2;
         var fixture = args[0] == "--nvml-telemetry-fixture";
         if (args.Length != (fixture ? 4 : 3) || fixture && !Fixtures.Contains(args[3]) ||
-            !int.TryParse(args[1], out var parentId) || !long.TryParse(args[2], out var parentStart)) return 2;
-        using var parent = Process.GetProcessById(parentId);
-        if (parent.HasExited || parent.StartTime.ToUniversalTime().Ticks != parentStart) return 2;
+            !int.TryParse(args[1], out var parentId) || parentId <= 0 ||
+            !long.TryParse(args[2], out var parentStart) || parentStart <= 0) return 2;
+        using var parent = OpenOwner(parentId,parentStart);
+        if (parent is null) return 197;
+        if(!fixture)VictusFanControl.Scheduling.ProductProcessPriority.Apply(message=>Console.Error.WriteLine(message));
         using var finished = new ManualResetEventSlim();
         var lastRequest = Environment.TickCount64;
         // This thread stays independent of blocked native calls and exits only this read-only helper.
@@ -24,8 +34,7 @@ internal static class NvmlTelemetryWorkerHost
         {
             while (!finished.Wait(500))
             {
-                try { if (parent.HasExited || Environment.TickCount64 - Interlocked.Read(ref lastRequest) > 20000) Environment.Exit(197); }
-                catch (InvalidOperationException) { Environment.Exit(197); }
+                if (!OwnerAlive(parent) || Environment.TickCount64 - Interlocked.Read(ref lastRequest) > 20000) Environment.Exit(197);
             }
         }) { IsBackground = true, Name = "NVML helper owner monitor" };
         monitor.Start();
@@ -38,7 +47,13 @@ internal static class NvmlTelemetryWorkerHost
                 NvmlTelemetryProtocol.ReadLineAsync(Console.In, idle.Token).GetAwaiter().GetResult());
             if (first.Version != NvmlTelemetryProtocol.Version || first.Operation != "initialize" || first.Sequence != 1 ||
                 !Guid.TryParseExact(first.Session, "N", out _) || first.PreferredDeviceName?.Length > 128) return 2;
-            if (!fixture) reader = new NvmlClient(first.PreferredDeviceName, first.RequirePreferredDevice);
+            void Progress(string phase)=>Reply(new(first.Version,first.Session,1,"",Progress:phase));
+            Progress("IpcReady");
+            if(fixture&&args[3]=="init-progress")
+                foreach(var phase in new[]{"LibraryLoading","LibraryLoaded","ExportsLoaded","NvmlInitialization","DeviceEnumeration","DeviceOpen"})Progress(phase);
+            if(fixture&&args[3]=="init-hang"){Progress("NvmlInitialization");Thread.Sleep(Timeout.Infinite);}
+            if(fixture&&args[3]=="init-progress-flood")for(var i=0;i<16;i++)Progress("IpcReady");
+            if (!fixture) reader = new NvmlClient(first.PreferredDeviceName, first.RequirePreferredDevice,Progress);
             var name = reader?.DeviceName ?? first.PreferredDeviceName ?? "fixture-GPU";
             Reply(new(first.Version, first.Session, 1, name));
             long sequence = 1;
@@ -87,8 +102,27 @@ internal static class NvmlTelemetryWorkerHost
         }
         finally
         {
-            reader?.Dispose(); finished.Set(); monitor.Join(1000);
+            try { reader?.Dispose(); }
+            finally { finished.Set(); monitor.Join(1000); }
         }
+    }
+
+    private static Process? OpenOwner(int id,long startedTicks)
+    {
+        Process? owner=null;
+        try
+        {
+            owner=Process.GetProcessById(id);
+            if (!owner.HasExited && owner.StartTime.ToUniversalTime().Ticks == startedTicks) return owner;
+        }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException) { }
+        owner?.Dispose(); return null;
+    }
+
+    private static bool OwnerAlive(Process owner)
+    {
+        try { return !owner.HasExited; }
+        catch (Exception error) when (error is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException) { return false; }
     }
 
     private static void Reply(NvmlTelemetryProtocol.Reply reply)

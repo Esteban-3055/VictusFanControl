@@ -26,6 +26,30 @@ internal static class NvmlTelemetryIsolationSelfTest
         }
         try
         {
+            Case("production read-only host explicitly High before any GPU initialization",()=>
+            {
+                using var child=Process.Start(NvmlTelemetryProcessClient.CreateStartInfo())??throw new IOException("Priority child missing.");
+                children.Add(child.Id);
+                try
+                {
+                    var line=child.StandardError.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult();
+                    child.Refresh();Require(child.PriorityClass==ProcessPriorityClass.High&&line?.Contains("effective=High")==true,"Production helper did not confirm High.");
+                    child.StandardInput.Close();Require(child.WaitForExit(5000),"Uninitialized helper did not exit on EOF.");
+                }
+                finally{if(!child.HasExited){child.StandardInput.Close();child.WaitForExit(5000);}}
+            });
+            Case("initialization progress is bounded and never a telemetry sample",()=>
+            {
+                using(var reader=Reader("init-progress"))
+                {children.Add(reader.ChildProcessId!.Value);Require(reader.CurrentPhase=="ReadyAwaitingFirstSample"&&reader.ReadSample().TemperatureC==51,"Initialization phases became data or prevented a real sample.");}
+                foreach(var fixture in new[]{"init-hang","init-progress-flood"})
+                {
+                    var watch=Stopwatch.StartNew();var rejected=false;
+                    try{using var bad=Reader(fixture);}
+                    catch(NvmlTelemetryUnavailableException error){rejected=fixture!="init-hang"||error.Message.Contains("phase=NvmlInitialization");}
+                    Require(rejected&&watch.ElapsedMilliseconds<7000,"Phase traffic renewed the startup deadline or lost the stalled phase.");
+                }
+            });
             Case("slow battery recovery does not rearm resume-gap detector", () => TelemetryRecoveryClockSelfTest.Run(Require));
             Case("healthy repeated acquisition; orderly EOF/disposal", () =>
             {
@@ -76,6 +100,31 @@ internal static class NvmlTelemetryIsolationSelfTest
                 using var reader = Reader("stderr-flood"); children.Add(reader.ChildProcessId!.Value);
                 Require(reader.ReadSample().LoadPercent == 12, "Stderr blocked telemetry.");
                 Require(reader.NativeDiagnosticCharacterCount <= 8192, "Native diagnostics retained an unbounded flood.");
+            });
+            Case("unconfirmed read-only termination blocks replacements until exact child exits",()=>
+            {
+                using var reader=new NvmlTelemetryProcessClient("fixture-GPU",true,()=>NvmlTelemetryProcessClient.CreateStartInfo("hang"),
+                    sampleTimeout:300,terminateFixture:_=>throw new System.ComponentModel.Win32Exception("Synthetic termination refusal"));
+                var pid=reader.ChildProcessId!.Value;children.Add(pid);
+                try
+                {
+                    try { reader.ReadSample();throw new InvalidOperationException("Hanging reader produced a sample."); } catch(NvmlTelemetryUnavailableException) { }
+                    int starts=0;
+                    try
+                    {
+                        using var replacement=new NvmlTelemetryProcessClient("fixture-GPU",true,()=>{starts++;return NvmlTelemetryProcessClient.CreateStartInfo("healthy");});
+                        throw new InvalidOperationException("Unconfirmed reader allowed replacement.");
+                    }
+                    catch(NvmlTelemetryUnavailableException) { }
+                    Require(starts==0&&Alive(pid),"Unconfirmed read-only child identity was lost or a replacement spawned.");
+                }
+                finally
+                {
+                    // Exact synthetic read-only fixture only. Never a live native mutator.
+                    using var fixtureChild=Process.GetProcessById(pid);fixtureChild.Kill();Require(fixtureChild.WaitForExit(5000),"Fixture child did not exit.");
+                }
+                using var fresh=Reader("healthy");children.Add(fresh.ChildProcessId!.Value);
+                Require(fresh.ReadSample().TemperatureC==51,"Confirmed read-only child exit did not unblock a fresh reader.");
             });
             Case("concurrent reads and disposal are serialized", () =>
             {

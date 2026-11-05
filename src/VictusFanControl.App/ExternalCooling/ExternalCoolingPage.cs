@@ -14,6 +14,7 @@ internal sealed class ExternalCoolingPage : IDisposable
     private readonly Action<string> _copy;
     private readonly System.Windows.Forms.Timer _timer=new(){Interval=1000};
     private ExternalCoolingSettings _saved;
+    internal Func<ExternalCurveConfiguration>? CurrentCurve {get;set;}
     private Font? _font;
     private bool _disposed,_selected,_forget;
     internal TextBox Host {get;}
@@ -54,6 +55,7 @@ internal sealed class ExternalCoolingPage : IDisposable
         box.GotFocus+=(_,_)=>_canvas.FocusExternalField(name);
         _canvas.Controls.Add(box);return box;
     }
+    internal void UpdateSavedCurve(ExternalCurveConfiguration curve)=>_saved=_saved with{Curve=curve};
     private void Restore()
     {
         Mode=_saved.Mode;Reconnect=_saved.AutoReconnect;Simulator=_saved.UseSimulator;Host.Text=_saved.Host;
@@ -112,7 +114,7 @@ internal sealed class ExternalCoolingPage : IDisposable
                     if(connect&&(Mode==ExternalCoolingMode.Disabled||(!Paired||_forget)&&key is null))throw new ArgumentException();
                     await _apply(settings,key,_forget,connect);
                     if(_disposed)return;
-                    _saved=settings;Restore();Notice=connect?"Preferencias guardadas; conexión solicitada.":"Preferencias guardadas. Pulsa Conectar para iniciar la comunicación.";
+                    _saved=settings with{Curve=CurrentCurve?.Invoke()??settings.Curve};Restore();Notice=connect?"Preferencias guardadas; conexión solicitada.":"Preferencias guardadas. Pulsa Conectar para iniciar la comunicación.";
                 }
                 catch(Exception){if(!_disposed)Notice="No se pudo completar. Revisa host, puerto y clave Base64 de 32 bytes.";}
                 finally{Busy=false;if(!_disposed)Layout(_selected);}

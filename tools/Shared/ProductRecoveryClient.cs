@@ -11,7 +11,7 @@ internal sealed record ProductRecoverySelection(Guid CpuSession, Guid GpuSession
     internal bool Pending => PerformancePending || Fans?.Count > 0;
     internal string Summary => "CPU: " + (CpuSession == Guid.Empty ? "sin registro pendiente" : "restaurar sólo los límites aún propios de la sesión") +
         "\nGPU: " + (GpuSession == Guid.Empty ? "sin registro pendiente" : "solicitar el reset de frecuencias de NVIDIA") +
-        (Fans?.Count > 0 ? "\nVentiladores y registros anteriores: " + Fans.Count + ". Liberación a Firmware; no se aplican niveles manuales. Los casos inciertos requieren Reiniciar Windows." : "");
+        (Fans?.Count > 0 ? "\nVentiladores y registros anteriores: " + Fans.Count + ". Liberación a Firmware; no se aplican niveles manuales. Una llamada incierta conserva el bloqueo; no se reinicia Windows automáticamente." : "");
     internal static ProductRecoverySelection Read(string? directory = null, bool ignoreCurrentOwner = false)
     {
         var includeFans = directory is null;

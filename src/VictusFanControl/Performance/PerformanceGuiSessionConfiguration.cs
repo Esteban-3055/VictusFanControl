@@ -28,12 +28,11 @@ public sealed record PerformanceGuiSessionConfiguration
     {
         if (AcGpuMaximumMHz < GpuProductPreferences.MinimumMHz || AcGpuMaximumMHz > GpuProductPreferences.ConfigurableMaximumMHz ||
             BatteryGpuMaximumMHz < GpuProductPreferences.MinimumMHz || BatteryGpuMaximumMHz > GpuProductPreferences.ConfigurableMaximumMHz)
-            throw new ArgumentException("GPU preferences outside the configurable 210–2500 MHz range.");
+            throw new ArgumentException($"GPU preferences outside the configurable {GpuProductPreferences.MinimumMHz}–{GpuProductPreferences.ConfigurableMaximumMHz} MHz range.");
         if (GpuEnabled && !GpuProductPreferences.CustomClockExecutionAuthorized &&
             (AcGpuMaximumMHz != GpuProductPreferences.QualifiedAcMaximumMHz || BatteryGpuMaximumMHz != GpuProductPreferences.QualifiedBatteryMaximumMHz))
             throw new InvalidOperationException("Los límites GPU personalizados están guardados, pero su aplicación requiere calificación física. Valores habilitados: AC 1850 / Batería 1200 MHz.");
         if (SchemaVersion != 1 || TargetProfileId != CpuPowerProductDefaults.TargetProfileId ||
-            (!CpuEnabled && !GpuEnabled) ||
             !CpuPowerProductDefaults.IsConfigurable(AcPl1Watts, AcPl2Watts) ||
             !CpuPowerProductDefaults.IsConfigurable(BatteryPl1Watts, BatteryPl2Watts))
             throw new ArgumentException("Invalid target-specific GUI performance configuration.");

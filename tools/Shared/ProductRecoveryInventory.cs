@@ -27,10 +27,20 @@ internal static class ProductRecoveryInventory
             if (p.Exists && (p.Attributes & FileAttributes.ReparsePoint) != 0) throw new IOException("Ruta de recuperación redirigida: " + p.FullName);
         if (Exists(path) && (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0) throw new IOException("Registro de recuperación redirigido: " + path);
     }
-    internal static byte[] ReadBytes(string path)
+    internal static FileStream OpenReadSnapshot(string path)
     {
         EnsurePlainPath(path);
-        using var f = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        // This transient marker is atomically published before native dispatch and
+        // deleted after a confirmed return. An observer must not prevent that
+        // deletion and turn a completed call into permanent uncertainty. Durable
+        // leases keep their existing restrictive sharing; recovery locks are separate.
+        var sharing = System.IO.Path.GetFileName(path).Equals("native-inflight.json", StringComparison.OrdinalIgnoreCase)
+            ? FileShare.Read | FileShare.Delete : FileShare.Read;
+        return new FileStream(path, FileMode.Open, FileAccess.Read, sharing);
+    }
+    internal static byte[] ReadBytes(string path)
+    {
+        using var f = OpenReadSnapshot(path);
         if (f.Length is <= 0 or > 1024 * 1024) throw new InvalidDataException("Registro vacío o demasiado grande: " + path);
         var bytes = new byte[checked((int)f.Length)]; f.ReadExactly(bytes); return bytes;
     }
@@ -103,13 +113,17 @@ internal static class ProductRecoveryInventory
             var marker=System.IO.Path.Combine(directory,"native-inflight.json");
             if(!Exists(marker))marker=System.IO.Path.Combine(directory,"native-uncertain.signal");
             if(!Exists(marker))continue;
+            byte[] markerBytes;
+            try { markerBytes=ReadBytes(marker); }
+            catch(FileNotFoundException) { continue; } // A normal return retired it after enumeration.
+            catch(DirectoryNotFoundException) { continue; }
             if(ignoreCurrentOwner && System.IO.Path.GetFileName(marker)=="native-inflight.json")
             {
-                using var j=JsonDocument.Parse(ReadBytes(marker));using var me=Process.GetCurrentProcess();
+                using var j=JsonDocument.Parse(markerBytes);using var me=Process.GetCurrentProcess();
                 if (IsCurrentNativeOwner(j.RootElement, me.Id, me.StartTime.ToUniversalTime().Ticks) &&
                     !Exists(System.IO.Path.Combine(directory,"native-uncertain.signal"))) continue;
             }
-            result.Add(new(marker,"OrphanWmi",Hash(ReadBytes(marker)),Exists(System.IO.Path.Combine(directory,"write-intent.json"))?
+            result.Add(new(marker,"OrphanWmi",Hash(markerBytes),Exists(System.IO.Path.Combine(directory,"write-intent.json"))?
                 "Hay intención de escritura sin lease. Falta evidencia de propiedad; conserva el diagnóstico y no se aplicará una liberación automática.":null));
         }
         // Journals for another target cannot be silently hidden by the current-target GUI.

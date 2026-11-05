@@ -12,10 +12,13 @@ internal sealed class PawnIoModuleSession : IDisposable
         }
 
         _device = PawnIoDevice.Open();
-        DriverVersion = _device.GetDriverVersion();
-
-        var module = File.ReadAllBytes(modulePath);
-        _device.LoadModule(module);
+        DriverVersion = Runtime.InitializationCleanup.Run(()=>
+        {
+            var version=_device.GetDriverVersion();
+            var module=File.ReadAllBytes(modulePath);
+            _device.LoadModule(module);
+            return version;
+        },_device.Dispose);
     }
 
     public Version DriverVersion { get; }

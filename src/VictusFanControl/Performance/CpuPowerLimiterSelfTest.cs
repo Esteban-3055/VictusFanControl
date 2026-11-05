@@ -12,6 +12,7 @@ internal static class CpuPowerLimiterSelfTest
     {
         try
         {
+            CpuPowerProductExecutionSelfTest.Run(output);
             Require(
                 CpuPowerConflictPolicySelfTest.Run(output) == 0,
                 "bounded external-writer conflict policy");
