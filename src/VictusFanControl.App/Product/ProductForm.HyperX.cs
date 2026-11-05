@@ -8,6 +8,13 @@ internal sealed partial class ProductForm
     private HyperXBatteryPage? _hyperXPage;
     private Task _hyperXStartup=Task.CompletedTask;
     private string? _hyperXNotice;
+    private HyperXSnapshot _trayHyperX = new();
+    internal void PresentHyperXTray(HyperXSnapshot snapshot)
+    {
+        if(_closing||IsDisposed)return;
+        _trayHyperX=snapshot;
+        UpdateTray(_canvas.State);
+    }
     private readonly System.Windows.Forms.Timer _hyperXTimer=new(){Interval=1000};
     private async Task InitializeHyperXAsync()
     {
@@ -47,6 +54,7 @@ internal sealed partial class ProductForm
         var now=DateTimeOffset.UtcNow;
         foreach(var snapshot in monitor.DrainMuteEvents())Notify(snapshot);
         var current=monitor.Snapshot;Notify(current);
+        PresentHyperXTray(current);
         if(_hyperXPage?.Selected==true)_hyperXPage.UpdateReading(current,now);
         void Notify(HyperXSnapshot snapshot)
         {

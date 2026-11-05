@@ -18,5 +18,10 @@
     "source": "Imagen de ChatGPT 10 oct 2026, 04_43_31-4.png",
     "sourceSha256": "4fff9f2c0c29da51d1d7020b19a05cbd03f76bd1dd46a3ad1f67785792dbc810",
     "icoSha256": "01d1cf3ed388ddc374deefb8856990484ce5b2f0fa96a839ed35026cc85c5570"
+  },
+  "tray-automatic-muted": {
+    "source": "Icono de ventilador con micrófono silenciado.png",
+    "sourceSha256": "31e4c72efe1ca380e2e1ef05af9b39ede92c875e69ecb4a8695cbc4e60a34356",
+    "icoSha256": "34f0a1aca0cf274c798ba534f65dfd5efed66a5f1535e907df088b918de12d4c"
   }
 }

@@ -235,9 +235,10 @@ internal sealed partial class ProductForm : Form
     }
     private void UpdateTray(ProductRuntimeState state)
     {
-        var next=ProductIcons.Select(state,TrayState);
+        var muted=_trayHyperX.ReceiverPresent&&_trayHyperX.Powered!=false&&_trayHyperX.Muted==true;
+        var next=ProductIcons.Select(state,TrayState,muted);
         if(next!=TrayState){TrayState=next;_tray.Icon=_icons.For(TrayState);}
-        var trayText="VictusFanControl · "+(TrayState==ProductTrayState.Error?"Error / sesión interrumpida":state.FanMode+" · "+state.FanAuthority);
+        var trayText="VictusFanControl · "+(TrayState==ProductTrayState.Error?"Error / sesión interrumpida":TrayState==ProductTrayState.AutomaticMuted?"Automático · Micrófono silenciado":state.FanMode+" · "+state.FanAuthority);
         _tray.Text=trayText[..Math.Min(63,trayText.Length)];
     }
     private void TryStartupAutomatic()
