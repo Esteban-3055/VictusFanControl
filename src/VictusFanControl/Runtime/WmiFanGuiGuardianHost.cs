@@ -66,7 +66,7 @@ internal static class WmiFanGuiGuardianHost
                 throw new InvalidOperationException("Supervisión WMI interrumpida: " + stop);
             }
         }
-        HpOmenBiosWmiClient? ctgpTransport = null;
+        HpOmenBiosWmiClient? transport = null;
         byte[] fixturePolicy = [0, 1, 1, 0];
         bool Ac() => fixture || new WindowsPerformancePowerSourceReader().Read().Source == PerformancePowerSourceKind.Ac;
         var ctgp = new Hp8C40CtgpControl(r =>
@@ -86,7 +86,7 @@ internal static class WmiFanGuiGuardianHost
                 if (owner.HasExited || monitor.TimedOut(clock.Elapsed) || !Ac() || File.Exists(Path.Combine(directory, "stop.signal")))
                     throw new InvalidOperationException("cTGP: AC, propietario o sesión dejaron de estar disponibles.");
             });
-            return (ctgpTransport ??= new HpOmenBiosWmiClient()).SendWithResponse(r);
+            return (transport ??= new HpOmenBiosWmiClient()).SendWithResponse(r);
         }, Ac, () => { if (!fixture) Hp8C40CtgpQualification.Verify(); }, () =>
             WmiFanExperiment.WriteJson(Path.Combine(directory, "ctgp-intent.json"), new
             { OwnerPid = ownerPid, OwnerStartUtcTicks = ownerStart, Original = new byte[] { 0, 1, 1, 0 }, Utc = DateTimeOffset.UtcNow }));
@@ -175,7 +175,7 @@ internal static class WmiFanGuiGuardianHost
                         {
                             int rc;
                             if (fixture) rc = 0;
-                            else rc = new HpOmenBiosWmiClient().Send(r);
+                            else rc = (transport ??= new HpOmenBiosWmiClient()).Send(r);
                             if (rc == 0 && r.CommandType == 0x2E) releaseAccepted = true;
                             if (rc == 0 && r.CommandType == 0x1A) legacyAccepted = true;
                             return rc;

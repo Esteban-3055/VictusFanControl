@@ -30,13 +30,26 @@ internal static class ProductRecoveryInventory
     internal static FileStream OpenReadSnapshot(string path)
     {
         EnsurePlainPath(path);
-        // This transient marker is atomically published before native dispatch and
-        // deleted after a confirmed return. An observer must not prevent that
-        // deletion and turn a completed call into permanent uncertainty. Durable
-        // leases keep their existing restrictive sharing; recovery locks are separate.
-        var sharing = System.IO.Path.GetFileName(path).Equals("native-inflight.json", StringComparison.OrdinalIgnoreCase)
-            ? FileShare.Read | FileShare.Delete : FileShare.Read;
-        return new FileStream(path, FileMode.Open, FileAccess.Read, sharing);
+        var name = System.IO.Path.GetFileName(path);
+        if (name.Equals("native-inflight.json", StringComparison.OrdinalIgnoreCase))
+        {
+            // A native call must be able to retire its marker after returning.
+            return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
+        }
+        try
+        {
+            return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        }
+        catch (IOException error) when ((error.HResult & 0xffff) == 32 &&
+            name.Equals("lease.json", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(System.IO.Path.GetFileName(System.IO.Path.GetDirectoryName(path)), "WmiFanGui", StringComparison.OrdinalIgnoreCase))
+        {
+            // The guardian keeps its write handle open after publishing identity.
+            // A read-only observer must coexist with that handle and allow lease
+            // retirement after the guardian closes it. The writer itself still
+            // excludes competing writes and deletion while it owns the lease.
+            return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        }
     }
     internal static byte[] ReadBytes(string path)
     {

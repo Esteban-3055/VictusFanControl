@@ -59,11 +59,27 @@ internal static class ProductRecoveryInventorySelfTest
             {
                 var owned=Path.Combine(local,"FanWmi","gui","current");Directory.CreateDirectory(owned);
                 Write("WmiFanGui/lease.json",new{OwnerPid=me.Id,OwnerStartUtcTicks=me.StartTime.ToUniversalTime().Ticks,GuardianPid=456,DirectEcProhibited=true,SessionDirectory=owned});
+                var guiLease = Path.GetFullPath(Path.Combine(common,"WmiFanGui/lease.json"));
+                // Match the production guardian's retained write handle.
+                using var leaseOwner = new FileStream(guiLease, FileMode.Open, FileAccess.Write, FileShare.Read);
+                Require(ProductRecoveryInventory.ReadFans(common,local).Any(x=>x.Path==guiLease&&x.Kind=="FanGui"&&x.Recoverable),
+                    "Live GUI lease was misclassified as unknown because the guardian held its write handle.");
                 var marker=Path.Combine(owned,"native-inflight.json");File.WriteAllText(marker,JsonSerializer.Serialize(new{Pid=me.Id}));File.WriteAllText(Path.Combine(owned,"write-intent.json"),"{}");
                 var active=ProductRecoveryInventory.ReadFans(common,local,ignoreCurrentOwner:true);
-                Require(!active.Any(x=>x.Path==marker||x.Path==Path.GetFullPath(Path.Combine(common,"WmiFanGui/lease.json"))),"Own active native query misclassified as orphan/pending lease.");
+                Require(!active.Any(x=>x.Path==marker||x.Path==guiLease),"Own active native query misclassified as orphan/pending lease.");
                 File.WriteAllText(Path.Combine(owned,"native-uncertain.signal"),"uncertain");
-                Require(ProductRecoveryInventory.ReadFans(common,local,ignoreCurrentOwner:true).Any(x=>x.Kind=="FanGui"&&x.Path==Path.GetFullPath(Path.Combine(common,"WmiFanGui/lease.json"))),"Own uncertain lease hidden.");
+                Require(ProductRecoveryInventory.ReadFans(common,local,ignoreCurrentOwner:true).Any(x=>x.Kind=="FanGui"&&x.Path==guiLease),"Own uncertain lease hidden.");
+                using var observer = ProductRecoveryInventory.OpenReadSnapshot(guiLease);
+                Require(!observer.CanWrite, "Recovery observation opened the lease for writing.");
+                var blocked = false;
+                try { File.Delete(guiLease); } catch (IOException) { blocked = true; }
+                Require(blocked && File.Exists(guiLease), "Observation relaxed the live guardian's deletion fence.");
+                leaseOwner.Dispose();
+                File.Delete(guiLease);
+                Require(!File.Exists(guiLease), "An observer prevented retirement after the guardian released its handle.");
+                using var retired = JsonDocument.Parse(observer);
+                Require(retired.RootElement.GetProperty("OwnerPid").GetInt32() == me.Id,
+                    "Retiring the lease corrupted the already-open observation.");
             }
             Console.WriteLine("Recovery inventory: PASS (GUI/experiment/legacy, native marker observation/return race, durable lease exclusion, multiple/changed/malformed/foreign records, fan-only and exact report; zero hardware IO).");
         }
