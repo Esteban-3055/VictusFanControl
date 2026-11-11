@@ -44,12 +44,36 @@ def main():
     cases=[]
     def case(name, action): action();cases.append({'name':name,'passed':True});print('PASS',name)
     case('device calibration, inverted NOT duty, independent lease and wraparound',lambda:subprocess.run([args.host,'--policy'],check=True,timeout=5))
+    case('external controller dynamics and safety',lambda:subprocess.run([args.host,'--controller'],check=True,timeout=5))
     for role,value in V['proofs'].items(): assert proof(role)==value
     base=[hello(),auth(),frame('telemetry',1,telemetry(),RX)]
     def healthy():
         results=run(args.host,base+[frame('telemetry',2,telemetry(True),RX),frame('telemetry',3,telemetry(True),RX)])
-        assert results[-1]['payload']['mode']=='Remote' and results[-1]['payload']['appliedPwmPct']==50
+        assert results[-1]['payload']['mode']=='Remote' and 0<=results[-1]['payload']['appliedDuty']<=255
     case('real C++ mutual auth, directional MACs and accepted request',healthy)
+    def missing_ambient():
+        messages=base+[frame('telemetry',2,telemetry(True),RX),frame('telemetry',3,telemetry(True),RX)]
+        result=subprocess.run([args.host,'--missing-ambient'],input='\n'.join(messages)+'\n',text=True,capture_output=True,check=True)
+        response=json.loads(result.stdout.splitlines()[-1]);status=response['payload']
+        expected=base64.b64encode(hmac.digest(TX,f"VictusExternalCooling/v1/frame\ndeviceStatus\n{SESSION}\n{response['sequence']}\n{encode(status)}".encode(),'sha256')).decode()
+        assert hmac.compare_digest(expected,response['mac'])
+        assert status['ambientTempC'] is None and status['communication']=='Ready' and status['mode']=='Remote'
+        assert status['appliedDuty']<255
+    case('missing NTC remains authenticated Remote with null ambient and no forced maximum',missing_ambient)
+    for pct,at in [(101,'2026-10-16T17:00:00Z'),(-1,'2026-10-16T17:00:00Z'),(55,None),(55,'2026-10-16T17:00:01Z'),(None,'2026-10-16T17:00:00Z')]:
+        bad=telemetry(False);bad.update(hyperxBatteryPct=pct,hyperxSampledAtUtc=at)
+        case(f'HyperX malformed extension {pct}/{at}',lambda bad=bad:run(args.host,[hello(),auth(),frame('telemetry',1,bad,RX)],False))
+    hx=dict(lowEnabled=True,criticalEnabled=True,lowPercent=20,criticalPercent=10,lowDurationMs=6000,criticalDurationMs=10000,lowBlinkCycles=3,criticalBlinkCycles=5)
+    good=telemetry(False);good['hyperxDisplay']=hx
+    case('authenticated display-only HyperX alert preferences',lambda:run(args.host,[hello(),auth(),frame('telemetry',1,good,RX)]))
+    for critical in [0,100]:
+        endpoint=telemetry(False);endpoint['hyperxDisplay']={**hx,'criticalPercent':critical}
+        case(f'critical endpoint {critical} reaches authenticated firmware',lambda endpoint=endpoint:run(args.host,[hello(),auth(),frame('telemetry',1,endpoint,RX)]))
+    for key,value in [('lowPercent',10),('criticalPercent',-1),('criticalPercent',101),('lowDurationMs',0),('lowBlinkCycles',21),('criticalEnabled',1),('criticalDurationMs',1000)]:
+        bad=telemetry(False);bad['hyperxDisplay']={**hx,key:value}
+        case(f'reject HyperX display {key}={value}',lambda bad=bad:run(args.host,[hello(),auth(),frame('telemetry',1,bad,RX)],False))
+    bad=telemetry(False);bad['hyperxDisplay']={k:v for k,v in hx.items() if k!='lowPercent'}
+    case('reject incomplete HyperX display preferences',lambda:run(args.host,[hello(),auth(),frame('telemetry',1,bad,RX)],False))
     case('Firmware null request',lambda:run(args.host,[hello(),auth(),frame('telemetry',1,telemetry(False,'Firmware'),RX)]))
     case('Manual accepted request',lambda:run(args.host,base+[frame('telemetry',2,telemetry(True,'Manual'),RX)]))
     def local_unknown_reference():

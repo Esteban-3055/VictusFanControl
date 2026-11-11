@@ -37,6 +37,14 @@ internal static partial class Program
         var delays=Enumerable.Range(1,10).Select(n=>Esp32TcpClient.ReconnectDelay(n).TotalMilliseconds).ToArray();
         Require(delays.SequenceEqual(new double[]{500,1000,2000,4000,8000,16000,30000,30000,30000,30000}),"Backoff did not reach/bound 30 seconds.");
         Require(Esp32TcpClient.ReconnectDelay(int.MaxValue,249).TotalMilliseconds==30249,"Backoff overflow/jitter changed.");
+        foreach(var error in new[]{SocketError.HostNotFound,SocketError.TryAgain,SocketError.NoData,SocketError.NoRecovery})
+        {
+            Require(Esp32TcpClient.ClassifyFailure(new SocketException((int)error),false)==ExternalCoolingFailureKind.NameResolution,"Name-resolution failure was hidden as generic connection failure.");
+            Require(Esp32TcpClient.ClassifyFailure(new SocketException((int)error),true)==ExternalCoolingFailureKind.Authentication,"Authentication boundary lost its failure classification.");
+        }
+        Require(Esp32TcpClient.ClassifyFailure(new SocketException((int)SocketError.ConnectionRefused),false)==ExternalCoolingFailureKind.Connection&&
+            Esp32TcpClient.ClassifyFailure(new OperationCanceledException(),false)==ExternalCoolingFailureKind.Timeout,
+            "Connection refusal or timeout mislabeled as name resolution.");
         Console.WriteLine("PASS source-age evidence, Automatic demand/date, unsynchronized clocks, backoff saturation.");
     }
 
@@ -120,6 +128,28 @@ internal static partial class Program
                 var f=ExternalCoolingProtocol.Sign(ExternalCoolingProtocol.Create("telemetry",auth.Id,1,new Source().Capture(DateTimeOffset.UtcNow).WithoutRequest()),auth.SendKey);
                 await wire.WriteAsync(f,cancel.Token);await wire.ReadAsync(cancel.Token);
                 await wire.WriteAsync(f,cancel.Token);await Until(()=>Volatile.Read(ref errors)>=3);
+            }
+            using(var tcp=new TcpClient())
+            {
+                await tcp.ConnectAsync(IPAddress.Loopback,port,cancel.Token);
+                await using var wire=new FramedConnection(tcp.GetStream());
+                using var auth=await AuthenticatedSession.ClientAsync(wire,key,cancel.Token);
+                var valid=new Source().Capture(DateTimeOffset.UtcNow).WithoutRequest() with{ExternalConfiguration=new()};
+                await wire.WriteAsync(ExternalCoolingProtocol.Sign(ExternalCoolingProtocol.Create("telemetry",auth.Id,1,valid),auth.SendKey),cancel.Token);
+                await wire.ReadAsync(cancel.Token);
+                var reused=valid with{ExternalConfiguration=new(){Rise=13}};
+                await wire.WriteAsync(ExternalCoolingProtocol.Sign(ExternalCoolingProtocol.Create("telemetry",auth.Id,2,reused),auth.SendKey),cancel.Token);
+                await Until(()=>Volatile.Read(ref errors)>=4);
+            }
+            using(var tcp=new TcpClient())
+            {
+                await tcp.ConnectAsync(IPAddress.Loopback,port,cancel.Token);
+                await using var wire=new FramedConnection(tcp.GetStream());
+                using var auth=await AuthenticatedSession.ClientAsync(wire,key,cancel.Token);
+                var bad=new Source().Capture(DateTimeOffset.UtcNow).WithoutRequest() with{ExternalConfiguration=new(){Rise=0}};
+                var f=ExternalCoolingProtocol.Sign(ExternalCoolingProtocol.Create("telemetry",auth.Id,1,bad),auth.SendKey);
+                await wire.WriteAsync(f,cancel.Token);await Until(()=>Volatile.Read(ref errors)>=5);
+                Require(!server.IsCompleted,"Malformed curve terminated the production simulator server.");
             }
             await using(var manager=new ExternalCoolingManager(new Source(),()=>key.ToArray()))
             {

@@ -75,6 +75,7 @@ internal sealed class CpuPowerLimiter : IDisposable
     private readonly ICpuPowerLimitBackend _backend;
     private readonly ICpuPowerSessionJournal _journal;
     private readonly CpuPowerConflictPolicy _conflictPolicy;
+    private readonly CpuPowerExecutionPolicy _executionPolicy;
 
     private CpuPowerLimitSnapshot? _baseline;
     private CpuPowerLimitSnapshot? _externalHandoff;
@@ -89,7 +90,8 @@ internal sealed class CpuPowerLimiter : IDisposable
     internal CpuPowerLimiter(
         ICpuPowerLimitBackend backend,
         ICpuPowerSessionJournal journal,
-        IActiveTimeClock? conflictClock = null)
+        IActiveTimeClock? conflictClock = null,
+        CpuPowerExecutionPolicy executionPolicy = CpuPowerExecutionPolicy.DownwardOnly)
     {
         _backend =
             backend ??
@@ -105,6 +107,11 @@ internal sealed class CpuPowerLimiter : IDisposable
                 "CPU power journal must expose an exact target profile id.",
                 nameof(journal));
         }
+
+        if(!Enum.IsDefined(executionPolicy)||executionPolicy==CpuPowerExecutionPolicy.ProductPl1ToPl2&&
+            _journal.TargetProfileId!=CpuPowerProductDefaults.TargetProfileId)
+            throw new ArgumentException("Expanded CPU power requires the exact product target.",nameof(executionPolicy));
+        _executionPolicy=executionPolicy;
 
         _conflictPolicy =
             new CpuPowerConflictPolicy(
@@ -1407,25 +1414,15 @@ internal sealed class CpuPowerLimiter : IDisposable
         return false;
     }
 
-    private static bool ValidRequest(
+    private bool ValidRequest(
         CpuPowerLimitRequest request) =>
-        double.IsFinite(request.Pl1Watts) &&
-        double.IsFinite(request.Pl2Watts) &&
-        request.Pl1Watts >= CpuPowerProductDefaults.MinimumPl1Watts &&
-        request.Pl2Watts >=
-            request.Pl1Watts;
+        CpuPowerExecutionRules.ValidRequest(request,_executionPolicy);
 
-    private static bool ValidPlanAgainstOriginalBaseline(
+    private bool ValidPlanAgainstOriginalBaseline(
         CpuPowerLimitApplyPlan plan,
         CpuPowerLimitSnapshot baseline) =>
         plan.RequestedRaw != baseline.Raw &&
-        plan.AppliedPl1Watts >= CpuPowerProductDefaults.MinimumPl1Watts &&
-        plan.AppliedPl2Watts >=
-            plan.AppliedPl1Watts &&
-        plan.AppliedPl1Watts <
-            baseline.Pl1Watts &&
-        plan.AppliedPl2Watts <
-            baseline.Pl2Watts;
+        CpuPowerExecutionRules.ValidPlan(plan.AppliedPl1Watts,plan.AppliedPl2Watts,baseline,_executionPolicy);
 
     private void ThrowIfDisposed()
     {

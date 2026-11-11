@@ -11,7 +11,7 @@ internal static class NvmlTelemetryProtocol
     internal sealed record Request(int Version, string Session, long Sequence, string Operation,
         string? PreferredDeviceName = null, bool RequirePreferredDevice = false);
     internal sealed record Reply(int Version, string Session, long Sequence, string DeviceName,
-        DateTimeOffset? SampledAtUtc = null, NvmlClient.GpuSample? Sample = null, bool Failed = false);
+        DateTimeOffset? SampledAtUtc = null, NvmlClient.GpuSample? Sample = null, bool Failed = false,string? Progress = null);
 
     internal static async Task<string?> ReadLineAsync(TextReader reader, CancellationToken cancellation)
     {

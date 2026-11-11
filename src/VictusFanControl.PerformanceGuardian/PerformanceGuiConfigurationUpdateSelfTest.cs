@@ -30,7 +30,8 @@ internal static class PerformanceGuiConfigurationUpdateSelfTest
             output.WriteLine("PASS live configuration validation and independent partial commits; no fabricated rollback");
 
             var reader=new SourceReader();var sourceListener=new SourceListener();var standbyListener=new StandbyListener();
-            using var source=new GuardianPerformancePowerSourceRuntime(reader,new RecordingGuardianCpuSourceTransitionSink(),new RecordingGuardianGpuSourceTransitionSink(),sourceListener);
+            var cpuSource=new RecordingGuardianCpuSourceTransitionSink();var gpuSource=new RecordingGuardianGpuSourceTransitionSink();
+            using var source=new GuardianPerformancePowerSourceRuntime(reader,cpuSource,gpuSource,sourceListener);
             using var standby=new GuardianModernStandbyLifecycleRuntime(source,domains,standbyListener);
             var prime=standby.Prime(true,true);domains.EnableAsync(true,true,prime.Observation.Source,CancellationToken.None).GetAwaiter().GetResult();
             standby.ActivateListener();int updates=0;
@@ -38,9 +39,21 @@ internal static class PerformanceGuiConfigurationUpdateSelfTest
             reader.Source=PerformancePowerSourceKind.Battery;
             try{standby.ExecuteConfigurationUpdate(_=>updates++);throw new Exception("unconfirmed source accepted");}catch(InvalidOperationException){}
             Require(updates==1,"unconfirmed source wrote presets");
+            var captured=standby.CaptureStatus(s=>s,true);
+            Require(captured.LastSource==PerformancePowerSourceKind.Battery&&cpuSource.Calls==1&&gpuSource.Calls==1,
+                "GUI status could not reconcile a missed Battery notification through the lifecycle wrapper.");
+            reader.Source=PerformancePowerSourceKind.Ac;standby.CaptureStatus(s=>s,true);
+            Require(cpuSource.Calls==2&&gpuSource.Calls==2,"Battery-to-AC status reconciliation did not dispatch both selected domains.");
+            standby.ExecuteConfigurationUpdate(_=>{},()=> (false,true));
             reader.Source=PerformancePowerSourceKind.Ac;standbyListener.Emit(GuardianModernStandbySignalKind.SessionDisplayOff);
             try{standby.ExecuteConfigurationUpdate(_=>updates++);throw new Exception("display Off accepted");}catch(InvalidOperationException){}
             Require(updates==1,"display/lifecycle fence wrote presets");
+            var reads=reader.Reads;reader.Source=PerformancePowerSourceKind.Battery;standby.CaptureStatus(s=>s,true);
+            Require(reader.Reads==reads&&cpuSource.Calls==2&&gpuSource.Calls==2,
+                "Status bypassed display-Off release and queried/reacquired a profile.");
+            standbyListener.Emit(GuardianModernStandbySignalKind.SessionDisplayOn);
+            Require(!domains.Snapshot.LastCpuEnabled&&domains.Snapshot.LastGpuEnabled,"Display-On reenabled an explicitly disabled CPU.");
+            output.WriteLine("PASS GUI source status fallback through lifecycle wrapper; display-Off blocks reconciliation; display-On retains independent selection.");
             output.WriteLine("PASS live update source and display/standby fences; fake IO only");
             return 0;
         }
@@ -55,7 +68,8 @@ internal static class PerformanceGuiConfigurationUpdateSelfTest
     private sealed class SourceReader:IPerformancePowerSourceReader
     {
         internal PerformancePowerSourceKind Source=PerformancePowerSourceKind.Ac;
-        public PerformancePowerSourceObservation Read()=>new(true,Source,1,80,0,"FAKE");
+        internal int Reads;
+        public PerformancePowerSourceObservation Read(){Reads++;return new(true,Source,1,80,0,"FAKE");}
     }
     private sealed class Lease:IDisposable{public void Dispose(){}}
     private sealed class SourceListener:IGuardianPowerSourceNotificationListenerFactory

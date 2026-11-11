@@ -16,7 +16,7 @@ internal sealed class ProductAutomaticReview
     private readonly bool _bounded;
     private ProductProtectionSettings _protections = new();
     internal void Configure(ProductProtectionSettings protections)
-    { lock (_sync) { if (_started.HasValue) throw new InvalidOperationException("Libera Automático antes de cambiar protecciones."); _protections = _bounded ? new() : protections; } }
+    { lock (_sync) { if (_started.HasValue) throw new InvalidOperationException("Libera Automático antes de cambiar protecciones."); _protections = _bounded ? new(){HistoricalGpuThermalPolicy=true} : protections; } }
     internal const int MaximumCpuSpikeMilliseconds = 2000;
     internal const double CpuSpikeThresholdC = SafetyGate.CpuEmergencyC;
     internal const string CpuSpikeDeadlineFailure = "Confirmación de pico CPU vencida: sin adquisición fresca de recuperación <95 °C en 2000 ms; volver a Firmware.";
@@ -81,13 +81,13 @@ internal sealed class ProductAutomaticReview
                 !Within(snapshot.CpuControlTemperatureC, 110) ||
                 (_protections.CpuThermalHandoff && (snapshot.CpuControlTemperatureC >= CpuImmediateHandoffC ||
                     snapshot.CpuControlTemperatureC > Hp8C40AutomaticFinalQualificationGate.MaximumCpuPhysicalC && !cpuSpikeAdmitted)) ||
-                !Within(snapshot.GpuTemperatureC, _protections.GpuThermalHandoff ? Hp8C40AutomaticFinalQualificationGate.MaximumGpuPhysicalC : 105) ||
-                !Within(snapshot.CpuPackagePowerW, _protections.PowerEnvelopeHandoff ? Hp8C40AutomaticFinalQualificationGate.MaximumCpuPackagePowerW : 500) ||
+                !Within(snapshot.GpuTemperatureC, _protections.GpuThermalHandoff ? (_bounded ? Hp8C40AutomaticFinalQualificationGate.MaximumGpuPhysicalC : ProductProtectionSettings.HabitualGpuHandoffC) : 105) ||
+                !Within(snapshot.CpuPackagePowerW, _bounded ? Hp8C40AutomaticFinalQualificationGate.MaximumCpuPackagePowerW : 500) ||
                 !Within(snapshot.GpuPowerW, 300))
-                throw new InvalidOperationException(EnvelopeFailure(snapshot, cpuSpikeAdmitted, _protections));
+                throw new InvalidOperationException(EnvelopeFailure(snapshot, cpuSpikeAdmitted, _protections, boundedReview: _bounded));
         }
     }
-    internal static string EnvelopeFailure(TelemetrySnapshot snapshot, bool cpuSpikeAdmitted = false, ProductProtectionSettings? protections = null)
+    internal static string EnvelopeFailure(TelemetrySnapshot snapshot, bool cpuSpikeAdmitted = false, ProductProtectionSettings? protections = null, bool boundedReview = false)
     {
         protections ??= new();
         var failures = new List<string>();
@@ -101,8 +101,8 @@ internal sealed class ProductAutomaticReview
                 $"(paquete {snapshot.CpuTemperatureC:0.##} °C; núcleo más caliente {snapshot.CpuCoreMaxTemperatureC:0.##} °C; retorno inmediato a Firmware)");
         else Check("CPU temperatura", snapshot.CpuControlTemperatureC,
             !protections.CpuThermalHandoff ? 110 : cpuSpikeAdmitted ? CpuImmediateHandoffC : Hp8C40AutomaticFinalQualificationGate.MaximumCpuPhysicalC, "°C");
-        Check("CPU potencia", snapshot.CpuPackagePowerW, protections.PowerEnvelopeHandoff ? Hp8C40AutomaticFinalQualificationGate.MaximumCpuPackagePowerW : 500, "W");
-        Check("GPU temperatura", snapshot.GpuTemperatureC, protections.GpuThermalHandoff ? Hp8C40AutomaticFinalQualificationGate.MaximumGpuPhysicalC : 105, "°C");
+        Check("CPU potencia", snapshot.CpuPackagePowerW, boundedReview ? Hp8C40AutomaticFinalQualificationGate.MaximumCpuPackagePowerW : 500, "W");
+        Check("GPU temperatura", snapshot.GpuTemperatureC, protections.GpuThermalHandoff ? (boundedReview ? Hp8C40AutomaticFinalQualificationGate.MaximumGpuPhysicalC : ProductProtectionSettings.HabitualGpuHandoffC) : 105, "°C");
         Check("GPU potencia", snapshot.GpuPowerW, 300, "W");
         if (!snapshot.IsComplete) failures.Add("telemetría incompleta");
         return "Prueba Automatic fuera de su margen: " + string.Join("; ", failures) + ".";
@@ -122,7 +122,7 @@ internal sealed class ProductAutomaticReview
                 // before the review envelope. Preserve that actual cause instead
                 // of calling a Healthy runtime an unspecified SafetyGate fault.
                 if (safety.ThermalEmergency && snapshot.CpuControlTemperatureC >= CpuImmediateHandoffC)
-                    throw new InvalidOperationException(EnvelopeFailure(snapshot));
+                    throw new InvalidOperationException(EnvelopeFailure(snapshot, protections: _protections, boundedReview: _bounded));
                 var reasons = safety.Reasons.Count > 0 ? string.Join("; ", safety.Reasons) : "SafetyGate no permite control Custom.";
                 throw new InvalidOperationException("Prueba Automatic interrumpida por SafetyGate: " + reasons);
             }

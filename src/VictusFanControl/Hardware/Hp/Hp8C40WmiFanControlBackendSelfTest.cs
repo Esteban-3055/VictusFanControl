@@ -67,12 +67,12 @@ internal static class Hp8C40WmiFanControlBackendSelfTest
         Require(preview.Capabilities.MaximumLevel==54&&!preview.Capabilities.SupportsIndependentLevels,"Preview lost its logical-only capability.");
         await preview.EnterCustomModeAsync(default);
         foreach(var level in new[]{51,52,53,54})await preview.ApplyAsync(new(level,level,"upper-range preview"),default);
-        Require(previewCalls.Select(r=>((int)r.Payload[0],(int)r.Payload[1])).SequenceEqual(new[]{(51,51),(52,52),(53,52),(54,52)})&&previewGuardian.Intents==4,
+        Require(previewCalls.Select(r=>((int)r.Payload[0],(int)r.Payload[1])).SequenceEqual(new[]{(51,51),(52,52),(53,53),(54,54)})&&previewGuardian.Intents==4,
             "Backend preview mapping or durable intents mismatch.");
-        Require(preview.LastAcceptedTargets==(54,52),"Diagnostic exposed the logical GPU target instead of the capped command.");
+        Require(preview.LastAcceptedTargets==(54,54),"Diagnostic exposed the logical GPU target instead of the capped command.");
         await preview.ApplyAsync(new(54,54,"hold logical target"),default);Require(previewCalls.Count==4,"Preview backend retransmitted a held pair.");
         await preview.RestoreFirmwareAutoAsync(default);Require(preview.LastAcceptedTargets is null,"Released preview exposed a stale command.");
-        await output.WriteLineAsync("PASS: WMI preview backend 51/51, 52/52, 53/52, 54/52, pair diagnostics, deduplication and release; fake IO only.");
+        await output.WriteLineAsync("PASS: WMI preview backend 51/51, 52/52, 53/53, 54/54, pair diagnostics, deduplication and release; fake IO only.");
 
         var failing = new FakeGuardian { RejectIntent = true };
         var dispatches = 0;
@@ -101,13 +101,23 @@ internal static class Hp8C40WmiFanControlBackendSelfTest
         Require(rejected && recoveryCalls.Count == 3 && recoveryCalls[1].Payload[0] == 255 &&
             recoveryCalls[2].CommandType == 0x1A && orphan.ReleaseEvidence is null,
             "Guardian failure did not attempt local WMI recovery / falsely retired lease.");
+        rejected = false;
+        try { await orphan.RestoreFirmwareAutoAsync(default); } catch (IOException) { rejected = true; }
+        Require(rejected && recoveryCalls.Count == 3 && lost.Releases == 1 && lost.Confirmations == 1,
+            "Unconfirmed release repeated native fallback or normal release.");
+        lost.CompletedRelease = true;
+        await orphan.DisposeAsync();
+        Require(recoveryCalls.Count == 3 && lost.Releases == 1 && lost.Confirmations == 2 && lost.Disposals == 1 &&
+            orphan.ReleaseEvidence is { GuardianLeaseRetired: true } && !orphan.LastRestoreEvidence.LocalFirmwareAckVerified,
+            "Late guardian completion did not drain disposal, repeated writes or invented firmware ownership.");
         await output.WriteLineAsync("PASS: supervisor failure permits only drained local release/default; lease remains unqualified.");
+        await output.WriteLineAsync("PASS: late bound guardian completion unblocks disposal without repeating native release; unconfirmed completion stays fenced.");
         return 0;
     }
     private sealed class FakeGuardian : IWmiFanGuiGuardian
     {
-        public bool Started, Alive = true, RejectIntent, RejectRelease;
-        public int Intents, Heartbeats, StartCalls, Releases;
+        public bool Started, Alive = true, RejectIntent, RejectRelease, CompletedRelease;
+        public int Intents, Heartbeats, StartCalls, Releases, Confirmations, Disposals;
         public string SessionDirectory => "fixture";
         public string ReportPath => "fixture/report.json";
         public Task StartAsync(CancellationToken t) { Started = true; StartCalls++; return Task.CompletedTask; }
@@ -122,6 +132,12 @@ internal static class Hp8C40WmiFanControlBackendSelfTest
             Started = false;
             return Task.FromResult(new FanWmiReleaseEvidence(true, true, true, false, ReportPath, "CLIENT_RELEASE"));
         }
-        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+        public Task<FanWmiReleaseEvidence> ConfirmCompletedReleaseAsync(CancellationToken t)
+        {
+            Confirmations++;
+            if (!CompletedRelease) throw new IOException("Bound guardian completion unconfirmed");
+            return Task.FromResult(new FanWmiReleaseEvidence(true, true, true, false, ReportPath, "LIFECYCLE_GAP"));
+        }
+        public ValueTask DisposeAsync() { Disposals++; return ValueTask.CompletedTask; }
     }
 }

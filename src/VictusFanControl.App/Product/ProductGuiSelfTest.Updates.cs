@@ -13,6 +13,7 @@ internal static partial class ProductGuiSelfTest
         try
         {
             static void Require(bool ok,string message){if(!ok)throw new InvalidOperationException(message);}
+            ProductSchedulingSelfTest.Run(Require);
             TestGuidedRecovery(Require); ProductAutomaticRecoverySelfTest.Run(Require);
             TestBackgroundRecovery(Require); TestUpdatePage(Require); TestUpdateHandoff(Require);
             return 0;

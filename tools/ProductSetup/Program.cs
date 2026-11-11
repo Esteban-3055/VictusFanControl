@@ -52,7 +52,7 @@ internal sealed class SetupForm : Form
             if (identity.User?.Value != args[5]) throw new IOException("Actualiza con la misma cuenta de Windows. No uses las credenciales de otra cuenta para elevar el instalador.");
             _ownerPid = pid; _ownerStart = ticks;
         }
-        Text = "VictusFanControl v" + Package.Version + " · Instalador";
+        Text = "VictusFanControl v" + Package.Version + " · Preliminar · Instalador";
         ClientSize = new(610, 370); FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; StartPosition = FormStartPosition.CenterScreen;
         Controls.Add(new Label { Text = "Instalar VictusFanControl", Left = 25, Top = 20, AutoSize = true, Font = new Font(Font.FontFamily, 16, FontStyle.Bold) });
         _status.Text = "Equipo: HP 8C40 / BIOS F.18.\n\nCierra VictusFanControl desde la bandeja. Se conservarán tus perfiles, registros y preferencias de inicio.\n\nPrimera instalación: inicio con Windows, minimizado y Automático. Se requiere .NET Desktop Runtime 8 x64 y PawnIO instalado. Usa tu misma cuenta de Windows.";
@@ -86,6 +86,7 @@ internal sealed class SetupForm : Form
         if (_working) return;
         _working = true; _install.Enabled = _cancel.Enabled = _startupAutomatic.Enabled = false;
         string? directory = null;
+        VictusFanControl.Recovery.ProductRecoveryInstallationGate? installationGate=null;
         try
         {
             _status.Text = "Esperando el cierre normal de la sesión anterior…";
@@ -103,6 +104,7 @@ internal sealed class SetupForm : Form
                     }
                 }
             }
+            installationGate=VictusFanControl.Recovery.ProductRecoveryInstallationGate.EnterInstaller();
             await RequireDesktopRuntimeAsync();
             _status.Text = "Verificando el contenido e instalando…";
             directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VictusFanControl", "setup", Guid.NewGuid().ToString("N"));
@@ -111,7 +113,7 @@ internal sealed class SetupForm : Form
             if (pending.Pending)
             {
                 var consent = MessageBox.Show(this, "Hay sesiones anteriores pendientes de recuperación.\n\n" + pending.Summary +
-                    "\n\nCierra otros controladores de CPU/GPU/ventiladores y aplicaciones de VictusFanControl. Se guardarán respaldos antes de liberar. No se activará Automático durante la recuperación. Si una llamada quedó incierta, será necesario Reiniciar Windows.\n\n¿Recuperar y continuar la instalación?",
+                    "\n\nCierra otros controladores de CPU/GPU/ventiladores y aplicaciones de VictusFanControl. Se guardarán respaldos antes de liberar. No se activará Automático durante la recuperación. Si una llamada conserva estado incierto, se detendrá la instalación y se conservará la evidencia hasta confirmar su retorno.\n\n¿Recuperar y continuar la instalación?",
                     "Recuperar sesión anterior", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
                 if (consent != DialogResult.Yes) throw new IOException("Instalación pausada. Los registros pendientes se conservaron; puedes recuperar al volver a instalar.");
                 _status.Text = "Recuperando la sesión anterior y guardando evidencia…";
@@ -125,6 +127,7 @@ internal sealed class SetupForm : Form
             start.StandardOutputEncoding=start.StandardErrorEncoding=new System.Text.UTF8Encoding(false);
             foreach (var value in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", Path.Combine(directory, "Install-VictusFanControl.ps1"), "-NoOpen", "-InstallerProcessId", Environment.ProcessId.ToString() }) start.ArgumentList.Add(value);
             start.ArgumentList.Add(_startupAutomatic.Checked?"-EnableStartupAutomatic":"-PreserveStartupPreferences");
+            installationGate.HandFileToScript();
             using var process = Process.Start(start) ?? throw new IOException("No se pudo abrir el instalador interno.");
             var output = process.StandardOutput.ReadToEndAsync(); var error = process.StandardError.ReadToEndAsync();
             await process.WaitForExitAsync();
@@ -136,6 +139,7 @@ internal sealed class SetupForm : Form
         catch (Exception ex) { Environment.ExitCode = 1; _status.Text = "Instalación no completada.\n\n" + ex.Message; MessageBox.Show(this, ex.Message, "Instalación no completada", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         finally
         {
+            installationGate?.Dispose();
             _working = false; _install.Enabled = _cancel.Enabled = _startupAutomatic.Enabled = true;
             if (directory is not null && Directory.Exists(directory)) { try { Directory.Delete(directory, true); } catch { } }
         }

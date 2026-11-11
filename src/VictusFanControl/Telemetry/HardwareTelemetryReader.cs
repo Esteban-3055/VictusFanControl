@@ -28,8 +28,11 @@ public sealed class HardwareTelemetryReader : IDisposable
     // blocked. These phase markers never renew telemetry or admission clocks.
     private HardwareTelemetryReadProgress _readProgress = new("NotStarted", Environment.TickCount64);
     public HardwareTelemetryReadProgress ReadProgress => Volatile.Read(ref _readProgress);
-    private void MarkReadPhase(string phase) =>
-        Volatile.Write(ref _readProgress, new(phase, Environment.TickCount64));
+    private void MarkReadPhase(string phase)
+    {
+        Volatile.Write(ref _readProgress,new(phase,Environment.TickCount64));
+        RuntimeProgressJournal.Record("Reader."+phase);
+    }
 
     private string _intelStatus = "NOT INITIALIZED";
     private string _ecStatus = "NOT INITIALIZED";
@@ -428,10 +431,10 @@ public sealed class HardwareTelemetryReader : IDisposable
 
     public void Dispose()
     {
-        _wmiFans?.Dispose();
-        _intel?.Dispose();
-        _ec?.Dispose();
-        _nvml?.Dispose();
+        var failures=new List<Exception>();
+        void Release(IDisposable? resource){try{resource?.Dispose();}catch(Exception error){failures.Add(error);}}
+        Release(_wmiFans);Release(_intel);Release(_ec);Release(_nvml);
+        if(failures.Count!=0)throw new AggregateException("Telemetry backend cleanup incomplete.",failures);
     }
 
     private static double ValidateFanRpm(ushort rpm, string fanName)
