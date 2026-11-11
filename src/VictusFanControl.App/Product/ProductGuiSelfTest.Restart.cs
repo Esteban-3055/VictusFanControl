@@ -67,6 +67,7 @@ internal static partial class ProductGuiSelfTest
             require(File.ReadAllText(journal)=="original","Restart changed a recovery record.");
             ProductSessionRestart.EnsureAbsent(new[]{Path.Combine(root,"absent.json")});
             TestFailedRestart(Path.Combine(root,"failure"),require);
+            TestLateReadDrainRestart(Path.Combine(root,"late-read-drain"),require);
             TestRestartDiagnosticFailure(Path.Combine(root,"disk-failure"),require);
             TestRestartStartupAndExit(Path.Combine(root,"startup"),require);
             TestRestartLifecycle(Path.Combine(root,"lifecycle"),require);
@@ -86,6 +87,18 @@ internal static partial class ProductGuiSelfTest
         form.RestartSessionAsync().GetAwaiter().GetResult();form.HandleCommand("fan-mode-2");form.HandleCommand("performance-apply");
         require(runtime.Disposals==1&&runtime.Commands==0,"Failed runtime was reused or blindly released again.");
         var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Failed restart could not exit.");require(runtime.Disposals==1,"Exit repeated a failed restart release.");
+    }
+    private static void TestLateReadDrainRestart(string directory, Action<bool,string> require)
+    {
+        var runtime = new RecordingRuntime { DisposeFailure = "WMI read still pending", ConfirmReadDrainFixture = () => Task.CompletedTask };
+        using var form = new ProductForm("fixture://modules", fixture:runtime, fixtureProfiles:new(), restartDirectory:directory);
+        form.Show(); Application.DoEvents();
+        CompleteGuiTask(form.RestartSessionAsync(), "Initial WMI read drain did not time out during restart.");
+        require(runtime.Disposals == 1 && form.RestartRequest is null && form.Canvas.RestartAvailable,
+            "Late read timeout restarted prematurely or hid the retry.");
+        CompleteGuiTask(form.RestartSessionAsync(), "Restart after confirmed WMI read did not finish.");
+        require(runtime.Disposals == 1 && runtime.Commands == 0 && form.IsDisposed && form.RestartRequest is not null,
+            "Confirmed WMI read failed to permit restart without replaying cleanup.");
     }
     private static void TestRestartStartupAndExit(string directory,Action<bool,string> require)
     {

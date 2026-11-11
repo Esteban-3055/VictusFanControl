@@ -10,6 +10,8 @@ namespace VictusFanControl.Runtime;
 
 internal static class WmiFanGuiGuardianHost
 {
+    private static readonly TimeSpan CtgpObservationBudget = TimeSpan.FromSeconds(5);
+
     public static void RequestStop(string directory, string reason)
     {
         var path = Path.Combine(directory, "stop.signal");
@@ -52,6 +54,7 @@ internal static class WmiFanGuiGuardianHost
         var releaseAccepted = false;
         var legacyAccepted = false;
         string? failure = null;
+        string? ctgpStatusPublicationFailure = null;
         var reason = "STARTUP_FAILURE";
         var baseline = 0L;
         var clock = Stopwatch.StartNew();
@@ -92,7 +95,14 @@ internal static class WmiFanGuiGuardianHost
             { OwnerPid = ownerPid, OwnerStartUtcTicks = ownerStart, Original = new byte[] { 0, 1, 1, 0 }, Utc = DateTimeOffset.UtcNow }));
         Guid lastCtgpRequest = Guid.Empty;
         var nextCtgpObservation = TimeSpan.Zero;
-        void PublishCtgp() => WmiFanExperiment.WriteJson(Path.Combine(directory, "ctgp-status.json"), ctgp.Status);
+        void PublishCtgp()
+        {
+            // A failed presentation update neither refreshes the last status nor
+            // changes whether hardware recovery is required or confirmed.
+            try { WmiFanExperiment.WriteJson(Path.Combine(directory, "ctgp-status.json"), ctgp.Status); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            { ctgpStatusPublicationFailure = ex.Message; }
+        }
         try
         {
             // Durable and exclusive, retained on uncertain native completion.
@@ -138,7 +148,30 @@ internal static class WmiFanGuiGuardianHost
                 // narrow modulo window. Never replay missed observations.
                 if (clock.Elapsed >= nextCtgpObservation)
                 {
-                    try { fixtureBeforeObservation?.Invoke(); ctgp.Observe(); CheckLifecycle(); PublishCtgp(); }
+                    try
+                    {
+                        if (ctgp.NeedsRestore || fixtureBeforeObservation is not null)
+                        {
+                            var observation = Task.Run(() =>
+                            {
+                                fixtureBeforeObservation?.Invoke();
+                                ctgp.Observe();
+                            });
+                            if (await Task.WhenAny(observation, Task.Delay(CtgpObservationBudget)).ConfigureAwait(false) != observation)
+                            {
+                                // Fence new control promptly. The observer still owns
+                                // its native call and must drain before restoration.
+                                reason = "CTGP_OBSERVATION_TIMEOUT";
+                                try { RequestStop(directory, reason); }
+                                finally { await observation.ConfigureAwait(false); }
+                                break;
+                            }
+                            await observation.ConfigureAwait(false);
+                        }
+                        else ctgp.Observe();
+                        CheckLifecycle();
+                        PublishCtgp();
+                    }
                     catch (Exception ex) { ctgp.Fail(ex); PublishCtgp(); throw; }
                     nextCtgpObservation = clock.Elapsed + TimeSpan.FromSeconds(2);
                 }
@@ -167,8 +200,8 @@ internal static class WmiFanGuiGuardianHost
                     RequestStop(directory, reason);
                     using var nativeSlot = WmiFanExperimentBoundary.EnterRecoverySlot(directory, TimeSpan.FromSeconds(10));
                     Exception? ctgpFailure = null;
-                    try { ctgp.Restore(); PublishCtgp(); }
-                    catch (Exception ex) { ctgp.Fail(ex); PublishCtgp(); ctgpFailure = ex; }
+                    try { ctgp.Restore(); }
+                    catch (Exception ex) { ctgp.Fail(ex); ctgpFailure = ex; }
                     if (File.Exists(Path.Combine(directory, "write-intent.json")))
                     {
                         var recovery = new WmiFanSession(r =>
@@ -194,6 +227,7 @@ internal static class WmiFanGuiGuardianHost
                 }
                 catch (Exception ex) { failure = failure is null ? ex.Message : failure + "; recovery: " + ex.Message; }
                 finally { lease?.Dispose(); }
+                PublishCtgp();
             }
             WmiFanExperiment.WriteJson(Path.Combine(directory, "guardian-report.json"), new
             {
@@ -202,7 +236,7 @@ internal static class WmiFanGuiGuardianHost
                 ReleaseRequestAccepted = releaseAccepted, LegacyDefaultRequestAccepted = legacyAccepted,
                 GuardianLeaseRetired = retired, IndependentFirmwareOwnershipVerified = false,
                 DirectEcProhibited = true, Failure = failure
-                , CtgpRestored = !ctgp.NeedsRestore, Ctgp = ctgp.Status, Timing = timing.Status
+                , CtgpRestored = !ctgp.NeedsRestore, Ctgp = ctgp.Status, CtgpStatusPublicationFailure = ctgpStatusPublicationFailure, Timing = timing.Status
             });
         }
         return retired && failure is null ? 0 : 1;

@@ -262,7 +262,12 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
                 WmiFanExperimentBoundary.BeginRecovery();
                 WmiFanGuiGuardianHost.RequestStop(SessionDirectory, "OWNER_DISPOSE");
                 using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                await HpWmiFanTelemetryReader.WaitForProductionQuiescenceAsync(deadline.Token).ConfigureAwait(false);
+                try { await HpWmiFanTelemetryReader.WaitForProductionQuiescenceAsync(deadline.Token).ConfigureAwait(false); }
+                catch (OperationCanceledException ex) when (deadline.IsCancellationRequested && _child is null)
+                {
+                    var directory = SessionDirectory;
+                    throw new WmiFanReadDrainPendingException(ex, () => ConfirmPassiveReadDrainAsync(directory));
+                }
                 await Task.Run(() =>
                 {
                     using var slot = WmiFanExperimentBoundary.EnterRecoverySlot(SessionDirectory, TimeSpan.FromSeconds(10));
@@ -271,4 +276,25 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
         }
         finally { _child?.Dispose(); }
     }
+
+    private async Task ConfirmPassiveReadDrainAsync(string directory)
+    {
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await HpWmiFanTelemetryReader.WaitForProductionQuiescenceAsync(deadline.Token).ConfigureAwait(false);
+        await Task.Run(() =>
+        {
+            using var slot = WmiFanExperimentBoundary.EnterRecoverySlot(directory, TimeSpan.FromSeconds(10), waitForConfirmedCleanup: true);
+            if (_child is not null || !WmiFanExperimentBoundary.Recovering ||
+                !string.Equals(directory, WmiFanExperimentBoundary.SessionDirectory, StringComparison.OrdinalIgnoreCase) ||
+                !File.Exists(Path.Combine(directory, "stop.signal")) || File.Exists(LeasePath) ||
+                File.Exists(Path.Combine(directory, "write-intent.json")) || File.Exists(Path.Combine(directory, "ctgp-intent.json")))
+                throw new IOException("No se confirmó el cierre de la sesión de lectura WMI.");
+        }).ConfigureAwait(false);
+    }
+}
+
+internal sealed class WmiFanReadDrainPendingException(Exception cause, Func<Task> confirm)
+    : IOException("La lectura WMI sigue pendiente al cerrar la sesión.", cause)
+{
+    internal Task ConfirmAsync() => confirm();
 }

@@ -12,12 +12,12 @@
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
   <!-- P14 historical audit builds retain their original version. Product release publishing opts in.
-       Preview 1.13.5 reads active WMI leases for recovery and reuses the guardian connection;
+       Preview 1.13.6 supervises slow cTGP observations and permits verified late WMI drainage;
        historical thermal qualification keeps its original thresholds and separate regression checks. -->
   <PropertyGroup Condition="'$(VictusProductRelease)' == 'true'">
-    <Version>1.13.5</Version>
-    <AssemblyVersion>1.13.5.0</AssemblyVersion>
-    <FileVersion>1.13.5.0</FileVersion>
-    <InformationalVersion>1.13.5</InformationalVersion>
+    <Version>1.13.6</Version>
+    <AssemblyVersion>1.13.6.0</AssemblyVersion>
+    <FileVersion>1.13.6.0</FileVersion>
+    <InformationalVersion>1.13.6</InformationalVersion>
   </PropertyGroup>
 </Project>

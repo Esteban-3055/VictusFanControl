@@ -52,6 +52,8 @@ internal static class WmiFanGuardianTimingSelfTest
             "Real Windows interrupt/active clock contract failed.");
         Console.WriteLine("PASS: slow work separated from idle; real Windows clocks; sleep during work/idle, scheduler stall, boundary, bracketed sampling and clock regression (no hardware IO).");
         await DelayedObservationAsync();
+        await TimedOutObservationAsync();
+        await LockedStatusReleaseAsync();
     }
 
     private static async Task DelayedObservationAsync()
@@ -114,5 +116,65 @@ internal static class WmiFanGuardianTimingSelfTest
             report.RootElement.GetProperty("CtgpRestored").GetBoolean() &&
             report.RootElement.GetProperty("GuardianLeaseRetired").GetBoolean(), "Delayed-observation fixture recovery was not verified.");
         Console.WriteLine("PASS: actual guardian host and GUI confirmation remain active across a 3.4-second completed observation and the next iteration; explicit release restores cTGP and retires its fixture lease. Zero hardware IO.");
+    }
+
+    private static async Task TimedOutObservationAsync()
+    {
+        var (folder, args) = CreateActiveFixture();
+        using var started = new ManualResetEventSlim();
+        using var returnFromRead = new ManualResetEventSlim();
+        var guardian = WmiFanGuiGuardianHost.RunAsync(args, fixture:true, fixtureBeforeObservation:() =>
+        {
+            started.Set();
+            if (!returnFromRead.Wait(TimeSpan.FromSeconds(15))) throw new TimeoutException("Fixture did not release its simulated WMI call.");
+        });
+        try
+        {
+            Require(started.Wait(TimeSpan.FromSeconds(5)), "Timed observation never entered the fixture.");
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            while (!File.Exists(Path.Combine(folder, "stop.signal"))) await Task.Delay(20, timeout.Token);
+            Require(!guardian.IsCompleted && File.Exists(Path.Combine(folder, "fixture-lease.json")) &&
+                !File.Exists(Path.Combine(folder, "guardian-report.json")), "Deadline falsely completed the active read or restored while it was pending.");
+        }
+        finally
+        {
+            returnFromRead.Set();
+            await guardian.WaitAsync(TimeSpan.FromSeconds(15));
+        }
+        CheckRelease(folder, await guardian, "CTGP_OBSERVATION_TIMEOUT", expectStatusFailure:false);
+        Console.WriteLine("PASS: a cTGP observation exceeding five seconds closes admission, retains its lease while pending, and restores after native completion (zero hardware IO).");
+    }
+
+    private static async Task LockedStatusReleaseAsync()
+    {
+        var (folder, args) = CreateActiveFixture();
+        var guardian = WmiFanGuiGuardianHost.RunAsync(args, fixture:true);
+        using var reader = File.Open(Path.Combine(folder, "ctgp-status.json"), FileMode.Open, FileAccess.Read, FileShare.Read);
+        WmiFanGuiGuardianHost.RequestStop(folder, "CLIENT_RELEASE");
+        CheckRelease(folder, await guardian.WaitAsync(TimeSpan.FromSeconds(15)), "CLIENT_RELEASE", expectStatusFailure:true);
+        Console.WriteLine("PASS: locked cTGP status does not prevent fan release, LegacyDefault, or lease retirement (zero hardware IO).");
+    }
+
+    private static (string Folder, string[] Args) CreateActiveFixture()
+    {
+        var folder = Path.GetFullPath(Path.Combine("logs/guardian-timing-self-test", Guid.NewGuid().ToString("N")));
+        Directory.CreateDirectory(folder);
+        using var owner = Process.GetCurrentProcess();
+        var start = owner.StartTime.ToUniversalTime().Ticks;
+        WmiFanExperiment.WriteJson(Path.Combine(folder, "heartbeat.json"), new { Pid = owner.Id, ElapsedMs = 1L });
+        WmiFanExperiment.WriteJson(Path.Combine(folder, "ctgp-command.json"), new CtgpCommand(Guid.NewGuid(), owner.Id, start, true));
+        WmiFanExperiment.WriteJson(Path.Combine(folder, "write-intent.json"), new { OwnerPid = owner.Id });
+        return (folder, ["--fan-wmi-fixture-session", "--session-dir", folder, "--owner-pid", owner.Id.ToString(), "--owner-start", start.ToString()]);
+    }
+
+    private static void CheckRelease(string folder, int exit, string reason, bool expectStatusFailure)
+    {
+        using var report = JsonDocument.Parse(File.ReadAllText(Path.Combine(folder, "guardian-report.json")));
+        var result = report.RootElement;
+        Require(exit == 0 && result.GetProperty("ExitReason").GetString() == reason &&
+            result.GetProperty("CtgpRestored").GetBoolean() && result.GetProperty("ReleaseRequestAccepted").GetBoolean() &&
+            result.GetProperty("LegacyDefaultRequestAccepted").GetBoolean() && result.GetProperty("GuardianLeaseRetired").GetBoolean() &&
+            (result.GetProperty("CtgpStatusPublicationFailure").ValueKind == JsonValueKind.String) == expectStatusFailure,
+            "Fixture failed to verify the expected release and publication result.");
     }
 }

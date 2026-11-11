@@ -97,7 +97,7 @@ internal interface IProductRecoveryHandoff
 }
 
 /// <summary>Presentation adapter. Owns no raw hardware commands; uses the existing controllers and IPC.</summary>
-internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
+internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff, IProductLateReadDrain
 {
     private readonly ProductAutomaticReview? _automaticReview;
     private readonly ProductAutomaticReview _automaticGuard;
@@ -117,6 +117,15 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
     private bool _ctgpFaulted;
     private string? _ctgpSource;
     private bool _releaseCompleted;
+    private WmiFanReadDrainPendingException? _lateReadDrain;
+    bool IProductLateReadDrain.HasPendingReadDrain => _lateReadDrain is not null;
+    async Task IProductLateReadDrain.ConfirmReadDrainAsync()
+    {
+        var pending = _lateReadDrain ?? throw new IOException("No hay una lectura WMI pendiente de confirmar.");
+        await pending.ConfirmAsync();
+        _releaseCompleted = true;
+        _lateReadDrain = null;
+    }
     private Guid? _drainedGpuSession;
     public Guid? DrainedGpuSession => _drainedGpuSession;
     public void CompleteRecovery(Guid session)
@@ -962,7 +971,14 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff
             if (failures.Count == 0) _drainedGpuSession = _performance.DrainedGpuSession;
             failures.Add(performanceFailure);
         }
+        if (failures is [WmiFanReadDrainPendingException pending]) _lateReadDrain = pending;
         if (failures.Count > 0) throw new AggregateException("Liberación incompleta. Conserva los journals y revisa los informes.",failures);
         _releaseCompleted=true;
     }
+}
+
+internal interface IProductLateReadDrain
+{
+    bool HasPendingReadDrain { get; }
+    Task ConfirmReadDrainAsync();
 }

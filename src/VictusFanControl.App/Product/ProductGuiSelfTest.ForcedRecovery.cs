@@ -66,9 +66,37 @@ internal static partial class ProductGuiSelfTest
                 var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Forced failure fixture exit hung.");
             }
             Console.WriteLine("PASS forced session recovery: visible without pending records, diagnostic before drain, one task, fresh Firmware runtime, preserved draft, no Automatic, no foreign recovery, uncertainty/suspend/evidence-failure fences (zero hardware IO).");
+            TestLateReadDrainRecovery(Path.Combine(root, "late-read-drain"), require);
             TestDefinitiveAutomaticSessionRecovery(Path.Combine(root,"automatic"), require);
         }
         finally { WaitOptionalDiagnostics();Environment.ExitCode=exitCode;Directory.Delete(root,true); }
+    }
+
+    private static void TestLateReadDrainRecovery(string root, Action<bool,string> require)
+    {
+        var old = new RecordingRuntime { DisposeFailure = "WMI read still pending" };
+        var next = new RecordingRuntime();
+        var nativeReturned = false;
+        var confirmations = 0;
+        old.ConfirmReadDrainFixture = () =>
+        {
+            confirmations++;
+            return nativeReturned ? Task.CompletedTask : Task.FromException(new IOException("Native read still running."));
+        };
+        using var form = new ProductForm("fixture://late-read-drain", fixture:old, fixtureProfiles:new(), restartDirectory:root);
+        form.RecoveryRuntimeFactory = _ => Task.FromResult<IProductRuntime>(next);
+        form.Show(); Application.DoEvents();
+        CompleteGuiTask(form.ForceSessionRecoveryAsync(true), "Initial read drain did not time out.");
+        require(old.Disposals == 1 && confirmations == 0 && next.Starts == 0, "Initial release failure was ignored.");
+        CompleteGuiTask(form.ForceSessionRecoveryAsync(true), "Pending read verification hung.");
+        require(old.Disposals == 1 && confirmations == 1 && next.Starts == 0, "Recovery opened before the native read returned.");
+        nativeReturned = true;
+        CompleteGuiTask(form.ForceSessionRecoveryAsync(true), "Recovery after completed native read hung.");
+        require(old.Disposals == 1 && confirmations == 2 && next.Starts == 1 && next.Commands == 0 &&
+            form.Canvas.State.FanMode == "Firmware" && !form.Canvas.State.LifecycleBlocked,
+            "Late read confirmation repeated disposal, lost recovery, or granted premature authority.");
+        CompleteGuiTask(form.RequestExitAsync(), "Late read drain recovery fixture exit hung.");
+        Console.WriteLine("PASS late WMI read drain: first failure retained, retry refuses while pending, confirmed return permits one new Firmware session (zero hardware IO).");
     }
 
     private static void TestDefinitiveAutomaticSessionRecovery(string root, Action<bool,string> require)

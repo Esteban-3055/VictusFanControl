@@ -33,7 +33,7 @@ internal sealed partial class ProductForm
             try { _runtime?.FenceLifecycle("Recuperación explícita de CPU/GPU"); } catch (Exception ex) { fenceFailure = ex; }
             DetachRuntime(); _canvas.Notice = "Liberando la sesión y preparando recuperación…"; _canvas.Invalidate();
             await Task.Yield();
-            try { await ShutdownRuntimeAsync(); }
+            try { await ShutdownRuntimeAsync(confirmLateReadDrain: true); }
             catch when (_shutdownRuntimeOwner is IProductRecoveryHandoff drained &&
                 drained.DrainedGpuSession is { } session && session != Guid.Empty && session == selected.GpuSession)
             {

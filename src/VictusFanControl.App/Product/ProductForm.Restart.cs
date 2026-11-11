@@ -14,7 +14,7 @@ internal sealed partial class ProductForm
     internal Task RestartSessionAsync()
     {
         if(_closing||IsDisposed||!_canvas.RestartAvailable)return _restartTask??Task.CompletedTask;
-        return _restartTask??= RestartSessionCoreAsync();
+        return _restartTask is { IsCompleted: false } pending ? pending : (_restartTask = RestartSessionCoreAsync());
     }
     private async Task RestartSessionCoreAsync()
     {
@@ -30,7 +30,7 @@ internal sealed partial class ProductForm
             _canvas.Notice="Guardando diagnóstico y liberando ventiladores, CPU/GPU y telemetría…";_canvas.Invalidate();
             _ = ProductDiagnostics.TryExportAsync(diagnostic,before,ProductProfilesStore.Parse(checkpoint.DraftJson),AppLog.CurrentLogPath);
             // Even a full diagnostic disk must not skip hardware cleanup.
-            await ShutdownRuntimeAsync();
+            await ShutdownRuntimeAsync(confirmLateReadDrain: true);
             // Save/import operations that were already pending may have completed while draining.
             // Preserve their final draft and saved baseline instead of an earlier UI snapshot.
             checkpoint=ProductSessionRestart.Capture(Draft,_saved,_hasSavedBaseline,_canvas.Dirty,_canvas.Page,_canvas.Editing);
@@ -55,13 +55,22 @@ internal sealed partial class ProductForm
             _startupFailure="No se pudo reiniciar la sesión: "+ex.Message;
             _canvas.State=_canvas.State with{LifecycleBlocked=true,LifecycleBlockReason=_startupFailure,Failure=_startupFailure,
                 Runtime="Failed",CanApplyPerformance=false,AutomaticPreparing=false,PerformanceUpdating=false};
-            _canvas.Notice=_startupFailure+" Conserva el diagnóstico y los registros de recuperación. Usa Salir desde la bandeja.";
+            _canvas.RestartAvailable = _shutdownRuntimeOwner is IProductLateReadDrain { HasPendingReadDrain: true };
+            _canvas.Notice=_startupFailure+(_canvas.RestartAvailable
+                ? " Puedes reintentar cuando termine la lectura WMI."
+                : " Conserva el diagnóstico y los registros de recuperación. Usa Salir desde la bandeja.");
             UpdateTray(_canvas.State);
             _canvas.Busy=false;_canvas.Invalidate();
         }
         finally{_restarting=false;}
     }
-    private Task ShutdownRuntimeAsync()=>_runtimeShutdown??= ShutdownRuntimeCoreAsync();
+    private Task ShutdownRuntimeAsync(bool confirmLateReadDrain = false)
+    {
+        if (confirmLateReadDrain && _runtimeShutdown is { IsFaulted: true } &&
+            _shutdownRuntimeOwner is IProductLateReadDrain { HasPendingReadDrain: true } pending)
+            return _runtimeShutdown = pending.ConfirmReadDrainAsync();
+        return _runtimeShutdown ??= ShutdownRuntimeCoreAsync();
+    }
     private async Task ShutdownRuntimeCoreAsync()
     {
         _externalCooling?.Suspend();

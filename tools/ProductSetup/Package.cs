@@ -7,7 +7,7 @@ namespace VictusSetup;
 
 internal static class Package
 {
-    internal const string Version = "1.13.5";
+    internal const string Version = "1.13.6";
     internal static void ExtractEmbedded(string destination)
     {
         var assembly = typeof(Package).Assembly;

@@ -819,7 +819,7 @@ internal static partial class ProductGuiSelfTest
         {runtime.Publish(blocked);form.HandleCommand("tuning-apply");require(runtime.Commands==1,"Blocked tuning apply dispatched.");}
         var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Advanced fixture exit did not drain.");exit.GetAwaiter().GetResult();
     }
-    internal sealed class RecordingRuntime:IProductRuntime,IProductRecoveryHandoff
+    internal sealed class RecordingRuntime:IProductRuntime,IProductRecoveryHandoff,IProductLateReadDrain
     {
         internal ProductPowerProfile? LastCurveSource;
         internal UnifiedFanDemand? LastCurve;
@@ -834,6 +834,13 @@ internal static partial class ProductGuiSelfTest
         internal int? LastManualLevel;
         internal Func<int,Task>? ManualCommandFixture;
         internal Func<Task>? DisposeFixture;
+        internal Func<Task>? ConfirmReadDrainFixture;
+        public bool HasPendingReadDrain => ConfirmReadDrainFixture is not null;
+        public async Task ConfirmReadDrainAsync()
+        {
+            await (ConfirmReadDrainFixture ?? throw new InvalidOperationException("Fixture has no pending WMI read."))();
+            ConfirmReadDrainFixture = null;
+        }
         internal PerformanceGuiSessionConfiguration? LastPerformance;
         internal TaskCompletionSource? ReleaseGate,ManualGate,PerformanceGate,DisposeGate;
         internal string? CommandFailure,StartFailure,DisposeFailure,FenceFailure,ReleaseFailure,AutomaticModeFailure;
