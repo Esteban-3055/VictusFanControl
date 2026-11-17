@@ -3,12 +3,14 @@ namespace VictusFanControl.App;
 /// <summary>Display-only voltage estimate, not a measurement of remaining charge.
 /// Reference knots are the lower voltage edges of the existing srn MIT table.
 /// The 3000..3584 mV tail is a provisional display estimate, not calibrated capacity.</summary>
-internal sealed class HyperXBatteryEstimator
+internal sealed class HyperXBatteryEstimator(int? fullChargeMillivolts = null)
 {
     // Share the decoder's existing upper plausibility limit. Values above the
     // last reference knot stay at the estimated 100% ceiling, not a charge flag
     // or a newly calibrated high-voltage capacity curve.
     internal const int MinimumMillivolts=3000,ReferenceMinimumMillivolts=3584,MaximumMillivolts=4500;
+    // Preserve the original curve through 95% when a local full reference is set.
+    internal const int UpperInterpolationStartMillivolts = 3960;
     internal const string Curve="srn-linear-low-provisional-v2";
     internal const double TimeConstantMilliseconds=60_000;
     private const double DisplayHysteresisPoints=0.75;
@@ -20,14 +22,17 @@ internal sealed class HyperXBatteryEstimator
         // Neither 3000 nor 3200 is a measured hardware shutdown threshold.
         (3000,0),(3200,0),(3584,10),(3674,15),(3703,20),(3732,25),(3743,30),(3753,35),(3764,40),
         (3774,45),(3784,50),(3792,55),(3804,60),(3825,65),(3840,70),(3860,75),
-        (3890,80),(3910,85),(3940,90),(3960,95),(3970,100),(4107,100)
+        (3890,80),(3910,85),(3940,90),(UpperInterpolationStartMillivolts,95),(3970,100),(4107,100)
     ];
     private double? filtered;
     private int? displayed;
     private long lastSampleMilliseconds;
-    internal static double? RawPercent(int millivolts)
+    internal static double? RawPercent(int millivolts, int? fullChargeMillivolts = null)
     {
         if(millivolts is <MinimumMillivolts or >MaximumMillivolts)return null;
+        if (fullChargeMillivolts is { } full && millivolts > UpperInterpolationStartMillivolts)
+            return millivolts >= full ? 100 : 95 + 5.0 * (millivolts - UpperInterpolationStartMillivolts) /
+                (full - UpperInterpolationStartMillivolts);
         for(int i=1;i<Knots.Length;i++)
         {
             var left=Knots[i-1];var right=Knots[i];
@@ -39,12 +44,13 @@ internal sealed class HyperXBatteryEstimator
     internal void Reset(){filtered=null;displayed=null;lastSampleMilliseconds=0;}
     internal int? Observe(int millivolts,long sampleMilliseconds)
     {
-        var raw=RawPercent(millivolts);
+        var raw=RawPercent(millivolts, fullChargeMillivolts);
         if(raw is null){Reset();return null;}
         var elapsed=sampleMilliseconds-lastSampleMilliseconds;
         // Use acquisition time on a monotonic clock, not UI refreshes or UTC.
         // A missing/old source starts afresh rather than blending different sessions.
-        if(filtered is null||elapsed<0||elapsed>=HyperXSnapshot.FreshSeconds*1000||Round(raw.Value)<=10)
+        if(filtered is null||elapsed<0||elapsed>=HyperXSnapshot.FreshSeconds*1000||Round(raw.Value)<=10||
+            fullChargeMillivolts is { } full && millivolts >= full)
         {filtered=raw;displayed=Round(raw.Value);}
         else if(elapsed>0)
             filtered+=(1-Math.Exp(-elapsed/TimeConstantMilliseconds))*(raw.Value-filtered.Value);
@@ -53,7 +59,10 @@ internal sealed class HyperXBatteryEstimator
         lastSampleMilliseconds=sampleMilliseconds;
         if(displayed is null||Math.Abs(filtered.Value-displayed.Value)>=DisplayHysteresisPoints)
             displayed=Round(filtered.Value);
-        return displayed;
+        // Rounding or smoothing a previous full sample must not report a new
+        // sample below the configured full reference as 100%.
+        return fullChargeMillivolts is { } reference && millivolts < reference
+            ? Math.Min(displayed.Value, 99) : displayed;
     }
     private static int Round(double percent)=>(int)Math.Round(Math.Clamp(percent,0,100),MidpointRounding.AwayFromZero);
 }

@@ -39,8 +39,11 @@ internal static class HyperXSelfTest
         var path=Path.Combine(Path.GetTempPath(),"vfc-hyperx-fixture-"+Guid.NewGuid().ToString("N"),"settings.json");
         try
         {
-            var settings=cfg with{LowPercent=30,CriticalPercent=15,FullPercent=95,MuteEnabled=false,LcdLowSeconds=8,LcdLowBlinkCycles=4};settings.Save(path);
+            var settings=cfg with{LowPercent=30,CriticalPercent=15,FullPercent=95,MuteEnabled=false,LcdLowSeconds=8,LcdLowBlinkCycles=4,FullChargeMillivolts=4118};settings.Save(path);
             Check(HyperXSettings.Load(path,out var notice)==settings&&notice is null,"HyperX persistence changed");
+            foreach (var invalid in new[] { 3960, 4501 })
+                try { (cfg with { FullChargeMillivolts = invalid }).Validate(); throw new Exception("Invalid full voltage accepted"); }
+                catch (InvalidDataException) { }
             File.WriteAllText(path,"broken");Check(HyperXSettings.Load(path,out notice)==cfg&&notice is not null&&File.ReadAllText(path)=="broken","Invalid settings evidence lost");
             foreach(var critical in new[]{0,100})
             {

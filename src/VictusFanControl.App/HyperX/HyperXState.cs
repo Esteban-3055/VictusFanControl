@@ -19,7 +19,7 @@ internal sealed record HyperXSnapshot
     internal DateTimeOffset? MuteEventAt {get;init;}
     internal bool? Powered {get;init;}
     internal bool Fresh(DateTimeOffset now)=>ReceiverPresent&&SampledAt is{} at&&now>=at&&(now-at).TotalSeconds<FreshSeconds;
-    internal static (int Millivolts,double? Percent,bool? Charging)? Decode(ReadOnlySpan<byte> b)
+    internal static (int Millivolts,double? Percent,bool? Charging)? Decode(ReadOnlySpan<byte> b, int? fullChargeMillivolts = null)
     {
         if(b.Length is not(15 or 20)||b[0]!=0x21||b[1]!=0xff||b[2]!=5)return null;
         int mv=(b[3]<<8)|b[4];
@@ -27,7 +27,7 @@ internal sealed record HyperXSnapshot
         // This report contains voltage, not a verified charger-present flag.
         // Real unplugged headsets can report above the historical 4107 mV cutoff.
         // Keep the estimate visible and represent charging as unknown.
-        return (mv,HyperXBatteryEstimator.RawPercent(mv),null);
+        return (mv,HyperXBatteryEstimator.RawPercent(mv, fullChargeMillivolts),null);
     }
 }
 
@@ -41,6 +41,8 @@ internal sealed record HyperXSettings
     public int LowPercent {get;init;}=20;
     public int CriticalPercent {get;init;}=10;
     public int FullPercent {get;init;}=100;
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public int? FullChargeMillivolts {get;init;}
     public int LcdLowSeconds {get;init;}=6;
     public int LcdCriticalSeconds {get;init;}=10;
     public int LcdLowBlinkCycles {get;init;}=3;
@@ -55,6 +57,8 @@ internal sealed record HyperXSettings
     {
         try{DisplayConfiguration().Validate();}catch(ArgumentException e){throw new InvalidDataException(e.Message,e);}
         if(LcdLowSeconds is <1 or >120||LcdCriticalSeconds is <1 or >120)throw new InvalidDataException("Duración LCD: 1–120 segundos.");
+        if (FullChargeMillivolts is <= HyperXBatteryEstimator.UpperInterpolationStartMillivolts or > HyperXBatteryEstimator.MaximumMillivolts)
+            throw new InvalidDataException("La referencia de carga completa debe estar entre 3961 y 4500 mV.");
         if(SchemaVersion!=1||CriticalPercent is <0 or >100||LowPercent>=FullPercent||FullPercent>100)
             throw new InvalidDataException("Crítica admite 0–100 %; baja debe ser menor que carga completa. Crítica tiene prioridad si se superponen.");
     }

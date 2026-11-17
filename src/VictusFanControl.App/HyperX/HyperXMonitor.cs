@@ -2,12 +2,12 @@ namespace VictusFanControl.App;
 
 /// <summary>Independent optional USB reader. No WMI, EC, controller or audio recording.
 /// Battery requests are rate limited; mute uses a blocking, cancellable HID read.</summary>
-internal sealed class HyperXMonitor(Action<int,DateTimeOffset>? persistHistory=null) : IAsyncDisposable
+internal sealed class HyperXMonitor(Action<int,DateTimeOffset>? persistHistory=null, int? fullChargeMillivolts=null) : IAsyncDisposable
 {
     private readonly CancellationTokenSource stop=new();
     private readonly object gate=new();
     private HyperXSnapshot latest=new();
-    private readonly HyperXBatteryEstimator batteryEstimate=new();
+    private readonly HyperXBatteryEstimator batteryEstimate=new(fullChargeMillivolts);
     private string? batteryPath;
     private Task? worker;
     private FileStream? events;
@@ -40,7 +40,7 @@ internal sealed class HyperXMonitor(Action<int,DateTimeOffset>? persistHistory=n
     internal void InvalidateBattery(string status)=>Publish(s=>s with{Status=status,Percent=null,Millivolts=null,Charging=null,SampledAt=null});
     internal bool ApplyBatteryReport(ReadOnlySpan<byte> report,DateTimeOffset sampledAt,long sampleMilliseconds)
     {
-        if(HyperXSnapshot.Decode(report) is not{} b)return false;
+        if(HyperXSnapshot.Decode(report, fullChargeMillivolts) is not{} b)return false;
         int? percent;
         lock(gate)
         {
@@ -62,7 +62,7 @@ internal sealed class HyperXMonitor(Action<int,DateTimeOffset>? persistHistory=n
         // One optional record per real reply, never per redraw/export. Retain raw
         // evidence for future calibration without logging HID paths or device IDs.
         AppLog.WriteStructured("HYPERX BATTERY ESTIMATE",new{sampledAtUtc=sampledAt,millivolts=b.Millivolts,
-            rawPercent=b.Percent,percent,chargingInferred=b.Charging,curve=HyperXBatteryEstimator.Curve,lowRangeCalibrated=false});
+            rawPercent=b.Percent,percent,fullChargeMillivolts,chargingInferred=b.Charging,curve=HyperXBatteryEstimator.Curve,lowRangeCalibrated=false});
         if(percent is{} saved)
             try{persistHistory?.Invoke(saved,sampledAt);}
             catch(Exception e)when(e is IOException or UnauthorizedAccessException or InvalidDataException)

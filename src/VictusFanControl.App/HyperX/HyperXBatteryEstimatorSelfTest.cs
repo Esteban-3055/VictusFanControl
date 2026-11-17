@@ -48,6 +48,31 @@ internal static partial class HyperXBatteryEstimatorSelfTest
         int? full=null;for(int i=1;i<=8;i++)full=estimate.Observe(3970,i*60_000);
         check(full==100,"Filtering or hysteresis permanently prevents full-threshold notification");
 
+        const int customFull = 4118;
+        var calibratedSettings = new HyperXSettings { FullChargeMillivolts = customFull };
+        calibratedSettings.Validate();
+        check(HyperXBatteryEstimator.RawPercent(3960, customFull) == 95 &&
+            HyperXBatteryEstimator.RawPercent(3795, customFull) == HyperXBatteryEstimator.RawPercent(3795),
+            "Full reference changed the curve below 95%");
+        var calibrated = new HyperXBatteryEstimator(customFull);
+        check(calibrated.Observe(customFull - 1, 0) == 99 &&
+            calibrated.Observe(customFull, 60_000) == 100 &&
+            calibrated.Observe(customFull - 1, 120_000) == 99,
+            "Custom full reference was bypassed by rounding or smoothing");
+        var calibratedMonitor = new HyperXMonitor(fullChargeMillivolts: customFull);
+        var calibratedAt = DateTimeOffset.UtcNow;
+        try
+        {
+            calibratedMonitor.ApplyBatteryReport(Reply(customFull), calibratedAt, 0);
+            var calibratedExport = new TelemetryExportService(() => new(), new EmptyMemory(), () => calibratedMonitor.Snapshot);
+            check(calibratedExport.Capture(calibratedAt).HyperxBatteryPct == 100,
+                "The LCD export did not receive the calibrated percentage");
+            calibratedMonitor.ApplyBatteryReport(Reply(customFull - 1), calibratedAt.AddMinutes(1), 60_000);
+            check(calibratedExport.Capture(calibratedAt.AddMinutes(1)).HyperxBatteryPct == 99,
+                "The LCD export did not respect the calibrated full reference");
+        }
+        finally { calibratedMonitor.DisposeAsync().AsTask().GetAwaiter().GetResult(); }
+
         var reader=new HyperXMonitor();var now=DateTimeOffset.UtcNow;
         try
         {
