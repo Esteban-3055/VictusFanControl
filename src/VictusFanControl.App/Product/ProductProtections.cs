@@ -116,7 +116,6 @@ internal sealed partial class ProductForm
             _=>p
         };
         Change(_draft with{Protections=next});
-        if(!next.ResumeAutomatic)_automaticResumption.Cancel();
         _canvas.Notice="Protecciones en edición. Aplica para preparar Automático; Guarda para conservar los ajustes.";
         return true;
     }

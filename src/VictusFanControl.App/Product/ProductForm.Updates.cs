@@ -126,7 +126,7 @@ internal sealed partial class ProductForm
     }
     internal async Task InstallDownloadedUpdateAsync(Action? ensureReleasedFixture = null, Action? launchFixture = null, Func<CancellationToken,Task>? verifyFixture = null)
     {
-        if (_checkingUpdate || _closing || _restarting || _displayOff || _canvas.Busy || _canvas.Dirty || _canvas.DownloadedUpdate is not { } update || (_isolatedRuntime && verifyFixture is null)) return;
+        if (_checkingUpdate || _closing || _restarting || _displayOff || _systemSuspended || _canvas.Busy || _canvas.UpdateEditsPending || _canvas.DownloadedUpdate is not { } update || (_isolatedRuntime && verifyFixture is null)) return;
         if (!ProductUpdates.IsNewer(update.Version,update.IsPrerelease,ProductRelease.NumericVersion)) { _canvas.DownloadedUpdate = null; return; }
         if (update.IsPrerelease && !_draft.IncludePrereleaseUpdates) { ResetUpdateSelection(); return; }
         if (!_isolatedRuntime && (verifyFixture is not null || ensureReleasedFixture is not null || launchFixture is not null)) throw new InvalidOperationException("Update fixture requires an isolated runtime.");
@@ -146,13 +146,14 @@ internal sealed partial class ProductForm
                 _canvas.DownloadedUpdate = update;
             }
             if (_closing || IsDisposed) return;
-            if (_canvas.Dirty || update.IsPrerelease && !_draft.IncludePrereleaseUpdates || _canvas.Busy || _restarting || _displayOff || boundary != _updateLifecycleBoundary)
+            if (_canvas.UpdateEditsPending || update.IsPrerelease && !_draft.IncludePrereleaseUpdates || _canvas.Busy || _restarting || _displayOff || boundary != _updateLifecycleBoundary)
             { _canvas.UpdateStatus = "El instalador se conserva. Guarda los cambios y resuelve la interrupción antes de volver a pulsar Instalar."; return; }
             if (_runtime is null || _canvas.State.PerformanceRecovery?.Pending == true)
             {
                 var pending = await ReadUpdateRecoveryAsync(boundary);
                 if (_closing || IsDisposed) return;
-                if (_displayOff || _canvas.Dirty || _canvas.Busy || _restarting || boundary != _updateLifecycleBoundary) return;
+                if (_displayOff || _canvas.UpdateEditsPending || _canvas.Busy || _restarting || boundary != _updateLifecycleBoundary)
+                { _canvas.UpdateStatus = "El instalador se conserva. Guarda los cambios y resuelve la interrupción antes de volver a pulsar Instalar."; return; }
                 if (pending.Pending)
                 {
                     if (!Draft.RecoverSessionsAutomatically)
@@ -165,6 +166,8 @@ internal sealed partial class ProductForm
                     if (!await recovery)
                     { if (!_closing && !IsDisposed) _canvas.UpdateStatus = (_canvas.State.Failure ?? "No se confirmó la recuperación.") + " La descarga se conserva."; return; }
                     if (_closing || IsDisposed) return;
+                    if (_canvas.UpdateEditsPending)
+                    { _canvas.UpdateStatus = "Sesión recuperada. Guarda o descarta los cambios antes de instalar. La descarga se conserva."; return; }
                     if (_exitRequested || _displayOff || boundary != _updateLifecycleBoundary)
                     { _canvas.UpdateStatus = "Sesión recuperada. La instalación se detuvo por cierre o cambio de energía; la descarga se conserva."; return; }
                 }
@@ -191,12 +194,13 @@ internal sealed partial class ProductForm
             Exception? fenceFailure = null;
             try { _runtime?.FenceLifecycle("Actualización de producto"); } catch (Exception ex) { fenceFailure = ex; }
             _canvas.Notice = "Liberando la sesión antes de actualizar…"; _canvas.Invalidate();
-            await ShutdownRuntimeAsync(); releaseCompleted = true;
+            await ShutdownRuntimeAsync(confirmLateReadDrain: true); releaseCompleted = true;
             if (fenceFailure is not null) throw new IOException("No se confirmó el bloqueo del controlador anterior.", fenceFailure);
             if (_isolatedRuntime) (ensureReleased ?? throw new InvalidOperationException("Fixture release fence missing."))();
             else ProductSessionRestart.EnsureNoRecoveryRecords();
             recordsCleared = true;
             if (_closing || _exitRequested || _displayOff || _restartLifecycleInterrupted) throw new IOException("Actualización cancelada por cierre o cambio de energía. La sesión quedó liberada.");
+            if (_canvas.UpdateEditsPending) throw new IOException("Hay cambios pendientes. Guárdalos o descártalos antes de volver a instalar.");
             if (_isolatedRuntime) (launchFixture ?? throw new InvalidOperationException("Fixture launcher missing."))();
             else
             {

@@ -14,6 +14,12 @@ internal sealed partial class ProductForm
     internal Task RestartSessionAsync()
     {
         if(_closing||IsDisposed||!_canvas.RestartAvailable)return _restartTask??Task.CompletedTask;
+        if(_canvas.OptionalEditsPending)
+        {
+            _canvas.Notice="Guarda o descarta los cambios de HyperX y de la base externa antes de reiniciar la sesión.";
+            _canvas.Invalidate();
+            return Task.CompletedTask;
+        }
         return _restartTask is { IsCompleted: false } pending ? pending : (_restartTask = RestartSessionCoreAsync());
     }
     private async Task RestartSessionCoreAsync()
@@ -42,6 +48,7 @@ internal sealed partial class ProductForm
             await Task.Run(()=>ProductSessionRestart.WriteReleasedState(statePath,checkpoint));
             if(_closing||_exitRequested)return;
             if(_displayOff||_restartLifecycleInterrupted)throw new IOException("Reinicio cancelado por un cambio de energía; no se abrió otro controlador.");
+            if(_canvas.OptionalEditsPending)throw new IOException("Se detectaron cambios de HyperX o de la base externa durante el reinicio. Los cambios siguen en edición.");
             RestartRequest=new(statePath,_modules,_automaticReview);
             AppLog.Write("PRODUCT SESSION RESTART READY: cleanup completed; diagnostic="+diagnostic+"; draft retained; next startup=Firmware.");
             _disposedRuntime=true;_exitRequested=true;Close();_shutdown.TrySetResult();

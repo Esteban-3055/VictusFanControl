@@ -73,13 +73,24 @@ internal static partial class ProductGuiSelfTest
                 form.PresentationTick(); require(next.Commands == 0, "Recovery automatically activated saved Automatic preference.");
                 var exit = form.RequestExitAsync(); PumpUntil(() => exit.IsCompleted, "Recovered GUI exit hung."); require(next.Disposals == 1 && old.Disposals == 1, "Recovery duplicated runtime disposal.");
             }
-            foreach (var failure in new[] { "cleanup", "changed-session", "suspend-before", "suspend-during", "runner" })
+            foreach (var failure in new[] { "cleanup", "changed-session", "suspend-before", "suspend-inventory", "display-inventory", "suspend-during", "runner" })
             {
                 pending = selected; launches = 0; created = 0;
                 old = new RecordingRuntime { DisposeGate = new(TaskCreationOptions.RunContinuationsAsynchronously), DisposeFailure = failure == "cleanup" ? "unresolved release" : null };
                 var recovered = new TaskCompletionSource<ProductRecoveryResult>(TaskCreationOptions.RunContinuationsAsynchronously);
                 using var form = new ProductForm("fixture://recovery", fixture: old, fixtureProfiles: new ProductProfiles());
-                form.RecoverySelectionReader = () => pending;
+                int reads=0;
+                var reading=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                var releaseRead=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                form.RecoverySelectionReader = () =>
+                {
+                    if(Interlocked.Increment(ref reads)==2&&(failure is "suspend-inventory" or "display-inventory"))
+                    {
+                        reading.SetResult();
+                        releaseRead.Task.WaitAsync(TimeSpan.FromSeconds(10)).GetAwaiter().GetResult();
+                    }
+                    return pending;
+                };
                 form.RecoveryRuntimeFactory = _ => { created++; return Task.FromResult<IProductRuntime>(new RecordingRuntime()); };
                 form.RecoveryRunner = _ => { launches++; return failure == "runner" ? Task.FromResult(new ProductRecoveryResult(false, "fixture-failure", "other active process")) : recovered.Task; };
                 form.Show(); Application.DoEvents(); old.Publish(Pending()); var task = form.RecoverPerformanceAsync(true);
@@ -87,6 +98,13 @@ internal static partial class ProductGuiSelfTest
                 if (failure == "changed-session") pending = selected with { GpuSession = Guid.NewGuid() };
                 if (failure == "suspend-before") form.HandlePowerEventAsync(4).GetAwaiter().GetResult();
                 old.DisposeGate.SetResult();
+                if(failure is "suspend-inventory" or "display-inventory")
+                {
+                    PumpUntil(()=>reading.Task.IsCompleted,"Pending inventory was not read after owner disposal.");
+                    if(failure=="suspend-inventory")CompleteGuiTask(form.HandlePowerEventAsync(4),"Suspend during inventory hung.");
+                    else CompleteGuiTask(form.HandlePowerEventAsync(0x8013,0),"Display off during inventory hung.");
+                    releaseRead.SetResult();
+                }
                 if (failure == "suspend-during")
                 {
                     PumpUntil(() => launches == 1, "Recovery worker did not start."); form.HandlePowerEventAsync(4).GetAwaiter().GetResult();

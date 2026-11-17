@@ -110,17 +110,18 @@ internal static partial class ProductGuiSelfTest
         }
         {
             var runtime=new RecordingRuntime{StateOverride=Ready()};runtime.ManualCommandFixture=level=>{Accept(runtime,level);return Task.CompletedTask;};
-            long clock=0;bool duplicate=false;
+            long clock=0;bool duplicate=false;int sourceReads=0;
             using var form=new ProductForm("fixture://cooling-full-phase",fixture:runtime,fixtureProfiles:new());
             form.Show();Application.DoEvents();form.Canvas.Editing=ProductPowerProfile.Battery;
             var draft=ProductProfilesStore.Serialize(form.Draft);
-            form.SetSessionCoolingFixture(()=>PerformancePowerSourceKind.Ac,()=>clock,()=>
+            form.SetSessionCoolingFixture(()=>++sourceReads==1?PerformancePowerSourceKind.Ac:PerformancePowerSourceKind.Battery,()=>clock,()=>
             {
                 require(runtime.Disposals==0&&runtime.Fences==0,"Releasing resources before the cooling interval ended.");
                 form.HandleCommand("performance-apply");form.PresentationTick();
                 if(!duplicate){duplicate=true;Send(form,0x11);}clock+=1000;
             });
             Send(form,0x11);require(clock==20_000&&runtime.Commands==2&&runtime.LastManualLevel==50,"AC cooling did not hold its separate 20s budget and one 50/50 request.");
+            require(sourceReads==1,"Shutdown cooling rechecked the source after admitting the cooling interval.");
             Send(form,0x11);require(clock==20_000&&runtime.Commands==2,"Repeated query repeated cooling or extended the delay.");
             require(ProductProfilesStore.Serialize(form.Draft)==draft&&runtime.Disposals==0,"Cooling changed saved presets or released before confirmation.");
             Send(form,0x16,true);require(runtime.Disposals==1,"AC cooling failed to run normal release afterwards.");Exit(form);

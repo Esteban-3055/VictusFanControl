@@ -116,6 +116,8 @@ internal sealed class ExternalCoolingPage : IDisposable
                     if(_disposed)return;
                     _saved=settings with{Curve=CurrentCurve?.Invoke()??settings.Curve};Restore();Notice=connect?"Preferencias guardadas; conexión solicitada.":"Preferencias guardadas. Pulsa Conectar para iniciar la comunicación.";
                 }
+                catch(Exception error) when(error is IOException or UnauthorizedAccessException)
+                {if(!_disposed)Notice="No se pudieron escribir los ajustes de la base externa. "+error.Message;}
                 catch(Exception){if(!_disposed)Notice="No se pudo completar. Revisa host, puerto y clave Base64 de 32 bytes.";}
                 finally{Busy=false;if(!_disposed)Layout(_selected);}
                 break;

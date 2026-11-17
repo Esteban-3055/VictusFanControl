@@ -106,7 +106,7 @@ internal static partial class ProductGuiSelfTest
         {
             foreach(var received in new[]{now.AddMinutes(1),now.AddSeconds(-3)})
             {
-                var page=new ExternalCurvePage(canvas,()=>new ExternalCoolingSettings{Curve=curve},_=>Task.CompletedTask,
+                var page=new ExternalCurvePage(canvas,()=>new ExternalCoolingSettings{Curve=curve},_=>Task.FromResult<string?>(null),
                     ()=>diagnostics with{LastValidReceivedUtc=received});
                 Require(page.AppliedState=="Sin confirmación actual del ESP32"&&page.Markers(now).Count==0,
                     "Configuration confirmation disagreed with marker freshness after a clock change or expired receipt.");
@@ -123,7 +123,7 @@ internal static partial class ProductGuiSelfTest
         var zeroPoints=ExternalCurveMarkers.Build(zero,zero,zeroDiagnostics,now);
         Require(zeroPoints.Count==2&&zeroPoints.All(p=>p.Input==0&&p.Output==0),"Real zero marker missing");
         using(var canvas=new ProductCanvas{Size=new(1672,941),Page=ProductPage.ExternalCurve}) {
-            canvas.ExternalCurve=new(canvas,()=>new ExternalCoolingSettings{Curve=zero},_=>Task.CompletedTask,()=>zeroDiagnostics);
+            canvas.ExternalCurve=new(canvas,()=>new ExternalCoolingSettings{Curve=zero},_=>Task.FromResult<string?>(null),()=>zeroDiagnostics);
             using var image=new Bitmap(canvas.Width,canvas.Height);
             canvas.DrawToBitmap(image,new(Point.Empty,canvas.Size));
             Directory.CreateDirectory("logs/external-cooling-self-test");

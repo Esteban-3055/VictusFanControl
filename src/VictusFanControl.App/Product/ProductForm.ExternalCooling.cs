@@ -74,7 +74,7 @@ internal sealed partial class ProductForm
     {
         _canvas.Page=ProductPage.ExternalCooling;LayoutExternalCoolingPage();_canvas.Invalidate();
     }
-    private async Task SaveExternalCurveAsync(ExternalCurveConfiguration curve)
+    private async Task<string?> SaveExternalCurveAsync(ExternalCurveConfiguration curve)
     {
         if(_externalCoolingStore is null||_externalCooling is null)throw new InvalidOperationException();
         await _externalSettingsGate.WaitAsync();
@@ -84,7 +84,16 @@ internal sealed partial class ProductForm
             var connect=_externalCooling.Diagnostics.State is ExternalCoolingConnectionState.Connected or ExternalCoolingConnectionState.Connecting or ExternalCoolingConnectionState.Authenticating or ExternalCoolingConnectionState.Reconnecting;
             await Task.Run(()=>_externalCoolingStore.Save(next));_externalCoolingSettings=next;
             _externalCoolingPage?.UpdateSavedCurve(curve);
-            if(!_closing)await _externalCooling.ConfigureAsync(next,connect);
+            if(!_closing)
+            {
+                try { await _externalCooling.ConfigureAsync(next,connect); }
+                catch(Exception error)
+                {
+                    AppLog.Write("External curve saved; connection not confirmed: "+error.GetType().Name);
+                    return "Curva guardada en el PC. No se pudo restablecer la conexión con el ESP32.";
+                }
+            }
+            return null;
         }
         finally{_externalSettingsGate.Release();}
     }
@@ -102,7 +111,6 @@ internal sealed partial class ProductForm
                 try
                 {
                     settings=settings with{Curve=_externalCoolingSettings.Curve};
-                    await _externalCooling.DisconnectAsync();
                     await Task.Run(()=>_externalCoolingStore.Save(settings,key,remove));
                     _externalCoolingLoadNotice=null;_externalCoolingSettings=settings;
                     if(!_closing)await _externalCooling.ConfigureAsync(settings,connect);

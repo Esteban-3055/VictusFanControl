@@ -146,9 +146,12 @@ internal static class AppLog
             foreach (var segment in Enumerable.Reverse(segments))
             {
                 using var stream = new FileStream(segment, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                var size = (int)Math.Min(stream.Length, remaining);
-                truncated = stream.Length > size;
-                stream.Seek(-size, SeekOrigin.End); var bytes = new byte[size]; var read = 0;
+                var length = stream.Length;
+                var size = (int)Math.Min(length, remaining);
+                var offset = length - size;
+                if (offset > 0) stream.Position = offset - 1;
+                truncated = offset > 0 && stream.ReadByte() != '\n';
+                stream.Position = offset; var bytes = new byte[size]; var read = 0;
                 while (read < size) { var n = stream.Read(bytes, read, size - read); if (n == 0) break; read += n; }
                 if (read != size) Array.Resize(ref bytes, read);
                 chunks.Insert(0, bytes); remaining -= read;

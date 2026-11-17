@@ -5,7 +5,7 @@ namespace VictusFanControl.App;
 
 /// <summary>External-only draft. Editing never invokes the notebook runtime.</summary>
 internal sealed class ExternalCurvePage(ProductCanvas canvas,Func<ExternalCoolingSettings> settings,
-    Func<ExternalCurveConfiguration,Task> save,Func<ExternalCoolingDiagnostics?> diagnostics)
+    Func<ExternalCurveConfiguration,Task<string?>> save,Func<ExternalCoolingDiagnostics?> diagnostics)
 {
     private ExternalCurveConfiguration _saved=settings().Curve;
     internal ExternalCurveConfiguration Draft {get;private set;}=settings().Curve;
@@ -135,8 +135,9 @@ internal sealed class ExternalCurvePage(ProductCanvas canvas,Func<ExternalCoolin
                 Busy=true;canvas.Invalidate();
                 try
                 {
-                    var next=Draft with{Revision=Guid.NewGuid().ToString("N")};next.Validate();await save(next);
-                    Draft=_saved=next;Notice="Curva guardada. El ESP32 confirma su aplicación al recibirla.";
+                    var next=Draft with{Revision=Guid.NewGuid().ToString("N")};next.Validate();
+                    var notice=await save(next);
+                    Draft=_saved=next;Notice=notice??"Curva guardada. El ESP32 confirma su aplicación al recibirla.";
                 }
                 catch(Exception){Notice="No se pudo guardar la curva externa. Se conserva el borrador.";}
                 finally{Busy=false;}

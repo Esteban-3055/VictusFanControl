@@ -112,6 +112,13 @@ inline void presentationTests() {
     check(alert.overlay(19500,top,bottom)&&std::strstr(top,"CRITICA"),"critical preempts a running low warning");
     HyperXDisplayConfig disabled;disabled.criticalEnabled=false;alert.configure(disabled);
     check(!alert.overlay(19500,top,bottom),"disabling critical cancels an active warning");
+    HyperXDisplayState lowFallback;lowFallback.configure(disabled);lowFallback.observe(10,1000,0,0);
+    check(lowFallback.overlay(0,top,bottom)&&std::strstr(top,"BAJA"),"disabled critical warning falls back to enabled low warning");
+    HyperXDisplayState highLow;HyperXDisplayConfig high;high.lowPercent=96;highLow.configure(high);
+    highLow.observe(96,1000,0,0);
+    check(highLow.overlay(0,top,bottom),"supported high low-battery threshold alerts");
+    highLow.observe(100,2000,0,10000);highLow.observe(96,3000,0,20000);
+    check(highLow.overlay(20000,top,bottom)&&std::strstr(top,"BAJA"),"100 percent rearms a high low-battery threshold");
     HyperXDisplayState timed;HyperXDisplayConfig cfg;cfg.lowDurationMs=4000;cfg.lowBlinkCycles=2;timed.configure(cfg);timed.observe(20,1000,0,0);
     check(timed.overlay(3999,top,bottom)&&!timed.overlay(4000,top,bottom),"custom duration and blink count applied");
     HyperXDisplayState old;old.observe(10,1000,180000,0);

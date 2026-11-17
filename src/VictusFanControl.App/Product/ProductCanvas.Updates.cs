@@ -4,6 +4,12 @@ namespace VictusFanControl.App;
 
 internal sealed partial class ProductCanvas
 {
+    internal bool OptionalEditsPending => HyperX is { Dirty: true } or { Busy: true } ||
+        CoolingPage is { Dirty: true } or { Busy: true } ||
+        ExternalCurve is { Dirty: true } or { Busy: true };
+
+    internal bool UpdateEditsPending => Dirty || OptionalEditsPending;
+
     private void Updates(Graphics g)
     {
         DrawText(g,"Actualizaciones",320,88,31,null,1300,true);
@@ -20,14 +26,14 @@ internal sealed partial class ProductCanvas
         if(UpdateProgressPercent is { } progress)Bar(g,new(334,549,1280,10),progress,100,Accent);
         Button(g,"updates-check",UpdateBusy?"Operación en curso…":"Buscar actualizaciones",new(334,579,400,48),false,!UpdateBusy);
         Button(g,"updates-download",AvailableUpdate is { } ready&&DownloadedUpdate==ready?"Descarga guardada":"Descargar",new(750,579,390,48),false,!UpdateBusy&&AvailableUpdate is { } available&&(!available.IsPrerelease||Profiles.IncludePrereleaseUpdates)&&DownloadedUpdate!=available);
-        Button(g,"updates-install",DownloadedUpdate is { } cached?"Instalar v"+cached.Version:"Instalar",new(1156,579,460,48),true,!UpdateBusy&&DownloadedUpdate is { } downloaded&&(!downloaded.IsPrerelease||Profiles.IncludePrereleaseUpdates)&&!Dirty);
+        Button(g,"updates-install",DownloadedUpdate is { } cached?"Instalar v"+cached.Version:"Instalar",new(1156,579,460,48),true,!UpdateBusy&&DownloadedUpdate is { } downloaded&&(!downloaded.IsPrerelease||Profiles.IncludePrereleaseUpdates)&&!UpdateEditsPending);
         Card(g,new(310,668,1337,155));
         if(State.PerformanceRecovery is {Pending:true} recovery)
             Button(g,"recovery-run","Recuperar sesión definitiva",new(1120,689,496,43),true,!UpdateBusy&&recovery.Actionable);
         DrawText(g,"La descarga se conserva hasta que puedas instalar",334,689,24,null,780,true);
-        DrawText(g,Dirty?"Guarda o descarta los cambios antes de instalar la actualización.":State.PerformanceRecovery is {Pending:true}?
+        DrawText(g,UpdateEditsPending?"Guarda o descarta los cambios en las pantallas abiertas y espera cualquier guardado antes de instalar.":State.PerformanceRecovery is {Pending:true}?
             Profiles.RecoverSessionsAutomatically?"Al instalar, se recuperará la sesión pendiente y se continuará automáticamente si la liberación queda confirmada. La descarga se conserva.":
             "Recupera la sesión anterior y vuelve a pulsar Instalar. El archivo descargado se conserva.":
-            "Puedes descargar mientras usas el programa. Instalar comprobará la release de GitHub y el archivo guardado, y liberará ventiladores y límites CPU/GPU antes de cerrar.",334,738,22,Dirty?Yellow:Muted,1260,height:70);
+            "Puedes descargar mientras usas el programa. Instalar comprobará la release de GitHub y el archivo guardado, y liberará ventiladores y límites CPU/GPU antes de cerrar.",334,738,22,UpdateEditsPending?Yellow:Muted,1260,height:70);
     }
 }

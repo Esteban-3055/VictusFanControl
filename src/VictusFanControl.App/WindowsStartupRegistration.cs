@@ -39,14 +39,14 @@ internal static class WindowsStartupRegistration
 
     internal static Task<bool> IsEnabledAsync(string? modulesDirectory = null) => QueryEnabledAsync(true,modulesDirectory);
     internal static Task<bool> IsRegisteredEnabledAsync() => QueryEnabledAsync(false);
-    private static async Task<bool> QueryEnabledAsync(bool requireCurrentExecutable,string? modulesDirectory = null)
+    private static async Task<bool> QueryEnabledAsync(bool requireCurrentExecutable,string? modulesDirectory = null,bool? expectedMinimized = null)
     {
-        var result=await QueryAsync(requireCurrentExecutable,modulesDirectory).ConfigureAwait(false);
+        var result=await QueryAsync(requireCurrentExecutable,modulesDirectory,expectedMinimized:expectedMinimized).ConfigureAwait(false);
         if(result.State==StartupRegistrationState.Unknown)throw new IOException(result.Detail);
         return result.State==StartupRegistrationState.Enabled;
     }
 
-    internal static async Task<StartupRegistrationResult> QueryAsync(bool requireCurrentExecutable=true,string? modulesDirectory=null,Func<Task<string?>>? readFixture=null)
+    internal static async Task<StartupRegistrationResult> QueryAsync(bool requireCurrentExecutable=true,string? modulesDirectory=null,Func<Task<string?>>? readFixture=null,bool? expectedMinimized=null)
     {
         try
         {
@@ -58,7 +58,7 @@ internal static class WindowsStartupRegistration
         if(!document.Descendants(ns+"Enabled").All(e=>e.Value=="true"))return new(StartupRegistrationState.Disabled,"La tarea está deshabilitada.");
         if(!requireCurrentExecutable)return new(StartupRegistrationState.Enabled,"Intención de inicio habilitada.");
         using var identity=WindowsIdentity.GetCurrent();
-        return HasCurrentContract(document,identity.User!.Value,Environment.ProcessPath!,modulesDirectory??Path.Combine(AppContext.BaseDirectory,"modules"),identity.Name)
+        return HasCurrentContract(document,identity.User!.Value,Environment.ProcessPath!,modulesDirectory??Path.Combine(AppContext.BaseDirectory,"modules"),identity.Name,expectedMinimized)
             ?new(StartupRegistrationState.Enabled,"Tarea verificada."):new(StartupRegistrationState.DifferentContract,"La tarea requiere actualizar su configuración.");
         }
         catch(Exception error){return new(StartupRegistrationState.Unknown,"No se pudo consultar el inicio con Windows: "+error.Message);}
@@ -89,7 +89,7 @@ internal static class WindowsStartupRegistration
         }
     }
 
-    internal static bool HasCurrentContract(XDocument document,string sid,string executable,string modules,string? currentAccountName=null)
+    internal static bool HasCurrentContract(XDocument document,string sid,string executable,string modules,string? currentAccountName=null,bool? expectedMinimized=null)
     {
         XNamespace ns="http://schemas.microsoft.com/windows/2004/02/mit/task";
         var root=document.Root;if(root?.Name!=ns+"Task")return false;
@@ -98,6 +98,7 @@ internal static class WindowsStartupRegistration
         var principal=root.Element(ns+"Principals")?.Elements().SingleOrDefault();
         var action=root.Element(ns+"Actions")?.Elements().SingleOrDefault();
         var arguments=action?.Element(ns+"Arguments")?.Value;
+        var normalArguments="--modules-dir \""+modules+"\"";
         // Task Scheduler exports a logon UserId as DOMAIN\account even when
         // registration used its SID. Accept only the current OS identity's
         // exact SID or canonical account, never an arbitrary matching username.
@@ -109,7 +110,8 @@ internal static class WindowsStartupRegistration
             principal.Element(ns+"LogonType")?.Value=="InteractiveToken" && principal.Element(ns+"RunLevel")?.Value=="HighestAvailable" &&
             action?.Name==ns+"Exec" && string.Equals(action.Element(ns+"Command")?.Value,executable,StringComparison.OrdinalIgnoreCase) &&
             string.Equals(action.Element(ns+"WorkingDirectory")?.Value,Path.GetDirectoryName(executable),StringComparison.OrdinalIgnoreCase) &&
-            (arguments=="--modules-dir \""+modules+"\"" || arguments=="--start-minimized --modules-dir \""+modules+"\"") &&
+            ((expectedMinimized!=true&&arguments==normalArguments) ||
+             (expectedMinimized!=false&&arguments=="--start-minimized "+normalArguments)) &&
             Value("Settings","DisallowStartIfOnBatteries")=="false" && Value("Settings","StopIfGoingOnBatteries")=="false" &&
             Value("Settings","ExecutionTimeLimit")=="PT0S" && Value("Settings","AllowHardTerminate")=="false" &&
             Value("Settings","MultipleInstancesPolicy")=="IgnoreNew"&&
@@ -171,7 +173,7 @@ internal static class WindowsStartupRegistration
             var result = await RunAsync("/Delete", "/TN", TaskName, "/F").ConfigureAwait(false);
             if (result.ExitCode != 0) throw new IOException(result.Output);
         }
-        if(await QueryEnabledAsync(enabled,modulesDirectory).ConfigureAwait(false)!=enabled)throw new IOException("El resultado de la tarea no coincide con el cambio solicitado.");
+        if(await QueryEnabledAsync(enabled,modulesDirectory,enabled?startMinimized:null).ConfigureAwait(false)!=enabled)throw new IOException("El resultado de la tarea no coincide con el cambio solicitado.");
         }
         catch(Exception original)
         {

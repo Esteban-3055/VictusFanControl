@@ -313,6 +313,9 @@ internal static partial class ProductGuiSelfTest
             require(!AppLog.ReadTail(log).Contains("unrelated session"),"Log export mixed other sessions.");
             File.WriteAllText(log,"complete\npartial");File.Delete(log+".1");
             require(AppLog.ReadTail(log)=="complete\n","Concurrent partial JSON row entered diagnostic export.");
+            File.WriteAllText(log,"older\nkeep1\nkeep2\n");
+            require(AppLog.ReadTail(log,12)=="keep1\nkeep2\n"&&AppLog.ReadTail(log,6)=="keep2\n"&&
+                AppLog.ReadTail(log,10)=="keep2\n","Diagnostic tail lost a complete record at the byte boundary.");
             var sample=Snapshot(DateTimeOffset.UtcNow,40,35,5,0) with{GpuPowerW=double.NaN};AppLog.WriteTelemetry(sample);
             var rows=AppLog.ReadTail(AppLog.TelemetryLogPath).Split('\n',StringSplitOptions.RemoveEmptyEntries);
             using var row=System.Text.Json.JsonDocument.Parse(rows[^1]);

@@ -32,16 +32,19 @@ class HyperXDisplayState {
 public:
     void configure(const HyperXDisplayConfig& c) {
         if(!c.valid())return;
+        if(config.lowEnabled!=c.lowEnabled||config.lowPercent!=c.lowPercent||
+           config.criticalEnabled!=c.criticalEnabled||config.criticalPercent!=c.criticalPercent)
+            lowLatched=criticalLatched=false;
         config=c;
         if((active==1&&!c.lowEnabled)||(active==2&&!c.criticalEnabled))active=0;
     }
     void observe(double value,int64_t at,uint32_t sourceAge,uint32_t now) {
         if(!std::isfinite(value)||value<0||value>100||sourceAge>=180000||at<=sampled)return;
         sampled=at;percent=value;
-        if(value>=config.lowPercent+5)lowLatched=false;
-        if(value>=config.criticalPercent+5)criticalLatched=false;
-        if(value<=config.criticalPercent) {
-            if(!criticalLatched&&config.criticalEnabled){active=2;started=now;}
+        if(value>=(config.lowPercent>95?100:config.lowPercent+5))lowLatched=false;
+        if(config.criticalPercent<100&&value>=(config.criticalPercent>95?100:config.criticalPercent+5))criticalLatched=false;
+        if(config.criticalEnabled&&value<=config.criticalPercent) {
+            if(!criticalLatched){active=2;started=now;}
             criticalLatched=true;lowLatched=true;
         } else if(value<=config.lowPercent) {
             if(!lowLatched&&config.lowEnabled){active=1;started=now;}

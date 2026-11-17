@@ -16,6 +16,8 @@ internal sealed class HyperXMonitor(Action<int,DateTimeOffset>? persistHistory=n
     private string? eventPath;
     private Task? disposal;
     private long muteVersion;
+    private long receiverGeneration;
+    internal long BatteryQueryGeneration {get{lock(gate)return receiverGeneration;}}
     private readonly System.Collections.Concurrent.ConcurrentQueue<HyperXSnapshot> muteEvents=new();
     internal IEnumerable<HyperXSnapshot> DrainMuteEvents(){while(muteEvents.TryDequeue(out var e))yield return e;}
     internal HyperXSnapshot Snapshot {get{lock(gate)return latest;}}
@@ -33,18 +35,25 @@ internal sealed class HyperXMonitor(Action<int,DateTimeOffset>? persistHistory=n
             if(string.Equals(batteryPath,path,StringComparison.OrdinalIgnoreCase))return;
             batteryPath=path;batteryEstimate.Reset();
             while(muteEvents.TryDequeue(out _)){} // No pending events from a different receiver.
-            latest=new(){ReceiverPresent=path is not null,Status=path is null?"Receptor no disponible":"Preparando receptor",
+            latest=new(){ReceiverGeneration=++receiverGeneration,ReceiverPresent=path is not null,Status=path is null?"Receptor no disponible":"Preparando receptor",
                 LastKnownPercent=latest.LastKnownPercent,LastKnownSampledAt=latest.LastKnownSampledAt};
         }
     }
     internal void InvalidateBattery(string status)=>Publish(s=>s with{Status=status,Percent=null,Millivolts=null,Charging=null,SampledAt=null});
     internal bool ApplyBatteryReport(ReadOnlySpan<byte> report,DateTimeOffset sampledAt,long sampleMilliseconds)
+        => ApplyBatteryReportCore(report,sampledAt,sampleMilliseconds,null);
+    internal bool ApplyQueriedBatteryReport(ReadOnlySpan<byte> report,DateTimeOffset sampledAt,long sampleMilliseconds,long queryGeneration)
+        => ApplyBatteryReportCore(report,sampledAt,sampleMilliseconds,queryGeneration);
+    private bool ApplyBatteryReportCore(ReadOnlySpan<byte> report,DateTimeOffset sampledAt,long sampleMilliseconds,long? queryGeneration)
     {
         if(HyperXSnapshot.Decode(report, fullChargeMillivolts) is not{} b)return false;
         int? percent;
         lock(gate)
         {
-            if(latest.Powered==false)
+            // A new request to the current receiver can restore battery telemetry
+            // when a hardware power-on event was missed. An older request cannot.
+            if(queryGeneration.HasValue&&queryGeneration.Value!=receiverGeneration)return true;
+            if(latest.Powered==false&&!queryGeneration.HasValue)
             {
                 batteryEstimate.Reset();
                 latest=latest with{ReceiverPresent=true,Status="Audífonos apagados",Percent=null,Millivolts=null,Charging=null,SampledAt=null};
@@ -53,6 +62,7 @@ internal sealed class HyperXMonitor(Action<int,DateTimeOffset>? persistHistory=n
             if(b.Charging==true){batteryEstimate.Reset();percent=null;}
             else percent=batteryEstimate.Observe(b.Millivolts,sampleMilliseconds);
             latest=latest with{ReceiverPresent=true,
+                Powered=latest.Powered==false?true:latest.Powered,
                 Status=b.Charging!=true&&percent is null?"Voltaje recibido; porcentaje sin referencia suficiente":
                     b.Millivolts<HyperXBatteryEstimator.ReferenceMinimumMillivolts?"Batería muy baja · estimación provisional":
                     eventPath is null?"Batería recibida; eventos de micrófono no disponibles":"Lectura recibida",
@@ -113,13 +123,14 @@ internal sealed class HyperXMonitor(Action<int,DateTimeOffset>? persistHistory=n
                     using var file=HyperXHid.Open(battery,true);
                     using var deadline=CancellationTokenSource.CreateLinkedTokenSource(stop.Token);deadline.CancelAfter(TimeSpan.FromSeconds(2));
                     byte[] request=new byte[20];request[0]=0x21;request[1]=0xff;request[2]=5;
+                    var queryGeneration=BatteryQueryGeneration;
                     await file.WriteAsync(request,deadline.Token);
                     var buffer=new byte[battery.InputBytes];
                     while(true)
                     {
                         int count=await file.ReadAsync(buffer,deadline.Token);
                         if(count==0)throw new IOException("Receptor desconectado");
-                        if(!ApplyBatteryReport(buffer.AsSpan(0,count),DateTimeOffset.UtcNow,Environment.TickCount64))continue;
+                        if(!ApplyQueriedBatteryReport(buffer.AsSpan(0,count),DateTimeOffset.UtcNow,Environment.TickCount64,queryGeneration))continue;
                         break;
                     }
                 }
@@ -145,17 +156,31 @@ internal sealed class HyperXMonitor(Action<int,DateTimeOffset>? persistHistory=n
             }
         }
         catch(Exception e)when(e is IOException or OperationCanceledException or ObjectDisposedException){}
-        finally{Publish(s=>s with{Muted=null,Powered=null,Percent=null,Millivolts=null,Charging=null,SampledAt=null});}
+        finally{ResetReceiverEvents(null);}
     }
     internal void ApplyEvent(byte kind,byte value)
     {
         // Never interpret unrelated 2-byte reports as "unmuted".
         if(kind==0x65&&value is 0 or 4)
         {
-            Publish(s=>s with{Muted=value==4,MuteEventVersion=Interlocked.Increment(ref muteVersion),MuteEventAt=DateTimeOffset.UtcNow});
-            muteEvents.Enqueue(Snapshot);while(muteEvents.Count>32)muteEvents.TryDequeue(out _);
+            lock(gate)
+            {
+                latest=latest with{Muted=value==4,MuteEventVersion=++muteVersion,MuteEventAt=DateTimeOffset.UtcNow};
+                muteEvents.Enqueue(latest);while(muteEvents.Count>32)muteEvents.TryDequeue(out _);
+            }
         }
-        if(kind==0x64&&value is 1 or 3)Publish(s=>value==1?s with{Powered=true}:s with{Powered=false,Muted=null,Percent=null,Millivolts=null,Charging=null,SampledAt=null});
+        if(kind==0x64&&value==1)Publish(s=>s with{Powered=true});
+        if(kind==0x64&&value==3)ResetReceiverEvents(false);
+    }
+    private void ResetReceiverEvents(bool? powered)
+    {
+        lock(gate)
+        {
+            batteryEstimate.Reset();
+            while(muteEvents.TryDequeue(out _)){}
+            latest=latest with{ReceiverGeneration=++receiverGeneration,Powered=powered,Muted=null,Percent=null,Millivolts=null,Charging=null,SampledAt=null,
+                Status=powered==false?"Audífonos apagados":latest.Status};
+        }
     }
     private async Task StopEventsAsync()
     {

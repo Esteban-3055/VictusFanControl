@@ -15,6 +15,7 @@ internal sealed record HyperXSnapshot
     internal int? LastKnownPercent {get;init;}
     internal DateTimeOffset? LastKnownSampledAt {get;init;}
     internal bool? Muted {get;init;}
+    internal long ReceiverGeneration {get;init;}
     internal long MuteEventVersion {get;init;}
     internal DateTimeOffset? MuteEventAt {get;init;}
     internal bool? Powered {get;init;}
@@ -85,19 +86,22 @@ internal sealed class HyperXNotificationPolicy
 {
     private bool low,critical,full;
     private bool? muted;
+    private long receiverGeneration;
     private long muteVersion;
     private HyperXSettings? previousSettings;
     internal IReadOnlyList<HyperXNotice> Evaluate(HyperXSnapshot s,HyperXSettings cfg,DateTimeOffset now)
     {
+        if(s.ReceiverGeneration<receiverGeneration)return Array.Empty<HyperXNotice>();
         cfg.Validate();var output=new List<HyperXNotice>();
         if(previousSettings!=cfg){low=critical=full=false;previousSettings=cfg;}
         if(s.Fresh(now)&&s.Percent is{} p)
         {
-            if(p>=cfg.LowPercent+5)low=false;if(p>=cfg.CriticalPercent+5)critical=false;
+            if(p>=Math.Min(100,cfg.LowPercent+5))low=false;
+            if(cfg.CriticalPercent<100&&p>=Math.Min(100,cfg.CriticalPercent+5))critical=false;
             if(p<cfg.FullPercent-5)full=false;
-            if(p<=cfg.CriticalPercent)
+            if(cfg.CriticalEnabled&&p<=cfg.CriticalPercent)
             {
-                if(!critical&&cfg.CriticalEnabled)output.Add(new("HyperX: batería crítica",$"Carga estimada: {p} %. Conecta el cable de carga."));
+                if(!critical)output.Add(new("HyperX: batería crítica",$"Carga estimada: {p} %. Conecta el cable de carga."));
                 critical=true;low=true;
             }
             else if(p<=cfg.LowPercent)
@@ -111,6 +115,7 @@ internal sealed class HyperXNotificationPolicy
         }
         // An active report after unknown/reconnect establishes a silent baseline.
         // Only a previously known muted state can produce an unmute notice.
+        if(s.ReceiverGeneration!=receiverGeneration){receiverGeneration=s.ReceiverGeneration;muted=null;}
         if(s.Muted is{} m&&s.MuteEventVersion>muteVersion&&muted!=m&&(m||muted==true)&&cfg.MuteEnabled&&s.MuteEventAt is{} eventAt&&now>=eventAt&&(now-eventAt).TotalSeconds<5)
             output.Add(new(m?"HyperX: micrófono silenciado":"HyperX: micrófono activado",m?"Se silenció el micrófono de los audífonos.":"Se quitó el silencio del micrófono."));
         muteVersion=Math.Max(muteVersion,s.MuteEventVersion);muted=s.Muted;return output;

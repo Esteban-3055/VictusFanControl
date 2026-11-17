@@ -53,6 +53,9 @@ internal sealed partial class ProductForm
                 pending.GpuSession != Guid.Empty && pending.GpuSession != selected.GpuSession || !ProductRecoveryInventory.AllowsRemaining(selected.Fans,pending.Fans))
                 throw new IOException("Los identificadores pendientes cambiaron. No se recuperó otra sesión.");
             await RecoveryUiAsync(() => { _canvas.Notice = "Recuperando sesiones y guardando respaldos…"; _canvas.Invalidate(); });
+            if (_closing || _exitRequested) return false;
+            if (_systemSuspended || _displayOff || _restartLifecycleInterrupted)
+                throw new IOException("Recuperación cancelada por suspensión o pantalla apagada. No se abrió el recuperador.");
             var recovered = pending.Pending
                 ? await Task.Run(() => RecoveryRunner?.Invoke(pending) ?? ProductRecoveryClient.RunAsync(AppContext.BaseDirectory, _modules, pending))
                 : new ProductRecoveryResult(true, "", "La liberación normal resolvió los registros pendientes.");

@@ -18,6 +18,12 @@ internal static class HyperXSelfTest
         var now=DateTimeOffset.UtcNow;var sample=new HyperXSnapshot{ReceiverPresent=true,SampledAt=now,Percent=20};
         Check(sample.Fresh(now.AddSeconds(179))&&!sample.Fresh(now.AddSeconds(180))&&!sample.Fresh(now.AddMilliseconds(-1)),"HyperX independent freshness bounds");
         var cfg=new HyperXSettings();var policy=new HyperXNotificationPolicy();
+        Check(new HyperXNotificationPolicy().Evaluate(sample with{Percent=10},cfg with{CriticalEnabled=false},now).Single().Title.Contains("baja"),
+            "Disabled critical alert hid the low battery alert");
+        var highThreshold=new HyperXNotificationPolicy();var highSettings=cfg with{LowPercent=96,FullEnabled=false};
+        Check(highThreshold.Evaluate(sample with{Percent=96},highSettings,now).Count==1,"High low-battery threshold did not alert");
+        highThreshold.Evaluate(sample with{Percent=100},highSettings,now);
+        Check(highThreshold.Evaluate(sample with{Percent=96},highSettings,now).Count==1,"A full recharge failed to rearm the high low-battery threshold");
         Check(policy.Evaluate(sample,cfg,now).Count==1&&policy.Evaluate(sample,cfg,now).Count==0,"Low alarm repeated");
         Check(policy.Evaluate(sample with{Percent=10},cfg,now).Single().Title.Contains("crítica"),"Critical alarm lost or duplicate low");
         Check(policy.Evaluate(new(),cfg,now).Count==0&&policy.Evaluate(sample with{Percent=10},cfg,now).Count==0,"Missing data rearmed critical alarm");
@@ -61,7 +67,18 @@ internal static class HyperXSelfTest
         var reader=new HyperXMonitor();reader.ApplyEvent(0x66,0);Check(reader.Snapshot.Muted is null,"Unknown report invented unmute");
         reader.ApplyEvent(0x65,4);reader.ApplyEvent(0x65,0);
         Check(reader.DrainMuteEvents().Select(s=>s.Muted).SequenceEqual(new bool?[]{true,false}),"Coalesced UI lost mute edges");
+        var powerCyclePolicy=new HyperXNotificationPolicy();
+        reader.ApplyEvent(0x65,4);
+        foreach(var state in reader.DrainMuteEvents())powerCyclePolicy.Evaluate(state,cfg,DateTimeOffset.UtcNow);
+        var oldQuery=reader.BatteryQueryGeneration;
         reader.ApplyEvent(0x64,3);Check(reader.Snapshot.Powered==false&&reader.Snapshot.Muted is null,"Power-off retained mute");
+        var report=Convert.FromHexString("21ff050ed3000000000000000000000000000000");
+        Check(reader.ApplyQueriedBatteryReport(report,now,1000,oldQuery)&&reader.Snapshot.Percent is null,"A late battery reply crossed the power-off boundary");
+        Check(reader.ApplyQueriedBatteryReport(report,now,61000,reader.BatteryQueryGeneration)&&reader.Snapshot is {Powered:true,Percent:not null},
+            "A valid new query could not restore battery telemetry after a missed power-on event");
+        reader.ApplyEvent(0x65,0);
+        Check(reader.DrainMuteEvents().SelectMany(state=>powerCyclePolicy.Evaluate(state,cfg,DateTimeOffset.UtcNow)).Count()==0,
+            "Receiver power boundary looked like a manual unmute");
         reader.DisposeAsync().AsTask().GetAwaiter().GetResult();reader.DisposeAsync().AsTask().GetAwaiter().GetResult();
         var heldCleanup=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var clock=System.Diagnostics.Stopwatch.StartNew();

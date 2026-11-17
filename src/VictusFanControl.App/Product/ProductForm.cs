@@ -268,9 +268,9 @@ internal sealed partial class ProductForm : Form
             { _startupAutomatic=new(clock,protections:profiles.Protections,resumption:true);return; }
             _ = RunAsync(async()=>
             {
+                var owner=_runtime;
                 try
                 {
-                    var owner=_runtime;
                     await owner.SelectFanModeAsync(AdaptiveFanProductionMode.Automatic,profiles);
                     RememberConfirmedAutomaticActivation(owner,profiles);_recoveryEpisode.Finish();
                     if(request.Phase!="resumption")_recoveryEpisode.CompleteUserActivation();
@@ -278,10 +278,22 @@ internal sealed partial class ProductForm : Form
                 catch(Exception activationError)
                 {
                     // Release both domains after a failed unattended preparation; journals survive a release failure.
-                    await _runtime.ReleasePerformanceAsync();
-                    UpdateState(_runtime.State with{Failure="Preparación de Automático no completada: "+activationError.Message});
-                    _recoveryEpisode.Finish(ownerConfirmed:!_runtime.State.PerformanceProcessPresent&&_runtime.State.PerformanceRecovery?.Pending!=true);
-                    if(!request.Cancelled && !_closing && !_displayOff && !_runtime.State.LifecycleBlocked)
+                    bool released=false;
+                    try
+                    {
+                        await owner.ReleasePerformanceAsync();
+                        released=!owner.State.PerformanceProcessPresent&&owner.State.PerformanceRecovery?.Pending!=true;
+                    }
+                    catch(Exception releaseError)
+                    {
+                        var detail="Preparación de Automático no completada: "+activationError.Message+
+                            ". Liberación CPU/GPU sin confirmar: "+releaseError.Message;
+                        UpdateState(owner.State with {Failure=detail});
+                        throw new IOException(detail,new AggregateException(activationError,releaseError));
+                    }
+                    finally { _recoveryEpisode.Finish(ownerConfirmed:released); }
+                    UpdateState(owner.State with{Failure="Preparación de Automático no completada: "+activationError.Message});
+                    if(released && !request.Cancelled && !_closing && !_displayOff && !owner.State.LifecycleBlocked)
                     {
                         _startupRetryAt=Environment.TickCount64+_recoveryEpisode.DelayMilliseconds;
                         _startupAutomatic=new(Environment.TickCount64,protections:profiles.Protections,resumption:true);
@@ -295,8 +307,8 @@ internal sealed partial class ProductForm : Form
     {
         if(_closing||IsDisposed)return;
         if(id.StartsWith("hyperx-",StringComparison.Ordinal)&&_hyperXPage is{} headset){if(!_canvas.Busy)_=headset.ExecuteAsync(id[7..]);return;}
-        if(id.StartsWith("external-curve-",StringComparison.Ordinal)&&_canvas.ExternalCurve is{} curve){_=curve.ExecuteAsync(id[15..]);return;}
-        if(id!="external-cooling"&&id.StartsWith("external-",StringComparison.Ordinal)&&_externalCoolingPage is{} external){_=external.ExecuteAsync(id);return;}
+        if(id.StartsWith("external-curve-",StringComparison.Ordinal)&&_canvas.ExternalCurve is{} curve){if(!_restarting)_=curve.ExecuteAsync(id[15..]);return;}
+        if(id!="external-cooling"&&id.StartsWith("external-",StringComparison.Ordinal)&&_externalCoolingPage is{} external){if(!_restarting)_=external.ExecuteAsync(id);return;}
         if (id is "firmware" or "fan-mode-0" or "fan-mode-1" or "session-restart")
             _automaticRecoveryResumeSuppressed = true;
         if (_recoveryTask is not null && id is "firmware" or "fan-mode-0" or "fan-mode-1" or "performance-release")
@@ -572,7 +584,21 @@ internal sealed partial class ProductForm : Form
             _animationReload=Task.Run(current.Reload);
     }
     private void ResetSimulation()=>_canvas.Simulation=new(_draft.Get(_canvas.Editing).Fan);
-    private async Task SaveAsync() => await RunAsync(async()=>{var settings=Draft;await Task.Run(()=>ProductProfilesStore.Save(settings,_profilesPath));_saved=ProductProfilesStore.Copy(settings);_hasSavedBaseline=true;_canvas.Dirty=false;if(_canvas.StartupEnabled)await WriteStartupRegistrationAsync(true,settings.StartMinimized);_canvas.Notice="Perfiles guardados. No se ha aplicado hardware.";});
+    private async Task SaveAsync() => await RunAsync(async()=>
+    {
+        var settings=Draft;
+        await Task.Run(()=>ProductProfilesStore.Save(settings,_profilesPath));
+        _saved=ProductProfilesStore.Copy(settings);_hasSavedBaseline=true;_canvas.Dirty=false;
+        if(_canvas.StartupEnabled)
+        {
+            try { await WriteStartupRegistrationAsync(true,settings.StartMinimized); }
+            catch(Exception error)
+            {
+                throw new IOException("Perfiles guardados. Windows no confirmó la opción de inicio minimizado. Pulsa Guardar para reintentar. "+error.Message,error);
+            }
+        }
+        _canvas.Notice="Perfiles guardados. No se ha aplicado hardware.";
+    });
     private async Task ToggleStartupAsync()
     {
         if(!_canvas.StartupKnown){await CheckStartupRegistrationAsync();return;}
@@ -581,7 +607,7 @@ internal sealed partial class ProductForm : Form
             var requested=!_canvas.StartupEnabled;
             try
             {
-                await WriteStartupRegistrationAsync(requested,_draft.StartMinimized);
+                await WriteStartupRegistrationAsync(requested,_saved.StartMinimized);
                 _canvas.StartupEnabled=await ReadStartupRegistrationAsync();
             }
             catch { _canvas.StartupKnown=false;throw; }

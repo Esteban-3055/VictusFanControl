@@ -38,6 +38,9 @@ internal static class PerformanceGuiIntegrationSelfTest
             var document = XDocument.Parse(xml);
             XNamespace ns = "http://schemas.microsoft.com/windows/2004/02/mit/task";
             Require(WindowsStartupRegistration.HasCurrentContract(document,"S-1-5-21-123",@"C:\Program Files\Victus & Control\app.exe",@"C:\Modules & Tools"),"Current startup contract rejected.");
+            Require(WindowsStartupRegistration.HasCurrentContract(document,"S-1-5-21-123",@"C:\Program Files\Victus & Control\app.exe",@"C:\Modules & Tools",expectedMinimized:true)&&
+                    !WindowsStartupRegistration.HasCurrentContract(document,"S-1-5-21-123",@"C:\Program Files\Victus & Control\app.exe",@"C:\Modules & Tools",expectedMinimized:false),
+                "Startup registration accepted the opposite minimized preference.");
             foreach(var triggerAsAccount in new[]{false,true})
             foreach(var principalAsAccount in new[]{false,true})
             {

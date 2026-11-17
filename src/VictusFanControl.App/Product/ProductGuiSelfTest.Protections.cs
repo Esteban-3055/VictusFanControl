@@ -86,7 +86,12 @@ internal static partial class ProductGuiSelfTest
                 TelemetrySnapshot Sample(int i)=>new(at.AddSeconds(i),"CPU",55,20,30,"GPU",45,15,20,2000,2000)
                 {CpuExpectedPhysicalCoreCount=1,CpuCoreTemperatures=[new(0,0,"Performance",55)]};
                 ProductRuntimeState Ready(int i)=>new(){Target="HP-8C40-9D0R1LA-F18",AutomaticAuthorized=true,Runtime="Healthy",Source="Ac",FanAuthority="Firmware",CanApplyPerformance=true,Snapshot=Sample(i)};
-                old.Publish(Ready(2) with{FanMode="Automatic"});form.EditValue("pl1",38);
+                old.Publish(Ready(2) with{FanMode="Automatic"});
+                form.HandleCommand("protections-resume");
+                if(failure)form.HandleCommand("protections-resume");
+                else form.HandleCommand("discard");
+                require(form.Draft.Protections.ResumeAutomatic,"Discard/re-enable did not restore the resume preference.");
+                form.EditValue("pl1",38);
                 old.Publish(Ready(2) with{LifecycleBlocked=true,LifecycleBlockReason="transient interruption"});
                 form.TryAutomaticResumption(Environment.TickCount64+10001);
                 PumpUntil(()=>old.Disposals==1,"Unattended retry did not release the old runtime.");require(created==0,"Unattended retry bypassed the old release.");
