@@ -82,7 +82,7 @@ internal sealed class HyperXBatteryPage(ProductCanvas canvas,HyperXSettings sett
             case "full-enabled":Draft=Draft with{FullEnabled=!Draft.FullEnabled};break;
             case "mute-enabled":Draft=Draft with{MuteEnabled=!Draft.MuteEnabled};break;
             case "discard":Draft=saved;Notice="Ajustes HyperX guardados restaurados.";break;
-            case "reset":Draft=new();Notice="Valores iniciales en edición. Guarda para aplicarlos.";break;
+            case "reset":Draft=new(){FullChargeMillivolts=saved.FullChargeMillivolts};Notice="Valores iniciales en edición. Guarda para aplicarlos.";break;
             case "save":await SaveAsync();return;
         }
         Refresh();

@@ -1,4 +1,4 @@
-﻿param([switch]$NoOpen,[int]$InstallerProcessId=0,[switch]$EnableStartupAutomatic,[switch]$PreserveStartupPreferences)
+﻿param([switch]$NoOpen,[int]$InstallerProcessId=0,[switch]$EnableStartupAutomatic,[switch]$PreserveStartupPreferences,[switch]$DesktopShortcut)
 $ErrorActionPreference='Stop'
 $OutputEncoding=[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 if($EnableStartupAutomatic -and $PreserveStartupPreferences){throw 'Selecciona sólo una opción de inicio.'}
@@ -80,12 +80,17 @@ elseif($PreserveStartupPreferences){$start.Arguments+=' --preserve-product-start
 $process=[Diagnostics.Process]::Start($start)
 try{$process.WaitForExit();if($process.ExitCode -ne 0){throw 'No se configuró el inicio. Se conservó la instalación anterior; revisa el mensaje.'}}finally{$process.Dispose()}
 $shell=New-Object -ComObject WScript.Shell
-$shortcut=$shell.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Programs')) 'VictusFanControl.lnk'))
-$shortcut.TargetPath=Join-Path $app 'VictusFanControl.App.exe'
-$shortcut.Arguments='--modules-dir "'+(Join-Path $app 'modules')+'"'
-$shortcut.WorkingDirectory=$app
-$shortcut.IconLocation=(Join-Path $app 'VictusFanControl.App.exe')+',0'
-$shortcut.Save()
+$folders=@([Environment]::GetFolderPath('Programs'))
+$desktop=[Environment]::GetFolderPath('DesktopDirectory')
+if($desktop -and ($DesktopShortcut -or (Test-Path -LiteralPath (Join-Path $desktop 'VictusFanControl.lnk')))) { $folders+=$desktop }
+foreach($folder in $folders) {
+    $shortcut=$shell.CreateShortcut((Join-Path $folder 'VictusFanControl.lnk'))
+    $shortcut.TargetPath=Join-Path $app 'VictusFanControl.App.exe'
+    $shortcut.Arguments='--modules-dir "'+(Join-Path $app 'modules')+'"'
+    $shortcut.WorkingDirectory=$app
+    $shortcut.IconLocation=(Join-Path $app 'VictusFanControl.App.exe')+',0'
+    $shortcut.Save()
+}
 Write-Host "Instalado en $destination"
 Write-Host 'Perfiles y preferencias anteriores conservados. Primera instalación: inicio con Windows, minimizado y Automático. La apertura mantiene los requisitos de sensores, guardianes y recuperación.'
 if(-not $NoOpen){& (Join-Path $destination 'Start-ProductGui.ps1') -Mode Open}
