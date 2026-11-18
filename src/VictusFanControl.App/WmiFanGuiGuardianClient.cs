@@ -250,16 +250,23 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
             releasedReportPath,
             r.GetProperty("ExitReason").GetString()!);
 
-        lock (_ctgpPublication) { _lastCtgpStatus = null; _ctgpReadFailure = null; }
         if (!_fixture)
         {
             var nextDirectory = CreateSessionDirectory();
             WmiFanExperimentBoundary.RearmGuiAfterSuccessfulRelease(
                 releasedDirectory,
                 nextDirectory);
-            SessionDirectory = nextDirectory;
+            lock (_ctgpPublication)
+            {
+                SessionDirectory = nextDirectory;
+                _lastCtgpStatus = null; _ctgpReadFailure = null;
+            }
             _clock.Restart();
             _released = false;
+        }
+        else
+        {
+            lock (_ctgpPublication) { _lastCtgpStatus = null; _ctgpReadFailure = null; }
         }
 
         _child.Dispose();
