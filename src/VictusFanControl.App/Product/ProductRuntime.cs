@@ -404,12 +404,8 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff,
                         guardian = _performance.LastStatus, performance = _automaticPerformance, fan = _controller.AutomaticConfiguration,
                         remainingSeconds = _automaticReview?.RemainingSeconds }));
                 }
-                if (_ctgpRequested && _ctgpSource == "Ac" && expected == "Ac" &&
-                    _fanGuardian?.Ctgp is not { Active: true, Failure: null })
-                {
-                    _ctgpFaulted = true;
-                    throw new InvalidOperationException("cTGP perdió su confirmación vigente; volver a Firmware.");
-                }
+                if (_ctgpRequested && _ctgpSource == "Ac" && expected == "Ac")
+                    EnsureCtgpConfirmation(_fanGuardian?.Ctgp, ref _ctgpFaulted);
                 var decision = await _controller.ProcessAutomaticAsync(snapshot,raw,token, refreshRawSafetyProvider: () =>
                 {
                     if (!ReferenceEquals(_snapshot,snapshot) || _closing || _lifecycleBlocked) return null;
@@ -436,21 +432,18 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff,
             }
             catch (Exception ex)
             {
-                if (_ctgpRequested)
-                {
-                    // An unreadable replacement may retain a recent Active observation.
-                    // Loss of the guardian itself still forbids unattended reactivation.
-                    try { _fanGuardian?.EnsureAlive(); }
-                    catch { _ctgpFaulted = true; }
-                }
-                if (_ctgpRequested && _ctgpSource == "Ac" && _fanGuardian?.Ctgp is not { Active: true, Failure: null })
+                // Expiry or missing telemetry still releases the old controller.
+                // Only an explicit policy failure cancels previous Automatic intent.
+                // Resumption must independently confirm full owner/native release.
+                if (_ctgpRequested && _fanGuardian?.Ctgp?.Failure is not null)
                     _ctgpFaulted = true;
                 AppLog.WriteStructured("PRODUCT AUTOMATIC INTERRUPTION EVIDENCE",new
                 {
                     automaticSessionId=_automaticSessionId,selectedProfile=_selectedFanProfile,
                     transitionCandidate=_sourceTransition.Candidate,transitionPending=_sourceTransition.Pending,
                     guardianFresh=_performance.LastStatusFresh,guardian=_performance.LastStatus,
-                    performance=_performance.AppliedConfiguration,snapshot,error=ex.Message
+                    performance=_performance.AppliedConfiguration,snapshot,error=ex.Message,
+                    ctgp=_fanGuardian?.CtgpDiagnostic(),ctgpRequiresManualRecovery=_ctgpFaulted
                 });
                 _automaticInterruptionSnapshot = snapshot; AppLog.Write("PRODUCT AUTOMATIC INTERRUPTED: " + _automaticSessionId + " · " + ex.Message); _automaticActivation.Cancel();
                 _lifecycleBlocked = true; _lifecycleBlockReason = ex.Message; _fans.CloseCustomAdmissionForLifecycleBoundary();
@@ -622,6 +615,13 @@ internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff,
         catch { _ctgpFaulted = true; throw; }
         _ctgpRequested = selected; _ctgpSource = source;
         AppLog.WriteStructured("PRODUCT CTGP SELECTION", new { selected, source, status = _fanGuardian.Ctgp });
+    }
+    internal static void EnsureCtgpConfirmation(CtgpStatus? status, ref bool policyFault)
+    {
+        if (status?.Failure is not null) policyFault = true;
+        if (status is not { State: "Active", Active: true, Managed: true, Failure: null } ||
+            !status.FreshAt(DateTimeOffset.UtcNow))
+            throw new InvalidOperationException("cTGP perdió su confirmación vigente; volver a Firmware.");
     }
     public Task ApplyFanCurveAsync(ProductPowerProfile source, UnifiedFanDemand demand)
     {

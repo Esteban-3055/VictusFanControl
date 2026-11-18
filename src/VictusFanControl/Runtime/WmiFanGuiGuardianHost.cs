@@ -148,6 +148,7 @@ internal static class WmiFanGuiGuardianHost
                 // narrow modulo window. Never replay missed observations.
                 if (clock.Elapsed >= nextCtgpObservation)
                 {
+                    var observationStarted = clock.Elapsed;
                     try
                     {
                         if (ctgp.NeedsRestore || fixtureBeforeObservation is not null)
@@ -173,7 +174,9 @@ internal static class WmiFanGuiGuardianHost
                         PublishCtgp();
                     }
                     catch (Exception ex) { ctgp.Fail(ex); PublishCtgp(); throw; }
-                    nextCtgpObservation = clock.Elapsed + TimeSpan.FromSeconds(2);
+                    // Slow successful work consumes the interval. Do not append a
+                    // second full idle interval to an already old observation.
+                    nextCtgpObservation = observationStarted + TimeSpan.FromSeconds(2);
                 }
                 // Work may legitimately include mutex admission and a slow,
                 // completed WMI call. It is not the following idle interval.

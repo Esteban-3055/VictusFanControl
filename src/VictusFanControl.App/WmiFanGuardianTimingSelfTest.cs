@@ -72,7 +72,7 @@ internal static class WmiFanGuardianTimingSelfTest
                 catch (OperationCanceledException) when (stopHeartbeat.IsCancellationRequested) { break; }
             }
         });
-        var delayed = false;
+        var delayed = 0;
         var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var args = new[] { "--fan-wmi-fixture-session", "--session-dir", folder, "--owner-pid", owner.Id.ToString(), "--owner-start", owner.StartTime.ToUniversalTime().Ticks.ToString() };
         var command = new CtgpCommand(Guid.NewGuid(), owner.Id, owner.StartTime.ToUniversalTime().Ticks, true);
@@ -82,8 +82,9 @@ internal static class WmiFanGuardianTimingSelfTest
         {
             // Delay a real host iteration only after activation. This callback is
             // rejected in production and never reaches a hardware transport.
-            if (delayed || !File.Exists(Path.Combine(folder, "ctgp-reply.json"))) return;
-            delayed = true; Thread.Sleep(3400); completed.SetResult();
+            if (delayed >= 2 || !File.Exists(Path.Combine(folder, "ctgp-reply.json"))) return;
+            delayed++; Thread.Sleep(3400);
+            if(delayed==2)completed.SetResult();
         }));
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
         try
@@ -92,7 +93,7 @@ internal static class WmiFanGuardianTimingSelfTest
             while (!File.Exists(Path.Combine(folder, "ctgp-reply.json"))) await Task.Delay(20, timeout.Token);
             while (!completed.Task.IsCompleted)
             {
-                Require(reader.Ctgp is { Active: true, Failure: null }, "GUI lost its five-second confirmation during bounded slow work.");
+                Require(reader.Ctgp is { Active: true, Failure: null }, "GUI lost its five-second confirmation between two slow completed observations.");
                 await Task.Delay(25, timeout.Token);
             }
             await completed.Task;
@@ -115,7 +116,7 @@ internal static class WmiFanGuardianTimingSelfTest
         Require(report.RootElement.GetProperty("ExitReason").GetString() == "CLIENT_RELEASE" &&
             report.RootElement.GetProperty("CtgpRestored").GetBoolean() &&
             report.RootElement.GetProperty("GuardianLeaseRetired").GetBoolean(), "Delayed-observation fixture recovery was not verified.");
-        Console.WriteLine("PASS: actual guardian host and GUI confirmation remain active across a 3.4-second completed observation and the next iteration; explicit release restores cTGP and retires its fixture lease. Zero hardware IO.");
+        Console.WriteLine("PASS: actual guardian host and GUI confirmation remain active across two consecutive 3.4-second observations; explicit release restores cTGP and retires its fixture lease. Zero hardware IO.");
     }
 
     private static async Task TimedOutObservationAsync()

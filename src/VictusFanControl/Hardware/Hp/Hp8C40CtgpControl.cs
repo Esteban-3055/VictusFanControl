@@ -26,6 +26,11 @@ internal static class CtgpPublication
 }
 internal sealed record CtgpStatus(string State, bool Active, bool Managed, string? Failure, DateTimeOffset Utc)
 {
+    internal static readonly TimeSpan ConfirmationLifetime = TimeSpan.FromSeconds(5);
+    internal bool FreshAt(DateTimeOffset now) => now >= Utc && now - Utc <= ConfirmationLifetime;
+    internal bool ConfirmsSelection(bool enabled, DateTimeOffset now) => Failure is null && FreshAt(now) &&
+        (enabled ? State == "Active" && Active && Managed || State == "AcOnly" && !Active && !Managed :
+            (State is "Disabled" or "Restored" or "AcOnly") && !Active && !Managed);
     internal static CtgpStatus Disabled => new("Disabled", false, false, null, DateTimeOffset.UtcNow);
 }
 

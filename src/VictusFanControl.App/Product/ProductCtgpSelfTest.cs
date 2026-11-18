@@ -50,6 +50,23 @@ internal static class ProductCtgpSelfTest
         var resume = new ProductAutomaticResumption(); resume.Arm(); resume.ConfirmActivation();
         resume.Observe(new ProductRuntimeState { FanMode = "Firmware", LifecycleBlocked = true, CtgpFaulted = true }, 100);
         Require(!resume.Wanted, "cTGP fault retained unattended reactivation intent.");
+        bool policyFault=false;
+        try { ProductRuntime.EnsureCtgpConfirmation(null,ref policyFault);throw new Exception("Missing cTGP confirmation admitted control."); }
+        catch(InvalidOperationException) { }
+        Require(!policyFault,"Missing telemetry was classified as an external policy failure.");
+        resume=new();resume.Arm();resume.ConfirmActivation();
+        resume.Observe(new ProductRuntimeState {FanMode="Firmware",LifecycleBlocked=true,CtgpFaulted=policyFault},100);
+        Require(resume.Wanted,"Expiry cancelled the intent needed after verified owner release.");
+        try { ProductRuntime.EnsureCtgpConfirmation(new("RecoveryRequired",false,true,"External policy changed",DateTimeOffset.UtcNow),ref policyFault); }
+        catch(InvalidOperationException) { }
+        Require(policyFault,"An explicit cTGP policy failure lost its manual-recovery latch.");
+        var activeStatus=new CtgpStatus("Active",true,true,null,DateTimeOffset.UtcNow);
+        Require(activeStatus.ConfirmsSelection(true,DateTimeOffset.UtcNow),"Valid Active acknowledgement was rejected.");
+        foreach(var invalid in new[]{activeStatus with{Active=false},activeStatus with{Managed=false},
+            activeStatus with{Utc=DateTimeOffset.UtcNow.AddSeconds(-6)},activeStatus with{Utc=DateTimeOffset.UtcNow.AddSeconds(30)}})
+            Require(!invalid.ConfirmsSelection(true,DateTimeOffset.UtcNow),"Malformed or stale Active acknowledgement was accepted.");
+        Require(!new CtgpStatus("RecoveryRequired",false,false,null,DateTimeOffset.UtcNow).ConfirmsSelection(false,DateTimeOffset.UtcNow),
+            "Unconfirmed restoration acknowledged the disable request.");
 
         Require(Hp8C40CtgpRequestScope.Qualified(new(0x20008, 0x22, [1, 1, 1, 0], 4)), "Qualified request rejected.");
         Require(!Hp8C40CtgpRequestScope.Qualified(new(0x20008, 0x22, [80, 1, 1, 0], 4)), "Numeric watts escaped whitelist.");
@@ -103,6 +120,20 @@ internal static class ProductCtgpSelfTest
         var released = await guardian.ReleaseAsync(timeout.Token).ConfigureAwait(false);
         Require(released.GuardianLeaseRetired, "cTGP fixture lease not retired.");
         var statusPath = Path.Combine(folder, "ctgp-status.json");
+        var cachedDirectory=Path.Combine(folder,"status-reader");Directory.CreateDirectory(cachedDirectory);
+        await using(var statusReader=new WmiFanGuiGuardianClient(fixture:true,fixtureDirectory:cachedDirectory))
+        {
+            var observationPath=Path.Combine(cachedDirectory,"ctgp-status.json");
+            var fresh=new CtgpStatus("Active",true,true,null,DateTimeOffset.UtcNow);
+            WmiFanExperiment.WriteJson(observationPath,fresh);
+            Require(statusReader.Ctgp is {Active:true},"Initial current observation missing.");
+            WmiFanExperiment.WriteJson(observationPath,fresh with{Utc=fresh.Utc.AddSeconds(-30)});
+            Require(statusReader.Ctgp?.Utc==fresh.Utc,"An older file replaced the confirmed current observation.");
+            File.WriteAllText(observationPath,"{");
+            Require(statusReader.Ctgp?.Utc==fresh.Utc,"A malformed replacement discarded the recent observation.");
+            await Task.Delay(CtgpStatus.ConfirmationLifetime+TimeSpan.FromMilliseconds(50));
+            Require(statusReader.Ctgp is null,"Retrying a malformed publication renewed an expired observation.");
+        }
         WmiFanExperiment.WriteJson(statusPath, new CtgpStatus("Active", true, true, null, DateTimeOffset.UtcNow.AddMinutes(-1)));
         Require(guardian.Ctgp is null, "Expired cTGP observation was accepted.");
         using (var held = new FileStream(statusPath, FileMode.Open, FileAccess.Read, FileShare.None))

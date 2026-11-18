@@ -55,14 +55,17 @@ internal sealed partial class ProductForm
         var retryReason = unattended ? "Reanudación automática" : "Reintento manual de Automático";
         _presentationTimer.Stop();_startupAutomatic?.Cancel(retryReason);
         var before=_canvas.State;
-        var releasedRuntime=_runtime as ProductRuntime;
+        var releasedRuntime=(_runtime??_shutdownRuntimeOwner) as ProductRuntime;
+        // Reserve the coordinator task before synchronous cleanup/factory fixtures
+        // can finish and clear the reservation.
+        await Task.Yield();
         try
         {
             _runtime?.FenceLifecycle(retryReason);
             DetachRuntime();
             _canvas.Notice="Liberando la interrupción anterior antes de preparar Automático…";_canvas.Invalidate();
             // Drain every pending operation and release all domains; never reuse a faulted controller/worker.
-            await ShutdownRuntimeAsync();_recoveryEpisode.ConfirmOwnerReleased();
+            await ShutdownRuntimeAsync(confirmLateReadDrain:true);_recoveryEpisode.ConfirmOwnerReleased();
             if(!_isolatedRuntime)ProductSessionRestart.EnsureNoRecoveryRecords();
             if(_closing||_exitRequested)return;
             if(_displayOff||_restartLifecycleInterrupted)throw new IOException("Reintento cancelado por suspensión o pantalla apagada.");
@@ -73,7 +76,7 @@ internal sealed partial class ProductForm
             if(_displayOff||_restartLifecycleInterrupted)throw new IOException("Reintento cancelado por un cambio de energía.");
             var preferences=ProductProfilesStore.Copy(requestedPreferences??Draft);
             var next=await (_retryRuntimeFactory?.Invoke(preferences)??Task.Run<IProductRuntime>(()=>new ProductRuntime(_modules,preferences,releasedRuntime:releasedRuntime)));
-            _runtime=next;_runtimeShutdown=null;_lifecycleRelease=Task.CompletedTask;_startupFailure=null;
+            _runtime=next;_runtimeShutdown=null;_shutdownRuntimeOwner=null;_lifecycleRelease=Task.CompletedTask;_startupFailure=null;
             if(_closing||_exitRequested||_displayOff||_restartLifecycleInterrupted)
             {
                 await ShutdownRuntimeAsync();
@@ -96,9 +99,12 @@ internal sealed partial class ProductForm
             var failedState=_runtime?.State??before;
             var pending = _isolatedRuntime ? failedState.PerformanceRecovery : await Task.Run(() => PerformanceRecoveryPreview.Read());
             if (!unattended || pending?.Pending != true) _automaticResumption.Cancel();
-            _runtime=null;_canvas.AutomaticRetryAvailable=false;_startupAutomatic?.Cancel("Reintento no completado.");
+            var lateReadPending=_shutdownRuntimeOwner is IProductLateReadDrain { HasPendingReadDrain:true };
+            _runtime=null;_canvas.AutomaticRetryAvailable=lateReadPending;_startupAutomatic?.Cancel("Reintento no completado.");
             _canvas.State=failedState with{LifecycleBlocked=true,Runtime="Failed",Failure="No se pudo preparar Automático: "+ex.Message,PerformanceRecovery=pending,CanApplyPerformance=false,AutomaticPreparing=false};
-            _canvas.Notice=_canvas.State.Failure!+" Conserva los registros de recuperación y usa Salir desde la bandeja.";
+            _canvas.Notice=_canvas.State.Failure!+(lateReadPending
+                ?" Puedes reintentar cuando termine la lectura WMI."
+                :" Conserva los registros de recuperación y usa Salir desde la bandeja.");
             UpdateTray(_canvas.State);
             AppLog.Write("PRODUCT AUTOMATIC RETRY BLOCKED (unattended="+unattended+"): "+ex);
         }

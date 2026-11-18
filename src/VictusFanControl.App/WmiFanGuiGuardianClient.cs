@@ -17,20 +17,42 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
     private bool _released;
     private readonly SemaphoreSlim _ctgpCommands = new(1, 1);
     private readonly object _heartbeatPublication = new();
+    private readonly object _ctgpPublication = new();
     private volatile CtgpStatus? _lastCtgpStatus;
+    private string? _ctgpReadFailure;
     internal CtgpStatus? Ctgp
     {
         get
         {
-            var path = Path.Combine(SessionDirectory, "ctgp-status.json");
-            try
+            lock (_ctgpPublication)
             {
-                var status = CtgpPublication.TryRead<CtgpStatus>(path) ?? _lastCtgpStatus;
-                _lastCtgpStatus = status; // A failed read never refreshes the original timestamp.
-                return status is not null && (status.Failure is not null || DateTimeOffset.UtcNow >= status.Utc && DateTimeOffset.UtcNow - status.Utc <= TimeSpan.FromSeconds(5)) ? status : null;
+                CtgpStatus? status = null;
+                try
+                {
+                    status = CtgpPublication.TryRead<CtgpStatus>(Path.Combine(SessionDirectory, "ctgp-status.json"));
+                    _ctgpReadFailure = null;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+                { _ctgpReadFailure = ex.GetType().Name + ": " + ex.Message; }
+                var now = DateTimeOffset.UtcNow;
+                if (status?.Utc > now)
+                {
+                    _ctgpReadFailure = "La observación cTGP tiene una fecha futura.";
+                    return null;
+                }
+                if (status is not null && (_lastCtgpStatus is null || status.Utc >= _lastCtgpStatus.Utc))
+                    _lastCtgpStatus = status;
+                // A retry, an older file or a failed read never renews the acquisition.
+                var observed = _lastCtgpStatus;
+                return observed is not null && (observed.Failure is not null || observed.FreshAt(now)) ? observed : null;
             }
-            catch (Exception ex) when (ex is IOException or JsonException) { return null; }
         }
+    }
+    internal object CtgpDiagnostic()
+    {
+        lock (_ctgpPublication)
+            return new { observation = _lastCtgpStatus, ageMilliseconds = _lastCtgpStatus is null ? (double?)null :
+                (DateTimeOffset.UtcNow - _lastCtgpStatus.Utc).TotalMilliseconds, readFailure = _ctgpReadFailure };
     }
 
     public async Task SetCtgpAsync(bool enabled, CancellationToken token)
@@ -53,9 +75,12 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
                     if (reply?.Id == command.Id)
                     {
                         var status = reply.Status;
-                        if (status.Failure is not null || enabled && status.State is not ("Active" or "AcOnly") || !enabled && status.Active)
-                            throw new IOException(status.Failure ?? "cTGP no confirmó la selección.");
-                        _lastCtgpStatus = status;
+                        if (status is null || !status.ConfirmsSelection(enabled, DateTimeOffset.UtcNow))
+                            throw new IOException(status?.Failure ?? "cTGP no confirmó la selección.");
+                        lock (_ctgpPublication)
+                        {
+                            if (_lastCtgpStatus is null || status.Utc >= _lastCtgpStatus.Utc) _lastCtgpStatus = status;
+                        }
                         return;
                     }
                 }
@@ -84,6 +109,7 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
 
     internal void ActivateBoundary(string? releasedBoundaryDirectory)
     {
+        lock (_ctgpPublication) { _lastCtgpStatus = null; _ctgpReadFailure = null; }
         if (!_fixture)
         {
             if(releasedBoundaryDirectory is null) WmiFanExperimentBoundary.Enable(SessionDirectory, true, gui: true, productUpperRange: _productUpperRange);
@@ -224,6 +250,7 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
             releasedReportPath,
             r.GetProperty("ExitReason").GetString()!);
 
+        lock (_ctgpPublication) { _lastCtgpStatus = null; _ctgpReadFailure = null; }
         if (!_fixture)
         {
             var nextDirectory = CreateSessionDirectory();
@@ -231,7 +258,6 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
                 releasedDirectory,
                 nextDirectory);
             SessionDirectory = nextDirectory;
-            _lastCtgpStatus = null;
             _clock.Restart();
             _released = false;
         }

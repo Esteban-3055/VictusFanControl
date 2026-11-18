@@ -92,7 +92,10 @@ internal static partial class ProductGuiSelfTest
                 else form.HandleCommand("discard");
                 require(form.Draft.Protections.ResumeAutomatic,"Discard/re-enable did not restore the resume preference.");
                 form.EditValue("pl1",38);
-                old.Publish(Ready(2) with{LifecycleBlocked=true,LifecycleBlockReason="transient interruption"});
+                bool ctgpPolicyFault=false;
+                try { ProductRuntime.EnsureCtgpConfirmation(null,ref ctgpPolicyFault); }
+                catch(InvalidOperationException) { }
+                old.Publish(Ready(2) with{LifecycleBlocked=true,LifecycleBlockReason="transient cTGP confirmation expiry",CtgpFaulted=ctgpPolicyFault});
                 form.TryAutomaticResumption(Environment.TickCount64+10001);
                 PumpUntil(()=>old.Disposals==1,"Unattended retry did not release the old runtime.");require(created==0,"Unattended retry bypassed the old release.");
                 old.DisposeGate.SetResult();PumpUntil(()=>!form.Canvas.Busy,"Unattended cleanup hung.");
