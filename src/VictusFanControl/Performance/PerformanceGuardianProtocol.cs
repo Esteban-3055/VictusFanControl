@@ -14,6 +14,8 @@ internal static class PerformanceGuardianProtocol
     internal const string DisableSession = "DISABLE_SESSION";
     internal const string Status = "STATUS";
     internal const string Shutdown = "SHUTDOWN";
+    internal const string ReleaseFailedDraining = "SESSION_RELEASE_FAILED_DRAINING_FOR_RECOVERY";
+    internal const int ExitRecoveryPending = 23;
 }
 
 internal sealed record PerformanceGuardianRequest(
@@ -45,7 +47,8 @@ internal sealed record PerformanceGuardianResponse(
     string? GpuStatus = null,
     string? PowerSource = null,
     string? RuntimeFailure = null,
-    PerformanceGuiSessionConfiguration? Configuration = null);
+    PerformanceGuiSessionConfiguration? Configuration = null,
+    Guid? RecoveryGpuSession = null);
 
 internal sealed class PerformanceGuardianProtocolException :
     IOException

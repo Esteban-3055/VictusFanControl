@@ -6,6 +6,7 @@ internal sealed partial class ProductForm
 {
     private bool _restarting,_restartLifecycleInterrupted;
     private Task? _restartTask,_runtimeShutdown;
+    private IProductRuntime? _shutdownRuntimeOwner;
     private readonly string? _restartDirectory;
     private readonly bool _isolatedRuntime;
     private readonly bool _restartOpening;
@@ -13,7 +14,13 @@ internal sealed partial class ProductForm
     internal Task RestartSessionAsync()
     {
         if(_closing||IsDisposed||!_canvas.RestartAvailable)return _restartTask??Task.CompletedTask;
-        return _restartTask??= RestartSessionCoreAsync();
+        if(_canvas.OptionalEditsPending)
+        {
+            _canvas.Notice="Guarda o descarta los cambios de HyperX y de la base externa antes de reiniciar la sesión.";
+            _canvas.Invalidate();
+            return Task.CompletedTask;
+        }
+        return _restartTask is { IsCompleted: false } pending ? pending : (_restartTask = RestartSessionCoreAsync());
     }
     private async Task RestartSessionCoreAsync()
     {
@@ -27,10 +34,9 @@ internal sealed partial class ProductForm
             try{_runtime?.FenceLifecycle("Reinicio explícito de sesión");}
             catch(Exception ex){preparationFailure=ex;}
             _canvas.Notice="Guardando diagnóstico y liberando ventiladores, CPU/GPU y telemetría…";_canvas.Invalidate();
-            try{await Task.Run(()=>ProductDiagnostics.Export(diagnostic,before,ProductProfilesStore.Parse(checkpoint.DraftJson),AppLog.CurrentLogPath));}
-            catch(Exception ex){preparationFailure??=ex;}
+            _ = ProductDiagnostics.TryExportAsync(diagnostic,before,ProductProfilesStore.Parse(checkpoint.DraftJson),AppLog.CurrentLogPath);
             // Even a full diagnostic disk must not skip hardware cleanup.
-            await ShutdownRuntimeAsync();
+            await ShutdownRuntimeAsync(confirmLateReadDrain: true);
             // Save/import operations that were already pending may have completed while draining.
             // Preserve their final draft and saved baseline instead of an earlier UI snapshot.
             checkpoint=ProductSessionRestart.Capture(Draft,_saved,_hasSavedBaseline,_canvas.Dirty,_canvas.Page,_canvas.Editing);
@@ -42,6 +48,7 @@ internal sealed partial class ProductForm
             await Task.Run(()=>ProductSessionRestart.WriteReleasedState(statePath,checkpoint));
             if(_closing||_exitRequested)return;
             if(_displayOff||_restartLifecycleInterrupted)throw new IOException("Reinicio cancelado por un cambio de energía; no se abrió otro controlador.");
+            if(_canvas.OptionalEditsPending)throw new IOException("Se detectaron cambios de HyperX o de la base externa durante el reinicio. Los cambios siguen en edición.");
             RestartRequest=new(statePath,_modules,_automaticReview);
             AppLog.Write("PRODUCT SESSION RESTART READY: cleanup completed; diagnostic="+diagnostic+"; draft retained; next startup=Firmware.");
             _disposedRuntime=true;_exitRequested=true;Close();_shutdown.TrySetResult();
@@ -55,19 +62,40 @@ internal sealed partial class ProductForm
             _startupFailure="No se pudo reiniciar la sesión: "+ex.Message;
             _canvas.State=_canvas.State with{LifecycleBlocked=true,LifecycleBlockReason=_startupFailure,Failure=_startupFailure,
                 Runtime="Failed",CanApplyPerformance=false,AutomaticPreparing=false,PerformanceUpdating=false};
-            _canvas.Notice=_startupFailure+" Conserva el diagnóstico y los registros de recuperación. Usa Salir desde la bandeja.";
+            _canvas.RestartAvailable = _shutdownRuntimeOwner is IProductLateReadDrain { HasPendingReadDrain: true };
+            _canvas.Notice=_startupFailure+(_canvas.RestartAvailable
+                ? " Puedes reintentar cuando termine la lectura WMI."
+                : " Conserva el diagnóstico y los registros de recuperación. Usa Salir desde la bandeja.");
             UpdateTray(_canvas.State);
             _canvas.Busy=false;_canvas.Invalidate();
         }
         finally{_restarting=false;}
     }
-    private Task ShutdownRuntimeAsync()=>_runtimeShutdown??= ShutdownRuntimeCoreAsync();
+    private Task ShutdownRuntimeAsync(bool confirmLateReadDrain = false)
+    {
+        if (confirmLateReadDrain && _runtimeShutdown is { IsFaulted: true } &&
+            _shutdownRuntimeOwner is IProductLateReadDrain { HasPendingReadDrain: true } pending)
+            return _runtimeShutdown = pending.ConfirmReadDrainAsync();
+        return _runtimeShutdown ??= ShutdownRuntimeCoreAsync();
+    }
     private async Task ShutdownRuntimeCoreAsync()
     {
         _externalCooling?.Suspend();
-        await _startup;
+        Exception? startupFailure = null;
+        // File-only startup can finish late but checks the lifecycle before
+        // constructing anything. Native construction, once begun, must drain.
+        try { if(_startupResourcesAcquired)await _startup; }
+        catch(Exception ex) { startupFailure=ex;AppLog.Write("Product startup task failed; attempting known runtime cleanup: "+ex); }
         if(_commandsDrained is not null)await _commandsDrained.Task;
-        await _lifecycleRelease;
-        if(_runtime is not null)await Task.Run(async()=>await _runtime.DisposeAsync());
+        Exception? previousReleaseFailure = null;
+        try { await _lifecycleRelease; }
+        catch(Exception ex)
+        {
+            previousReleaseFailure = ex;
+            AppLog.Write("Product earlier lifecycle release failed; awaiting final runtime cleanup: "+ex);
+        }
+        _shutdownRuntimeOwner = _runtime;
+        if(_shutdownRuntimeOwner is { } owner)await Task.Run(async()=>await owner.DisposeAsync());
+        else if(previousReleaseFailure is not null || startupFailure is not null)throw new IOException("No hay controlador disponible para confirmar la liberación anterior.",previousReleaseFailure??startupFailure);
     }
 }

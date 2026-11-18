@@ -28,13 +28,14 @@ internal static class ProductFanRecoverySelfTest
             Require(!ProductFanRecovery.PreviousBoot(DateTimeOffset.UtcNow,boot),"Same boot allowed.");
             Require(!ProductFanRecovery.PreviousBoot(boot.AddSeconds(-30),boot),"Ambiguous boot timestamp allowed.");
             Require(ProductFanRecovery.PreviousBoot(boot.AddHours(-1),boot),"Previous boot blocked.");
-            foreach(var mode in new[]{"no-intent","release","rejected","same-boot","previous-boot","changed","late-change","uncertain-release"})
+            foreach(var mode in new[]{"no-intent","release","rejected","same-boot","previous-boot","changed","late-change","uncertain-release","ctgp-only","ctgp-fail","ctgp-missing"})
             {
                 var common=Path.Combine(root,mode);var dir=Path.Combine(common,"session");var evidence=Path.Combine(common,"evidence");Directory.CreateDirectory(dir);Directory.CreateDirectory(evidence);
                 var path=Path.Combine(common,"lease.json");
                 File.WriteAllBytes(path,JsonSerializer.SerializeToUtf8Bytes(new{OwnerPid=123,OwnerStartUtcTicks=456L,GuardianPid=789,DirectEcProhibited=true,SessionDirectory=dir}));
                 var original=File.ReadAllBytes(path);var entry=new ProductRecoveryRecord(path,"FanGui",ProductRecoveryInventory.Hash(original));
-                if(mode!="no-intent")File.WriteAllText(Path.Combine(dir,"write-intent.json"),"{\"Level\":30}");
+                if(mode is not ("no-intent" or "ctgp-only"))File.WriteAllText(Path.Combine(dir,"write-intent.json"),"{\"Level\":30}");
+                if(mode.StartsWith("ctgp-"))File.WriteAllText(Path.Combine(dir,"ctgp-intent.json"),"{}");
                 if(mode is "same-boot" or "previous-boot")
                 {
                     var marker=Path.Combine(dir,"native-inflight.json");File.WriteAllText(marker,"{\"Pid\":123}");
@@ -50,23 +51,26 @@ internal static class ProductFanRecoverySelfTest
                         if(mode=="late-change")File.AppendAllText(path," ");
                         if(mode=="uncertain-release") { File.WriteAllText(Path.Combine(dir,"native-inflight.json"),"{}");throw new IOException("Uncertain native return"); }
                         return mode=="rejected"&&r.CommandType==0x2E?1:0;
-                    },_=>{});
+                    },_=>{},mode=="ctgp-missing"?null:_=>{if(mode=="ctgp-fail")throw new IOException("Fixture cTGP restore rejected.");});
                 }
                 catch(Exception){failed=true;}
-                var shouldFail=mode is "rejected" or "same-boot" or "changed" or "late-change" or "uncertain-release";
+                var shouldFail=mode is "rejected" or "same-boot" or "changed" or "late-change" or "uncertain-release" or "ctgp-fail" or "ctgp-missing";
                 Require(failed==shouldFail,"Wrong completion: "+mode);
                 Require(File.Exists(path)==shouldFail,"Lease retention failed: "+mode);
                 Require(calls.All(x=>x is 0x2E or 0x1A),"Normal target allowed.");
                 if(mode is "no-intent" or "same-boot" or "changed")Require(calls.Count==0,"Hardware call sent before admission: "+mode);
                 if(mode is "release" or "previous-boot")Require(calls.SequenceEqual(new[]{0x2E,0x1A}),"Release sequence changed.");
+                if(mode is "ctgp-fail" or "ctgp-missing")Require(calls.SequenceEqual(new[]{0x2E,0x1A}),"cTGP failure skipped fan restoration.");
+                if(mode=="ctgp-only")Require(calls.Count==0,"cTGP-only recovery sent fan targets.");
                 if(!shouldFail)Require(Directory.GetFiles(common,"lease.json.recovered-*").Single() is var archived&&File.ReadAllBytes(archived).SequenceEqual(original),"Original lease archive lost.");
             }
-            foreach(var mode in new[]{"orphan-same-boot","orphan-previous-boot","orphan-intent"})
+            foreach(var mode in new[]{"orphan-same-boot","orphan-previous-boot","orphan-intent","orphan-ctgp-intent"})
             {
                 var dir=Path.Combine(root,mode);var evidence=Path.Combine(dir,"evidence");Directory.CreateDirectory(evidence);
                 var path=Path.Combine(dir,"native-inflight.json");File.WriteAllText(path,"{\"Pid\":123}");
                 if(mode!="orphan-same-boot")File.SetLastWriteTimeUtc(path,boot.AddHours(-1).UtcDateTime);
                 if(mode=="orphan-intent")File.WriteAllText(Path.Combine(dir,"write-intent.json"),"{}");
+                if(mode=="orphan-ctgp-intent")File.WriteAllText(Path.Combine(dir,"ctgp-intent.json"),"{}");
                 var entry=new ProductRecoveryRecord(path,"OrphanWmi",ProductRecoveryInventory.Hash(File.ReadAllBytes(path)));var failed=false;
                 try{ProductFanRecovery.ExecuteOrphan(entry,evidence,boot,()=>{});}catch(IOException){failed=true;}
                 Require(failed==(mode!="orphan-previous-boot")&&File.Exists(path)==failed,"Orphan restart/ownership fence failed: "+mode);

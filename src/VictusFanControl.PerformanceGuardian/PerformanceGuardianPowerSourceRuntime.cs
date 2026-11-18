@@ -27,6 +27,9 @@ internal interface IGuardianPowerSourceRuntime :
 {
     GuardianPowerSourceRuntimeSnapshot Snapshot { get; }
 
+    // Hosts without an active source implementation retain a read-only snapshot.
+    T CaptureStatus<T>(Func<GuardianPowerSourceRuntimeSnapshot,T> capture, bool reconcile) => capture(Snapshot);
+
     PerformanceSourceDispatchResult Prime(
         bool cpuEnabled,
         bool gpuEnabled);
@@ -66,6 +69,7 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
         new();
 
     private readonly IPerformancePowerSourceReader _reader;
+    private readonly bool _allowEmptySelection;
     private readonly ICpuPowerSourceTransitionSink _cpu;
     private readonly IGpuClockSourceTransitionSink _gpu;
     private readonly IGuardianPowerSourceNotificationListenerFactory
@@ -97,8 +101,10 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
         IPerformancePowerSourceReader reader,
         ICpuPowerSourceTransitionSink cpu,
         IGpuClockSourceTransitionSink gpu,
-        IGuardianPowerSourceNotificationListenerFactory listenerFactory)
+        IGuardianPowerSourceNotificationListenerFactory listenerFactory,
+        bool allowEmptySelection=false)
     {
+        _allowEmptySelection=allowEmptySelection;
         _reader =
             reader ??
             throw new ArgumentNullException(
@@ -131,6 +137,26 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
         }
     }
 
+    public T CaptureStatus<T>(Func<GuardianPowerSourceRuntimeSnapshot,T> capture, bool reconcile)
+    {
+        ArgumentNullException.ThrowIfNull(capture);
+        ThrowIfDisposed();
+        lock (_sync)
+        {
+            // GUI STATUS may recover a missed Windows notification only inside
+            // the explicitly enabled session. Never retry a failed transition
+            // or recreate authority after Unknown, Stop or lifecycle release.
+            if(reconcile && _active && _failure is null && _coordinator is not null)
+            {
+                _reconciliationSignals++;
+                ProcessSourceSignalLocked();
+            }
+            // Capture domain state/configuration under the same fence as both
+            // CPU/GPU transitions, then release it before encoding/writing IPC.
+            return capture(SnapshotLocked());
+        }
+    }
+
     public PerformanceSourceDispatchResult Prime(
         bool cpuEnabled,
         bool gpuEnabled)
@@ -138,7 +164,7 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
         ThrowIfDisposed();
 
         if (!cpuEnabled &&
-            !gpuEnabled)
+            !gpuEnabled && !_allowEmptySelection)
         {
             throw new InvalidOperationException(
                 "Performance Guardian source runtime requires at least one explicitly enabled domain.");
@@ -195,7 +221,7 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
         }
     }
 
-    public void ExecuteConfigurationUpdate(Action<PerformancePowerSourceKind> update)
+    public void ExecuteConfigurationUpdate(Action<PerformancePowerSourceKind> update,Func<(bool Cpu,bool Gpu)>? selection=null)
     {
         ThrowIfDisposed();
         lock (_sync)
@@ -204,7 +230,11 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
             if (!_active || _failure is not null || !observed.Succeeded ||
                 observed.Source is not (PerformancePowerSourceKind.Ac or PerformancePowerSourceKind.Battery) || observed.Source != _lastSource)
                 throw new InvalidOperationException("Source runtime is not ready for an update; wait for confirmed stable AC/Battery.");
-            update(observed.Source);
+            try{update(observed.Source);}
+            finally
+            {
+                if(selection is not null){var domains=selection();_cpuEnabled=domains.Cpu;_gpuEnabled=domains.Gpu;}
+            }
             var after = _reader.Read();
             if (!after.Succeeded || after.Source != observed.Source)
                 throw new InvalidOperationException("Power source changed during preset update; inspect committed domain values.");
@@ -887,6 +917,9 @@ internal static class PerformanceGuardianPowerSourceRuntimeSelfTest
     {
         try
         {
+            AtomicStatusCapture(output);
+            MissedNotificationAndBatteryStartup(output);
+            FailedStatusTransitionCannotRetry(output);
             AcBatteryAcAndDuplicate(output);
             UnknownQueryFailureIsBounded(output);
             CpuFailureDoesNotBlockGpu(output);
@@ -908,6 +941,72 @@ internal static class PerformanceGuardianPowerSourceRuntimeSelfTest
         }
     }
 
+    private static void MissedNotificationAndBatteryStartup(TextWriter output)
+    {
+        foreach(var initial in new[]{PerformancePowerSourceKind.Ac,PerformancePowerSourceKind.Battery})
+        {
+            var reader=new MutableSourceReader{Source=initial};
+            var cpu=new RecordingGuardianCpuSourceTransitionSink();var gpu=new RecordingGuardianGpuSourceTransitionSink();
+            var listener=new ManualListenerFactory();
+            using IGuardianPowerSourceRuntime runtime=new GuardianPerformancePowerSourceRuntime(reader,cpu,gpu,listener);
+            runtime.CaptureStatus(s=>s,true);
+            Require(reader.Reads==0&&cpu.Calls==0&&gpu.Calls==0,"Status before enable queried/dispatched source.");
+            runtime.Start(true,true);
+            Require(runtime.Snapshot.LastSource==initial&&cpu.Calls==0&&gpu.Calls==0,"Battery/AC startup changed its prime or wrote twice.");
+            var destination=initial==PerformancePowerSourceKind.Ac?PerformancePowerSourceKind.Battery:PerformancePowerSourceKind.Ac;
+            reader.Source=destination;
+            var confirmed=runtime.CaptureStatus(s=>s,true); // Deliberately no listener notification.
+            Require(confirmed.LastSource==destination&&cpu.LastSource==destination&&gpu.LastSource==destination&&cpu.Calls==1&&gpu.Calls==1,
+                "Missed Windows notification left the explicitly enabled Battery/AC profile stale.");
+            runtime.CaptureStatus(s=>s,true);listener.Signal();
+            Require(cpu.Calls==1&&gpu.Calls==1,"Status plus duplicate notification rewrote the same presets.");
+            reader.Source=initial;runtime.CaptureStatus(s=>s,true);
+            Require(cpu.Calls==2&&gpu.Calls==2&&runtime.Snapshot.LastSource==initial,"Startup source round trip failed.");
+            runtime.Stop("FIXTURE");var reads=reader.Reads;reader.Source=destination;
+            runtime.CaptureStatus(s=>s,true);
+            Require(reader.Reads==reads&&cpu.Calls==2&&gpu.Calls==2,"Status after Stop reacquired authority.");
+        }
+        output.WriteLine("PASS source status reconciliation: AC/Battery startup, missing notifications, round trips, duplicate suppression and no authority before enable/after Stop; fake IO.");
+    }
+    private static void FailedStatusTransitionCannotRetry(TextWriter output)
+    {
+        var reader=new MutableSourceReader();var cpu=new RecordingGuardianCpuSourceTransitionSink();var gpu=new RecordingGuardianGpuSourceTransitionSink();
+        using IGuardianPowerSourceRuntime runtime=new GuardianPerformancePowerSourceRuntime(reader,cpu,gpu,new ManualListenerFactory());
+        runtime.Start(true,true);reader.Source=PerformancePowerSourceKind.Battery;gpu.ThrowOnCall=true;
+        var failed=runtime.CaptureStatus(s=>s,true);var reads=reader.Reads;
+        Require(failed.Failure is not null&&cpu.Calls==1&&gpu.Calls==1,"Partial failure was hidden by status capture.");
+        gpu.ThrowOnCall=false;reader.Source=PerformancePowerSourceKind.Ac;var retained=runtime.CaptureStatus(s=>s,true);
+        Require(retained.Failure==failed.Failure&&reader.Reads==reads&&cpu.Calls==1&&gpu.Calls==1,
+            "Status retried a failed transition or erased native failure evidence.");
+        output.WriteLine("PASS source status partial failure: no retry, no evidence clearing, no fabricated combined success.");
+    }
+    private static void AtomicStatusCapture(TextWriter output)
+    {
+        var reader=new MutableSourceReader();var cpu=new RecordingGuardianCpuSourceTransitionSink();var gpu=new RecordingGuardianGpuSourceTransitionSink();
+        var listener=new ManualListenerFactory();
+        using IGuardianPowerSourceRuntime runtime=new GuardianPerformancePowerSourceRuntime(reader,cpu,gpu,listener);
+        runtime.Start(true,true);reader.Source=PerformancePowerSourceKind.Battery;
+        Task? signal=null;using var requested=new ManualResetEventSlim();
+        var captured=runtime.CaptureStatus(source=>
+        {
+            var before=cpu.Calls;
+            signal=Task.Run(()=>{requested.Set();listener.Signal();});
+            Require(requested.Wait(TimeSpan.FromSeconds(5)),"Concurrent source fixture did not start.");
+            var interleaved=signal.Wait(TimeSpan.FromMilliseconds(200));
+            return (source.LastSource,before,gpu.Calls,interleaved);
+        },false);
+        Require(signal!.Wait(TimeSpan.FromSeconds(5)),"Concurrent source fixture did not drain.");
+        Require(!captured.interleaved&&captured.LastSource==PerformancePowerSourceKind.Ac&&captured.before==0&&captured.Calls==0,
+            "A source transition interleaved with domain/status capture.");
+        Require(cpu.Calls==1&&gpu.Calls==1&&runtime.Snapshot.LastSource==PerformancePowerSourceKind.Battery,"Source signal was lost after capture.");
+        output.WriteLine("PASS atomic source/domain status capture: concurrent notification waits for the complete capture; fake IO.");
+    }
+    private sealed class MutableSourceReader:IPerformancePowerSourceReader
+    {
+        internal PerformancePowerSourceKind Source=PerformancePowerSourceKind.Ac;
+        internal int Reads;
+        public PerformancePowerSourceObservation Read(){Reads++;return Observation(Source,Source==PerformancePowerSourceKind.Ac?(byte)1:(byte)0);}
+    }
     private static void AcBatteryAcAndDuplicate(
         TextWriter output)
     {

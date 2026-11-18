@@ -41,7 +41,7 @@ public sealed class HpOmenBiosWmiClient
     private const string ReturnCodeFieldName = "rwReturnCode";
 
     private static readonly byte[] Signature = [0x53, 0x45, 0x43, 0x55];
-    private static readonly TimeSpan InvokeTimeout = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan DiscoveryTimeout = TimeSpan.FromSeconds(5);
 
     private readonly ManagementScope _scope;
     private readonly ManagementPath _methodPath;
@@ -128,16 +128,13 @@ public sealed class HpOmenBiosWmiClient
             EcWmiInvestigationTrace.Record(trace, "wmi.parameters.end", methodName);
             methodInput["InData"] = data;
 
-            var invokeOptions = new InvokeMethodOptions
-            {
-                Timeout = InvokeTimeout
-            };
-
             EcWmiInvestigationTrace.Record(trace, "wmi.invoke.begin", methodName);
             if (WmiFanExperimentBoundary.Enabled) WmiFanExperimentBoundary.EnsureRequestAllowed(request);
             FanDispatchAdmissionScope.EnsureNativeRequestAllowed(request);
+            // The synchronous System.Management overload does not honor
+            // InvokeMethodOptions.Timeout. Keep tracking until it actually returns.
             using var methodOutput = WmiFanExperimentBoundary.InvokeNative(request,
-                () => target.InvokeMethod(methodName, methodInput, invokeOptions))
+                () => target.InvokeMethod(methodName, methodInput, null))
                 ?? throw new HpBiosCallException(
                     $"HP WMI method {methodName} returned no output.");
 
@@ -183,7 +180,7 @@ public sealed class HpOmenBiosWmiClient
     {
         var enumerationOptions = new System.Management.EnumerationOptions
         {
-            Timeout = InvokeTimeout
+            Timeout = DiscoveryTimeout
         };
 
         using var searcher = new ManagementObjectSearcher(

@@ -46,7 +46,30 @@ internal static partial class ProductGuiSelfTest
                 require(failedCreated==0&&form.Canvas.State.LifecycleBlocked&&!form.Canvas.AutomaticRetryAvailable,"Failed release/suspension recreated control.");
                 var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Failed retry could not exit.");require(failedOld.Disposals==1,"Failed retry disposed twice.");
             }
-            Console.WriteLine("Manual Automatic retry: PASS (same GUI/session, explicit click, clean release, fresh acquisitions, hot CPU refusal, draft preservation and failure/suspend fences; zero hardware IO).");
+            {
+                bool returned=false;int confirmed=0,retryCreations=0;
+                var late=new RecordingRuntime { StateOverride=Blocked(),DisposeFailure="WMI still pending",ConfirmReadDrainFixture=()=>
+                {
+                    confirmed++;
+                    return returned?Task.CompletedTask:Task.FromException(new IOException("WMI still pending"));
+                }};
+                var replacement=new RecordingRuntime();
+                using var form=new ProductForm("fixture://manual-late-read",fixture:late,fixtureProfiles:baseline,restartDirectory:root,
+                    retryRuntimeFactory:_=>{retryCreations++;return Task.FromResult<IProductRuntime>(retryCreations==1?replacement:new RecordingRuntime());});
+                form.Show();Application.DoEvents();late.Publish(Blocked());
+                CompleteGuiTask(form.RetryAutomaticAsync(),"Initial late-read retry hung.");
+                require(retryCreations==0&&late.Disposals==1&&form.Canvas.AutomaticRetryAvailable,"An unresolved late read lost the explicit confirmation retry.");
+                CompleteGuiTask(form.RetryAutomaticAsync(),"Pending read confirmation hung.");
+                require(retryCreations==0&&confirmed==1,"A pending read acquired a new controller.");
+                returned=true;
+                CompleteGuiTask(form.RetryAutomaticAsync(),"Returned read confirmation hung.");
+                require(retryCreations==1&&confirmed==2&&late.Disposals==1,"A verified late read repeated cleanup or lost its new controller.");
+                replacement.Publish(Blocked());
+                CompleteGuiTask(form.RetryAutomaticAsync(),"The next independent interruption reused a completed retry task.");
+                require(retryCreations==2&&replacement.Disposals==1,"A completed retry task prevented the next recovery.");
+                CompleteGuiTask(form.RequestExitAsync(),"Late-read retry fixture exit hung.");
+            }
+            Console.WriteLine("Manual Automatic retry: PASS (same GUI/session, explicit click, clean release, fresh acquisitions, hot CPU refusal, draft preservation, late read confirmation, repeated interruptions and failure/suspend fences; zero hardware IO).");
         }
         finally{Environment.ExitCode=exitCode;if(Directory.Exists(root))Directory.Delete(root,true);}
     }

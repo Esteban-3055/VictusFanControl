@@ -44,21 +44,76 @@ internal static class ProductAutomaticAdmissionSelfTest
             var rejected = false; try { guard.Observe(sample, Safety(sample)); } catch (InvalidOperationException) { rejected = true; }
             require(rejected, "Removing the consumption cutoff admitted invalid GPU telemetry.");
         }
-        foreach (var sample in new[] { Sample() with { CpuPackagePowerW = 61 }, Sample() with { GpuTemperatureC = 83 } })
+        foreach (var sample in new[] { Sample() with { GpuTemperatureC = 95.001 } })
         {
             require(ProductAutomaticAdmission.StartupIssues(State(sample), new(), at).Count > 0,
-                "GPU change disabled the CPU power or GPU thermal protection at entry.");
+                "Consumption change disabled the GPU thermal protection at entry.");
             foreach (var mode in Enum.GetValues<ProductAutomaticReviewMode>())
             {
                 var guard = new ProductAutomaticReview(() => 0, mode); guard.Start();
                 var rejected = false; try { guard.Observe(sample, Safety(sample)); } catch (InvalidOperationException) { rejected = true; }
-                require(rejected, "GPU change disabled the CPU power or GPU thermal protection in operation.");
+                require(rejected, "Consumption change disabled the GPU thermal protection in operation.");
             }
         }
-        var imported = ProductProfilesStore.Parse(ProductProfilesStore.Serialize(new ProductProfiles()));
-        require(imported.Protections.PowerEnvelopeHandoff &&
+        foreach(var temperature in new[]{82d,83,87,94.999,95})
+        {
+            var sample=Sample() with{GpuTemperatureC=temperature};
+            require(ProductAutomaticAdmission.StartupIssues(State(sample),new(),at).Count==0,"Habitual GPU entry rejected <=95 C.");
+            var policy=new ProductProtectionSettings();
+            var effective=policy.ApplyThermalPolicy(sample,Safety(sample) with{ThermalEmergency=true,PreconditionsReady=false});
+            require(effective.CustomControlPermitted&&!effective.ThermalEmergency,"Historical raw GPU gate leaked into habitual admission.");
+            var guard=new ProductAutomaticReview(()=>0,ProductAutomaticReviewMode.Habitual);guard.Configure(policy);guard.Start();
+            guard.Observe(sample,effective);guard.EnsureDispatchAllowed(sample);
+        }
+        foreach(var temperature in new[]{95.001,96d,105})
+            require(new ProductProtectionSettings().IsGpuThermalEmergency(temperature),"GPU >95 did not hand off.");
+        foreach(var invalid in new double?[]{null,double.NaN,double.PositiveInfinity,-1,105.001})
+            Code(Sample() with{GpuTemperatureC=invalid},invalid.HasValue?"gpu-temperature-invalid":"gpu-temperature-missing");
+        foreach(var mode in new[]{ProductAutomaticReviewMode.Short,ProductAutomaticReviewMode.Extended})
+        {
+            var sample=Sample() with{GpuTemperatureC=83};var guard=new ProductAutomaticReview(()=>0,mode);guard.Configure(new());guard.Start();
+            var denied=false;try{guard.Observe(sample,Safety(sample));}catch(InvalidOperationException){denied=true;}
+            require(denied,"Habitual GPU threshold weakened historical bounded review.");
+        }
+        require(!ProductProfilesStore.Serialize(new ProductProfiles{Protections=new(){HistoricalGpuThermalPolicy=true}}).Contains("historicalGpuThermalPolicy",StringComparison.OrdinalIgnoreCase),"Runtime-only historical thermal flag persisted.");
+        Console.WriteLine("PASS habitual GPU: 82/83/87/94.999/exact95 admitted; >95 handoff; historical review and invalid telemetry preserved.");
+        foreach(var watts in new[]{60d,60.001,61,75,115,500})
+        foreach(var legacyFlag in new[]{false,true})
+        {
+            var sample=Sample(115) with{CpuPackagePowerW=watts};
+            var preferences=new ProductProtectionSettings{PowerEnvelopeHandoff=legacyFlag};
+            require(ProductAutomaticAdmission.StartupIssues(State(sample),preferences,at).Count==0,
+                "Habitual startup still has a CPU consumption cutoff.");
+            require(ProductAutomaticAdmission.RuntimeIssues(sample,at,Safety(sample),preferences).Count==0,
+                "Habitual runtime still has a CPU consumption cutoff.");
+            var guard=new ProductAutomaticReview(()=>0,ProductAutomaticReviewMode.Habitual);guard.Configure(preferences);guard.Start();
+            guard.Observe(sample,Safety(sample));guard.EnsureDispatchAllowed(sample);
+        }
+        foreach(var mode in new[]{ProductAutomaticReviewMode.Short,ProductAutomaticReviewMode.Extended})
+        {
+            var sample=Sample() with{CpuPackagePowerW=61};
+            var guard=new ProductAutomaticReview(()=>0,mode);guard.Start();
+            var rejected=false;try{guard.Observe(sample,Safety(sample));}catch(InvalidOperationException){rejected=true;}
+            require(rejected,"Habitual change bypassed the explicit bounded physical review envelope.");
+        }
+        foreach(var invalid in new double?[]{null,double.NaN,double.PositiveInfinity,-1,500.001})
+        {
+            var sample=Sample() with{CpuPackagePowerW=invalid};
+            Code(sample,invalid.HasValue?"cpu-power-invalid":"cpu-power-missing");
+            var guard=new ProductAutomaticReview(()=>0,ProductAutomaticReviewMode.Habitual);guard.Start();
+            var rejected=false;try{guard.Observe(sample,Safety(sample));}catch(InvalidOperationException){rejected=true;}
+            require(rejected,"Consumption change admitted invalid CPU telemetry.");
+        }
+        var oldJson=ProductProfilesStore.Serialize(new ProductProfiles()).Replace("\"powerEnvelopeHandoff\": false","\"powerEnvelopeHandoff\": true");
+        var imported=ProductProfilesStore.Parse(oldJson);
+        require(!imported.Protections.PowerEnvelopeHandoff&&imported.Protections.CpuThermalHandoff&&imported.Protections.GpuThermalHandoff&&
+            imported.Ac.CpuPl1Watts==35&&imported.Ac.CpuPl2Watts==60&&imported.Ac.GpuMaximumMHz==1850,
+            "Legacy cutoff migration changed thermal preferences or configured CPU/GPU limits.");
+        require(!ProductProfilesStore.Copy(new ProductProfiles{Protections=new(){PowerEnvelopeHandoff=true}}).Protections.PowerEnvelopeHandoff,
+            "Saving an old enabled consumption preference reintroduced the cutoff.");
+        require(!imported.Protections.PowerEnvelopeHandoff &&
             ProductAutomaticAdmission.StartupIssues(State(Sample(115)), imported.Protections, at).Count == 0,
-            "Existing enabled power protection restored the removed GPU cutoff.");
+            "Legacy enabled power preference restored the removed consumption cutoff.");
 
         Code(null, "no-snapshot");
         Code(Sample() with { CpuTemperatureC = null }, "cpu-temperature-missing");
@@ -104,6 +159,6 @@ internal static class ProductAutomaticAdmissionSelfTest
             require(gate.Observe(State(sample), sample.Timestamp, i * 1000) == (i == 2) && gate.Issues.Count == 0,
                 "Recovered startup did not count three distinct fresh high-GPU-power acquisitions.");
         }
-        Console.WriteLine("PASS: GPU 81/83/115 W in startup and every product mode; CPU/thermal cutoffs retained; exact admission causes and freshness boundaries.");
+        Console.WriteLine("PASS: habitual CPU 60/60.001/61/75/115/500 W and GPU consumption admit startup/runtime/dispatch; legacy cutoff cleared; invalid telemetry, bounded reviews, thermal and freshness protections retained.");
     }
 }

@@ -12,6 +12,7 @@ internal static class ProductRecoveryInventorySelfTest
         void Write(string name,object value){var file=Path.Combine(common,name);Directory.CreateDirectory(Path.GetDirectoryName(file)!);File.WriteAllBytes(file,JsonSerializer.SerializeToUtf8Bytes(value));}
         try
         {
+            TestNativeMarkerObservation(root,Require);
             Require(ProductRecoveryInventory.ReadFans(common,local).Count==0,"Empty inventory failed.");
             Write("WmiFanGui/lease.json",new{OwnerPid=123,OwnerStartUtcTicks=1,GuardianPid=456,DirectEcProhibited=true,SessionDirectory=Path.Combine(root,"session")});
             Write("WmiFanExperiment/lease.json",new{Pid=789,Directory=Path.Combine(root,"experiment"),Utc=DateTimeOffset.UtcNow,Control=true,FirmwareRestorationVerified=false});
@@ -58,14 +59,71 @@ internal static class ProductRecoveryInventorySelfTest
             {
                 var owned=Path.Combine(local,"FanWmi","gui","current");Directory.CreateDirectory(owned);
                 Write("WmiFanGui/lease.json",new{OwnerPid=me.Id,OwnerStartUtcTicks=me.StartTime.ToUniversalTime().Ticks,GuardianPid=456,DirectEcProhibited=true,SessionDirectory=owned});
+                var guiLease = Path.GetFullPath(Path.Combine(common,"WmiFanGui/lease.json"));
+                // Match the production guardian's retained write handle.
+                using var leaseOwner = new FileStream(guiLease, FileMode.Open, FileAccess.Write, FileShare.Read);
+                Require(ProductRecoveryInventory.ReadFans(common,local).Any(x=>x.Path==guiLease&&x.Kind=="FanGui"&&x.Recoverable),
+                    "Live GUI lease was misclassified as unknown because the guardian held its write handle.");
                 var marker=Path.Combine(owned,"native-inflight.json");File.WriteAllText(marker,JsonSerializer.Serialize(new{Pid=me.Id}));File.WriteAllText(Path.Combine(owned,"write-intent.json"),"{}");
                 var active=ProductRecoveryInventory.ReadFans(common,local,ignoreCurrentOwner:true);
-                Require(!active.Any(x=>x.Path==marker||x.Path==Path.GetFullPath(Path.Combine(common,"WmiFanGui/lease.json"))),"Own active native query misclassified as orphan/pending lease.");
+                Require(!active.Any(x=>x.Path==marker||x.Path==guiLease),"Own active native query misclassified as orphan/pending lease.");
                 File.WriteAllText(Path.Combine(owned,"native-uncertain.signal"),"uncertain");
-                Require(ProductRecoveryInventory.ReadFans(common,local,ignoreCurrentOwner:true).Any(x=>x.Kind=="FanGui"&&x.Path==Path.GetFullPath(Path.Combine(common,"WmiFanGui/lease.json"))),"Own uncertain lease hidden.");
+                Require(ProductRecoveryInventory.ReadFans(common,local,ignoreCurrentOwner:true).Any(x=>x.Kind=="FanGui"&&x.Path==guiLease),"Own uncertain lease hidden.");
+                using var observer = ProductRecoveryInventory.OpenReadSnapshot(guiLease);
+                Require(!observer.CanWrite, "Recovery observation opened the lease for writing.");
+                var blocked = false;
+                try { File.Delete(guiLease); } catch (IOException) { blocked = true; }
+                Require(blocked && File.Exists(guiLease), "Observation relaxed the live guardian's deletion fence.");
+                leaseOwner.Dispose();
+                File.Delete(guiLease);
+                Require(!File.Exists(guiLease), "An observer prevented retirement after the guardian released its handle.");
+                using var retired = JsonDocument.Parse(observer);
+                Require(retired.RootElement.GetProperty("OwnerPid").GetInt32() == me.Id,
+                    "Retiring the lease corrupted the already-open observation.");
             }
-            Console.WriteLine("Recovery inventory: PASS (GUI/experiment/legacy, multiple/changed/malformed/foreign records, fan-only and exact report; zero hardware IO).");
+            Console.WriteLine("Recovery inventory: PASS (GUI/experiment/legacy, native marker observation/return race, durable lease exclusion, multiple/changed/malformed/foreign records, fan-only and exact report; zero hardware IO).");
         }
         finally{Directory.Delete(root,true);}
+    }
+
+    private static void TestNativeMarkerObservation(string root,Action<bool,string> require)
+    {
+        if(!OperatingSystem.IsWindows())return; // Windows delete sharing is the reported failure.
+        var folder=Path.Combine(root,"marker-observation");Directory.CreateDirectory(folder);
+        var path=Path.Combine(folder,"native-inflight.json");
+        var original="{\"Pid\":123,\"CommandType\":45}";
+        File.WriteAllText(path,original);
+        // Reproduce the old reader deterministically while the completed call
+        // tries to retire its marker. No native call is made by this fixture.
+        using(var oldReader=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.Read))
+        {
+            var blocked=false;try{File.Delete(path);}catch(IOException){blocked=true;}
+            require(blocked&&File.Exists(path),"Fixture did not reproduce the Windows sharing violation.");
+        }
+        using(var observer=ProductRecoveryInventory.OpenReadSnapshot(path))
+        {
+            File.Delete(path);
+            require(!File.Exists(path),"Recovery observation blocked retirement of a completed native marker.");
+            using var reader=new StreamReader(observer,leaveOpen:true);
+            require(reader.ReadToEnd()==original,"Retirement changed the already-open observation snapshot.");
+        }
+        File.WriteAllText(path,original);
+        using(var observer=ProductRecoveryInventory.OpenReadSnapshot(path))
+        {
+            var replacement=path+".tmp";
+            File.WriteAllText(replacement,JsonSerializer.Serialize(new{Pid=456,CommandType=45}));
+            File.Replace(replacement,path,destinationBackupFileName:null);
+            using var current=JsonDocument.Parse(ProductRecoveryInventory.ReadBytes(path));
+            require(current.RootElement.GetProperty("Pid").GetInt32()==456,"Observer blocked atomic marker publication.");
+            using var reader=new StreamReader(observer,leaveOpen:true);
+            require(reader.ReadToEnd()==original,"Atomic replacement changed the old observation's bytes.");
+        }
+        var lease=Path.Combine(folder,"lease.json");File.WriteAllText(lease,"{}");
+        using(var retained=ProductRecoveryInventory.OpenReadSnapshot(lease))
+        {
+            var blocked=false;try{File.Delete(lease);}catch(IOException){blocked=true;}
+            require(blocked&&File.Exists(lease),"Transient marker fix relaxed durable lease sharing.");
+        }
+        Console.WriteLine("PASS Windows marker observation: legacy reader reproduces sharing violation; current observer permits confirmed-return deletion and atomic replacement; durable lease exclusion unchanged (no hardware IO).");
     }
 }

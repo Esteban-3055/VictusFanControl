@@ -172,23 +172,43 @@ internal static class ProductFanRecovery
         }
     }
     private static object RecoverWmi(ProductRecoveryRecord entry, Options o, DateTimeOffset boot) => ExecuteWmi(entry,o.Output,boot,()=>RequireIsolation(o.Owner),
-        r=>new HpOmenBiosWmiClient().Send(r),dir=>{WmiFanExperimentBoundary.Enable(dir,true);WmiFanExperimentBoundary.BeginRecovery();});
-    internal static object ExecuteWmi(ProductRecoveryRecord entry, string evidence, DateTimeOffset boot, Action ensureIsolation, Func<HpBiosRequest,int> send, Action<string> prepareBoundary)
+        r=>new HpOmenBiosWmiClient().Send(r),dir=>{WmiFanExperimentBoundary.Enable(dir,true);WmiFanExperimentBoundary.BeginRecovery();}, dir=>
+        {
+            using var intent = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(dir,"ctgp-intent.json")));
+            if(!intent.RootElement.GetProperty("Original").GetBytesFromBase64().SequenceEqual(new byte[]{0,1,1,0}))
+                throw new IOException("Intención cTGP fuera de la política calificada.");
+            Hp8C40CtgpQualification.Verify();
+            var client = new HpOmenBiosWmiClient();
+            Hp8C40CtgpControl.RestoreRecorded(r=>
+            {
+                RequireIsolation(o.Owner);
+                using var scope = new Hp8C40CtgpRequestScope(()=>throw new IOException("La recuperación nunca activa cTGP."));
+                return client.SendWithResponse(r);
+            });
+        });
+    internal static object ExecuteWmi(ProductRecoveryRecord entry, string evidence, DateTimeOffset boot, Action ensureIsolation, Func<HpBiosRequest,int> send, Action<string> prepareBoundary, Action<string>? restoreCtgp = null)
     {
         VerifyHash(entry); ensureIsolation();
         var dir = SessionDirectory(entry);
         PreflightNative(entry, boot, evidence);
-        foreach (var name in new[] { "ready.json", "guardian.json", "guardian-report.json", "summary.json", "write-intent.json", "stop.signal" })
+        foreach (var name in new[] { "ready.json", "guardian.json", "guardian-report.json", "summary.json", "write-intent.json", "stop.signal", "ctgp-intent.json", "ctgp-status.json" })
             if (ProductRecoveryInventory.Exists(Path.Combine(dir, name))) Backup(Path.Combine(dir, name), Path.Combine(evidence, name + ".before"));
         VerifyHash(entry);
         using var lease = new FileStream(entry.Path, FileMode.Open, FileAccess.Read, FileShare.Read);
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "stop.signal"), "EXPLICIT_PRODUCT_RECOVERY");
         var hadIntent = ProductRecoveryInventory.Exists(Path.Combine(dir, "write-intent.json"));
+        var hadCtgpIntent = ProductRecoveryInventory.Exists(Path.Combine(dir, "ctgp-intent.json"));
+        Exception? ctgpFailure = null;
         var release = false; var legacy = false;
+        if(hadIntent || hadCtgpIntent) prepareBoundary(dir);
+        if(hadCtgpIntent)
+        {
+            try { (restoreCtgp ?? throw new IOException("cTGP requiere restauración confirmada antes de retirar la sesión."))(dir); }
+            catch(Exception ex) { ctgpFailure = ex; }
+        }
         if (hadIntent)
         {
-            prepareBoundary(dir);
             var session = new WmiFanSession(r =>
             {
                 ensureIsolation();
@@ -199,9 +219,10 @@ internal static class ProductFanRecovery
             }, _ => throw new InvalidOperationException("Recovery has no normal fan target authority."));
             session.Recover();
         }
+        if(ctgpFailure is not null) throw new IOException("Restauración cTGP pendiente; se conserva la sesión.",ctgpFailure);
         // The whitelist persisted write intent before every target. Absence means no target was admitted.
         PreflightNative(entry, boot, archive: null); VerifyHash(entry); ensureIsolation();
-        var result = new { NoWriteIntent = !hadIntent, ReleaseRequestAccepted = release, LegacyDefaultRequestAccepted = legacy,
+        var result = new { NoWriteIntent = !hadIntent && !hadCtgpIntent, CtgpRestored = hadCtgpIntent, ReleaseRequestAccepted = release, LegacyDefaultRequestAccepted = legacy,
             IndependentFirmwareOwnershipVerified = false, DirectEcProhibited = true };
         ProductRecoveryInventory.WriteDurable(Path.Combine(evidence, "fan-release-completed.json"), JsonSerializer.SerializeToUtf8Bytes(result));
         lease.Dispose();
@@ -213,7 +234,8 @@ internal static class ProductFanRecovery
     internal static object ExecuteOrphan(ProductRecoveryRecord entry,string evidence,DateTimeOffset boot,Action ensureIsolation)
     {
         VerifyHash(entry);ensureIsolation();
-        if(ProductRecoveryInventory.Exists(Path.Combine(SessionDirectory(entry),"write-intent.json")))throw new IOException("La sesión sin lease contiene intención de escritura. No se puede reconstruir propiedad.");
+        if(ProductRecoveryInventory.Exists(Path.Combine(SessionDirectory(entry),"write-intent.json")) ||
+           ProductRecoveryInventory.Exists(Path.Combine(SessionDirectory(entry),"ctgp-intent.json")))throw new IOException("La sesión sin lease contiene intención de escritura. No se puede reconstruir propiedad.");
         PreflightNative(entry,boot,evidence);
         return new{NoWriteIntent=true,NativeMarkersArchivedAfterKernelRestart=true,FanHardwareWrites=false,IndependentFirmwareOwnershipVerified=false};
     }

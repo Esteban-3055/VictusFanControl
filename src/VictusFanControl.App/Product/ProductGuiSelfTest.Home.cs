@@ -31,7 +31,7 @@ internal static partial class ProductGuiSelfTest
         }
         canvas.Page=ProductPage.Home;Render("home-dashboard-live");
         var names=canvas.Hits.Where(h=>h.Id.StartsWith("page-")).OrderBy(h=>h.Bounds.Y).Select(h=>h.Label).ToArray();
-        require(names.SequenceEqual(new[]{"Inicio","Ventiladores","Rendimiento","Curvas","Perfiles","Monitorización","Protecciones","Configuración","Avanzado","Base externa","Actualizaciones"}),
+        require(names.SequenceEqual(new[]{"Inicio","Ventiladores","Rendimiento","Curvas","Perfiles","Monitorización","Protecciones","Configuración","Avanzado","Base externa","Curva Externa","HyperX Battery","Actualizaciones"}),
             "Requested navigation order was not rendered.");
         var phase=canvas.HomeFanPhases;var clock=ProductCanvas.AnimationClockMilliseconds;
         canvas.AdvanceHomeAnimation(clock+100,DateTimeOffset.UtcNow);var moving=canvas.HomeFanPhases;
@@ -52,6 +52,9 @@ internal static partial class ProductGuiSelfTest
             "RPM gaps restarted inertia or lost the independent measured speeds.");
         require(canvas.CpuFanReading(heldNow) is {Rpm:3000,Held:true}&&canvas.GpuFanReading(heldNow) is {Rpm:1500,Held:true},
             "Missing RPM replaced independent measured readouts with blanks or simulated RPM.");
+        require(ProductCanvas.HomeFanRpmCaption(canvas.CpuFanReading(heldNow))=="Última RPM"&&
+            ProductCanvas.HomeFanRpmCaption(canvas.GpuFanReading(heldNow))=="Última RPM",
+            "Retained readings were presented as current RPM.");
         Render("home-dashboard-held-rpm");
         var beforeFailure=canvas.HomeFanAnimationSpeeds;
         canvas.State=feedbackState with{Runtime="Failed"};
@@ -131,7 +134,8 @@ internal static partial class ProductGuiSelfTest
             for(int i=1;i<=120;i++)canvas.AdvanceHomeAnimation(clock+i*100,now);
             var speeds=canvas.HomeFanAnimationSpeeds;var phases=canvas.HomeFanPhases;
             void Save(string value)=>File.WriteAllText(path,"{\"segundosPorVueltaA3000Rpm\":"+value+"}");
-            Save("2");form.PresentationTick();
+            void WaitSetting(double value)=>require(SpinWait.SpinUntil(()=>{form.PresentationTick();return canvas.HomeAnimationSecondsPerRevolution==value;},5000),"Background visual setting did not arrive.");
+            Save("2");WaitSetting(2);
             require(canvas.HomeAnimationSecondsPerRevolution==2&&canvas.HomeFanAnimationSpeeds==speeds&&canvas.HomeFanPhases==phases,
                 "Live file reload did not reach both animations without resetting inertia.");
             for(int i=1;i<=200;i++)canvas.AdvanceHomeAnimation(clock+12000+i*100,now);
@@ -141,15 +145,15 @@ internal static partial class ProductGuiSelfTest
             require(canvas.HomeAnimationSecondsPerRevolution==2,"Partial save interrupted the active setting.");
             canvas.Page=ProductPage.Fans;Save("0.5");form.PresentationTick();
             require(canvas.HomeAnimationSecondsPerRevolution==2&&!canvas.HomeAnimationRunning,"Another page reloaded/animated hidden Home.");
-            canvas.Page=ProductPage.Home;form.PresentationTick();
+            canvas.Page=ProductPage.Home;WaitSetting(0.5);
             require(canvas.HomeAnimationSecondsPerRevolution==0.5&&canvas.HomeAnimationRunning,"Returning to Home did not pick up the pending edit.");
             form.WindowState=FormWindowState.Minimized;Save("3");form.PresentationTick();
             require(canvas.HomeAnimationSecondsPerRevolution==0.5&&!canvas.HomeAnimationRunning,"Minimized Home kept animation/settings work alive.");
-            form.WindowState=FormWindowState.Normal;form.PresentationTick();
+            form.WindowState=FormWindowState.Normal;WaitSetting(3);
             require(canvas.HomeAnimationSecondsPerRevolution==3&&canvas.HomeAnimationRunning,"Restore failed to apply the pending edit.");
             form.Hide();Save("1");form.PresentationTick();
             require(canvas.HomeAnimationSecondsPerRevolution==3&&!canvas.HomeAnimationRunning,"Tray-hidden Home kept animation/settings work alive.");
-            form.Show();form.PresentationTick();
+            form.Show();WaitSetting(1);
             require(canvas.HomeAnimationSecondsPerRevolution==1&&canvas.CpuFanReading(now)?.Rpm==3000&&canvas.GpuFanReading(now)?.Rpm==1500&&
                 runtime.Commands==0&&ProductProfilesStore.Serialize(form.Draft)==draft,"Visual edits changed RPM, hardware or profiles.");
             var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Live animation fixture exit stalled.");

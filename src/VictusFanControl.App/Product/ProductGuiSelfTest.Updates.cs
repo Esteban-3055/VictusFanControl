@@ -13,6 +13,7 @@ internal static partial class ProductGuiSelfTest
         try
         {
             static void Require(bool ok,string message){if(!ok)throw new InvalidOperationException(message);}
+            ProductSchedulingSelfTest.Run(Require);
             TestGuidedRecovery(Require); ProductAutomaticRecoverySelfTest.Run(Require);
             TestBackgroundRecovery(Require); TestUpdatePage(Require); TestUpdateHandoff(Require);
             return 0;
@@ -67,6 +68,21 @@ internal static partial class ProductGuiSelfTest
                 require(downloads==1&&form.Canvas.DownloadedUpdate==update&&runtime.Disposals==0,"Download changed runtime or could not preserve a draft.");
                 bool dirtyLaunch=false;form.InstallDownloadedUpdateAsync(()=>{},()=>dirtyLaunch=true,_=>Task.CompletedTask).GetAwaiter().GetResult();require(!dirtyLaunch,"Dirty draft installed.");
                 form.HandleCommand("discard");
+                form.HandleCommand("page-"+(int)ProductPage.HyperXBattery);
+                var headset=form.Canvas.HyperX!;
+                headset.EditValue("low",25);
+                form.HandleCommand("page-"+(int)ProductPage.Updates);form.Canvas.Refresh();
+                require(!form.Canvas.Hits.Single(h=>h.Id=="updates-install").Enabled,"A HyperX draft did not block the update button.");
+                CompleteGuiTask(form.InstallDownloadedUpdateAsync(()=>{},()=>dirtyLaunch=true,_=>Task.CompletedTask),"HyperX draft update hung.");
+                require(!dirtyLaunch&&headset.Dirty,"The update discarded a HyperX draft.");
+                CompleteGuiTask(headset.ExecuteAsync("discard"),"HyperX discard hung.");
+                var verifyDraftGate=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                var editingDuringVerification=form.InstallDownloadedUpdateAsync(()=>{},()=>dirtyLaunch=true,_=>verifyDraftGate.Task);
+                headset.EditValue("low",25);
+                verifyDraftGate.SetResult();
+                CompleteGuiTask(editingDuringVerification,"Concurrent HyperX draft verification hung.");
+                require(!dirtyLaunch&&headset.Dirty&&form.Canvas.DownloadedUpdate==update,"A draft added during verification closed the application or lost the download.");
+                CompleteGuiTask(headset.ExecuteAsync("discard"),"Concurrent HyperX discard hung.");
                 var failed=form.CheckUpdateAsync(_=>Task.FromException<ProductUpdate?>(new IOException("offline")));PumpUntil(()=>failed.IsCompleted,"Failed check hung.");
                 require(form.Canvas.AvailableUpdate is null&&form.Canvas.DownloadedUpdate==update&&form.Canvas.UpdateStatus.Contains("offline")&&!form.Canvas.UpdateBusy,"Failed check retained stale update/admission.");
                 var latest=form.CheckUpdateAsync(_=>Task.FromResult<ProductUpdate?>(null));PumpUntil(()=>latest.IsCompleted,"No-update check hung.");require(form.Canvas.AvailableUpdate is null&&form.Canvas.UpdateStatus.Contains("No hay"),"Latest-version status missing.");
@@ -248,6 +264,27 @@ internal static partial class ProductGuiSelfTest
                 form.HandleCommand("performance-apply");require(runtime.Commands==0,"Failed update reused disposed runtime.");
                 var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Failed update could not exit.");
                 require(runtime.Disposals==1,"Failed update repeated cleanup on exit.");
+            }
+            bool returned=false;int confirmations=0,launches=0;
+            runtime=new RecordingRuntime { DisposeFailure="WMI still pending", ConfirmReadDrainFixture=()=>
+            {
+                confirmations++;
+                return returned?Task.CompletedTask:Task.FromException(new IOException("WMI still pending"));
+            }};
+            using(var form=new ProductForm("fixture://update-late-read",fixture:runtime,fixtureProfiles:new()))
+            {
+                form.Show();Application.DoEvents();
+                var update=FutureUpdate(1024);
+                form.Canvas.DownloadedUpdate=update;
+                Task Install()=>form.InstallDownloadedUpdateAsync(()=>{},()=>launches++,_=>Task.CompletedTask);
+                CompleteGuiTask(Install(),"Initial read-drain timeout hung.");
+                CompleteGuiTask(Install(),"Pending read-drain retry hung.");
+                require(runtime.Disposals==1&&confirmations==1&&launches==0&&form.Canvas.DownloadedUpdate==update,
+                    "The updater launched while WMI remained pending or lost the verified download.");
+                returned=true;
+                CompleteGuiTask(Install(),"Returned read-drain retry hung.");
+                require(runtime.Disposals==1&&confirmations==2&&launches==1&&form.IsDisposed,
+                    "The updater could not verify the late return and install after the cached failure.");
             }
             Console.WriteLine("Product update handoff: PASS (cleanup drain, journal/UAC/suspend failure fences, normal close and single disposal; no hardware IO).");
         }

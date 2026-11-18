@@ -23,6 +23,9 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     private readonly SemaphoreSlim _wake = new(0, 1);
     private readonly SemaphoreSlim _hardwareReadGate = new(1, 1);
     private readonly object _commandGate = new();
+    private readonly Func<CancellationToken,ValueTask<TelemetrySnapshot>>? _admissionReadFixture;
+    private Action? _disposeReaderFixture;
+    private int _freshAdmissionRequested;
 
     private HardwareTelemetryReader? _reader;
     private Task? _loop;
@@ -34,6 +37,11 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     private long _lastLoopTick = Environment.TickCount64;
     private long _lastCompletedReadTick = Environment.TickCount64;
     private long _logSequence;
+    private readonly object _disposeSync = new();
+    private Task? _disposeTask;
+    private TelemetryShutdownReport? _shutdownReport;
+    private TelemetryObserverFailure? _lastObserverFailure;
+    private long _observerFailureCount;
     private long _powerEpoch;
     private long _lastAcceptedResumeTick;
     private int _degradedCompleteStreak;
@@ -43,8 +51,11 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     private int _identicalSnapshotStreak;
     private sealed record WorkerProgress(string Phase, long StartedAtMilliseconds);
     private WorkerProgress _progress = new("NotStarted", Environment.TickCount64);
-    private void MarkProgress(string phase) =>
-        Volatile.Write(ref _progress, new(phase, Environment.TickCount64));
+    private void MarkProgress(string phase)
+    {
+        Volatile.Write(ref _progress,new(phase,Environment.TickCount64));
+        RuntimeProgressJournal.Record("Worker."+phase,generation:Interlocked.Read(ref _powerEpoch));
+    }
 
     private object CaptureWatchdogProgress(long ageMilliseconds)
     {
@@ -63,13 +74,36 @@ internal sealed class TelemetryWorker : IAsyncDisposable
         };
     }
 
-    public TelemetryWorker(string modulesDirectory)
+    public TelemetryWorker(string modulesDirectory, Func<CancellationToken,ValueTask<TelemetrySnapshot>>? admissionReadFixture = null)
     {
         _modulesDirectory = modulesDirectory;
+        _admissionReadFixture=admissionReadFixture;
+        if(admissionReadFixture is not null)_recoveryRequested=false;
         StateMachine = new RuntimeStateMachine();
     }
 
     public RuntimeStateMachine StateMachine { get; }
+    internal bool RecoveryPending => RecoveryRequested();
+    internal long LastCompletedReadTick => Interlocked.Read(ref _lastCompletedReadTick);
+    internal TelemetryShutdownReport? ShutdownReport => Volatile.Read(ref _shutdownReport);
+    internal long ObserverFailureCount => Interlocked.Read(ref _observerFailureCount);
+    internal TelemetryObserverFailure? LastObserverFailure => Volatile.Read(ref _lastObserverFailure);
+
+    // Fixtures cannot Start() and never construct a hardware reader.
+    internal static TelemetryWorker CreateLifetimeFixture(Task acquisition, Task watchdog, Action disposeReader,
+        Action<CancellationToken>? observeLifetime = null)
+    {
+        var worker = new TelemetryWorker("fixture://lifetime", _ => throw new InvalidOperationException("Lifetime fixture has no reader."));
+        worker._loop = acquisition; worker._watchdog = watchdog; worker._disposeReaderFixture = disposeReader;
+        observeLifetime?.Invoke(worker._cts.Token);
+        return worker;
+    }
+
+    private void DisposeReader()
+    {
+        if (_disposeReaderFixture is not null) _disposeReaderFixture();
+        else _reader?.Dispose();
+    }
 
     // Automatic and acknowledgement refresh share one reader and read gate; no second polling loop.
     public Func<bool>? FreshFanAcquisitionRequired { get; set; }
@@ -82,6 +116,44 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     public event EventHandler<TelemetrySnapshot>? SnapshotAvailable;
     public event EventHandler<string>? DiagnosticsAvailable;
     public event EventHandler<string>? EventLogged;
+
+    // Consume once on the existing loop's next acquisition. Do not wake it into
+    // back-to-back RAPL/GetSystemTimes reads or start another polling loop.
+    public void RequestAutomaticTelemetry() => Interlocked.Exchange(ref _freshAdmissionRequested,1);
+
+    internal static bool FreshForAutomaticAdmission(TelemetrySnapshot snapshot, DateTimeOffset now) =>
+        snapshot.IsComplete && snapshot.RetainedTelemetry is null && now>=snapshot.Timestamp &&
+        now-snapshot.Timestamp<TimeSpan.FromSeconds(3) && snapshot.HasFreshControlSensorsAt(now) &&
+        snapshot.IsFanTelemetryFreshAt(now,3000);
+
+    // Preparation can wait on a command queue or Guardian. Refresh under the
+    // same reader gate before granting authority; no second hardware owner.
+    public async ValueTask<TelemetrySnapshot> RefreshForAutomaticAdmissionAsync(CancellationToken cancellationToken)
+    {
+        using var budget=CancellationTokenSource.CreateLinkedTokenSource(cancellationToken,_cts.Token);
+        budget.CancelAfter(TimeSpan.FromSeconds(3));
+        var epoch=CurrentPowerEpoch();
+        await _hardwareReadGate.WaitAsync(budget.Token).ConfigureAwait(false);
+        try
+        {
+            void Admit()
+            {
+                budget.Token.ThrowIfCancellationRequested();
+                if(IsSuspended()||CurrentPowerEpoch()!=epoch||RecoveryRequested()||StateMachine.State!=SystemState.Healthy||
+                    _reader is null && _admissionReadFixture is null)
+                    throw new InvalidOperationException("Lectura de entrada Automatic cancelada por estado o energía.");
+            }
+            Admit(); MarkProgress("AutomaticAdmissionHardwareRead");
+            var snapshot=await (_admissionReadFixture?.Invoke(budget.Token)??_reader!.ReadFreshSnapshotAsync(budget.Token)).ConfigureAwait(false);
+            if(ProductTelemetryTolerance)snapshot=_continuity.Observe(snapshot);
+            Admit();
+            if(!FreshForAutomaticAdmission(snapshot,DateTimeOffset.UtcNow))
+                throw new InvalidOperationException("La lectura nueva de entrada Automatic no es completa y vigente.");
+            TouchCompletedRead();
+            return snapshot;
+        }
+        finally { _hardwareReadGate.Release(); }
+    }
 
     /// <summary>Called only by the in-flight actuation, while the main loop awaits its processor.</summary>
     public async ValueTask<TelemetrySnapshot> RefreshDuringFanAcknowledgementAsync(CancellationToken cancellationToken)
@@ -143,6 +215,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
 
     public void Start()
     {
+        if(_admissionReadFixture is not null)throw new InvalidOperationException("Admission fixture cannot start hardware acquisition.");
         if (_loop is not null)
         {
             return;
@@ -263,10 +336,33 @@ internal sealed class TelemetryWorker : IAsyncDisposable
         return true;
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
-        _cts.Cancel();
-        Wake();
+        TaskCompletionSource completion;
+        lock (_disposeSync)
+        {
+            if (_disposeTask is not null) return new(_disposeTask);
+            completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            _disposeTask = completion.Task;
+        }
+        // The task is reserved before cancellation callbacks can reenter disposal.
+        _ = CompleteDisposalAsync(completion);
+        return new(completion.Task);
+    }
+
+    private async Task CompleteDisposalAsync(TaskCompletionSource completion)
+    {
+        try { await DisposeCoreAsync().ConfigureAwait(false); completion.TrySetResult(); }
+        catch (Exception error) { completion.TrySetException(error); }
+    }
+
+    private async Task DisposeCoreAsync()
+    {
+        var taskFailures = new List<Exception>();
+        var cleanupFailures = new List<Exception>();
+        void Attempt(Action action) { try { action(); } catch (Exception error) { cleanupFailures.Add(error); } }
+        Attempt(_cts.Cancel);
+        Attempt(Wake);
 
         var tasks = new[] { _loop, _watchdog }.Where(task => task is not null).Cast<Task>().ToArray();
         if (tasks.Length > 0)
@@ -275,15 +371,31 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             {
                 await Task.WhenAll(tasks).ConfigureAwait(false);
             }
-            catch (OperationCanceledException)
+            catch (Exception)
             {
+                // WhenAll has drained every task even when one faulted. Keep
+                // fault evidence while continuing independent resource cleanup.
+                foreach (var task in tasks.Where(task => task.IsFaulted))
+                    taskFailures.AddRange(task.Exception!.Flatten().InnerExceptions);
             }
         }
 
-        _reader?.Dispose();
-        _hardwareReadGate.Dispose();
-        _wake.Dispose();
-        _cts.Dispose();
+        var acquired = false;
+        try
+        {
+            // No timeout pretends that an in-flight native reader has returned.
+            await _hardwareReadGate.WaitAsync().ConfigureAwait(false); acquired = true;
+            DisposeReader(); _reader = null;
+        }
+        catch (Exception error) { cleanupFailures.Add(error); }
+        finally { if (acquired) Attempt(() => _hardwareReadGate.Release()); }
+        Attempt(_hardwareReadGate.Dispose);
+        Attempt(_wake.Dispose);
+        Attempt(_cts.Dispose);
+        Volatile.Write(ref _shutdownReport,new(cleanupFailures.Count == 0 && tasks.All(task => task.IsCompleted),
+            Array.AsReadOnly(taskFailures.ToArray()),Array.AsReadOnly(cleanupFailures.ToArray())));
+        if (taskFailures.Count != 0 || cleanupFailures.Count != 0)
+            throw new AggregateException("Telemetry stopped with recorded task/cleanup failures.",taskFailures.Concat(cleanupFailures));
     }
 
     internal static bool IsPlannedFanReleaseRead(Exception error) => error is WmiFanReadAdmissionPausedException { PlannedRelease:true };
@@ -390,26 +502,21 @@ internal sealed class TelemetryWorker : IAsyncDisposable
         while (!cancellationToken.IsCancellationRequested)
         {
             await Task.Delay(WatchdogIntervalMs, cancellationToken).ConfigureAwait(false);
-
-            if (IsSuspended() || StateMachine.State != SystemState.Healthy)
-            {
-                continue;
-            }
-
-            var ageMs = unchecked(Environment.TickCount64 - Interlocked.Read(ref _lastCompletedReadTick));
-            if (ageMs < (ProductTelemetryTolerance ? 5000 : HealthySnapshotWatchdogMs))
-            {
-                continue;
-            }
-
-            var progress = CaptureWatchdogProgress(ageMs);
-            StateMachine.Transition(
-                SystemState.Degraded,
-                $"Telemetry watchdog expired after {ageMs} ms without a completed read.");
-            Log($"Telemetry watchdog expired after {ageMs} ms; recovery requested.");
-            RequestRecovery("Telemetry freshness watchdog expired.");
-            Log("TELEMETRY WATCHDOG PROGRESS: " + System.Text.Json.JsonSerializer.Serialize(progress));
+            CheckWatchdog(Environment.TickCount64);
         }
+    }
+
+    internal void CheckWatchdog(long nowTick)
+    {
+        if (IsSuspended() || StateMachine.State != SystemState.Healthy) return;
+        var ageMs = unchecked(nowTick - Interlocked.Read(ref _lastCompletedReadTick));
+        if (ageMs < (ProductTelemetryTolerance ? 5000 : HealthySnapshotWatchdogMs)) return;
+        var progress = CaptureWatchdogProgress(ageMs);
+        // Recovery is mandatory; observers and logging cannot prevent its request.
+        RequestRecovery("Telemetry freshness watchdog expired.");
+        StateMachine.Transition(SystemState.Degraded,$"Telemetry watchdog expired after {ageMs} ms without a completed read.");
+        Log($"Telemetry watchdog expired after {ageMs} ms; recovery requested.");
+        Log("TELEMETRY WATCHDOG PROGRESS: " + System.Text.Json.JsonSerializer.Serialize(progress));
     }
 
     internal long ObserveLoopTick(long now)
@@ -461,7 +568,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
             Log($"Transient telemetry degradation detected; missing={missing}.");
         }
 
-        if (_degradedIncompleteStreak >= RecoveryAfterIncompleteSamples)
+        if (_degradedIncompleteStreak >= RecoveryAfterIncompleteSamples && !ProductTelemetryTolerance)
         {
             Log($"{_degradedIncompleteStreak} consecutive incomplete snapshots; full telemetry recovery requested.");
             RequestRecovery("Repeated incomplete telemetry snapshots.");
@@ -482,10 +589,15 @@ internal sealed class TelemetryWorker : IAsyncDisposable
         StateMachine.Transition(SystemState.Recovering, reason);
         Log($"Recovery started: {reason}");
 
-        _reader?.Dispose();
-        _reader = null;
-        _continuity.Reset();
-        ResetFreezeGuard();
+        await _hardwareReadGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            _reader?.Dispose();
+            _reader = null;
+            _continuity.Reset();
+            ResetFreezeGuard();
+        }
+        finally { _hardwareReadGate.Release(); }
 
         await Task.Delay(ResumeSettleMs, cancellationToken).ConfigureAwait(false);
 
@@ -622,7 +734,8 @@ internal sealed class TelemetryWorker : IAsyncDisposable
 
             TelemetrySnapshot snapshot;
             MarkProgress("HardwareRead");
-            if (!ProductTelemetryTolerance && FreshFanAcquisitionRequired?.Invoke() == true)
+            var admissionRead=ProductTelemetryTolerance&&Interlocked.Exchange(ref _freshAdmissionRequested,0)!=0;
+            if (admissionRead || !ProductTelemetryTolerance && FreshFanAcquisitionRequired?.Invoke() == true)
             {
                 using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 var remaining = AcquisitionBudgetMilliseconds?.Invoke();
@@ -703,7 +816,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     {
         _reader ??= new HardwareTelemetryReader(_modulesDirectory, schedulePeriodicFanReads:true, productTolerance:ProductTelemetryTolerance,
             gpuTelemetryFactory: ProductTelemetryTolerance ? ((name, exact) => new NvmlTelemetryProcessClient(name, exact)) : null);
-        if (!_reader.BackendsInitialized)
+        if (!_reader.BackendsInitialized && !ProductTelemetryTolerance)
         {
             throw new InvalidOperationException(
                 "One or more telemetry backends failed to initialize. " +
@@ -757,7 +870,7 @@ internal sealed class TelemetryWorker : IAsyncDisposable
         }
     }
 
-    private async Task WaitOrWakeAsync(int milliseconds, CancellationToken cancellationToken)
+    internal async Task WaitOrWakeAsync(int milliseconds, CancellationToken cancellationToken)
     {
         await _wake.WaitAsync(milliseconds, cancellationToken).ConfigureAwait(false);
     }
@@ -784,22 +897,26 @@ internal sealed class TelemetryWorker : IAsyncDisposable
     private void Log(string text)
     {
         var sequence = Interlocked.Increment(ref _logSequence);
-        EventLogged?.Invoke(
-            this,
-            $"#{sequence:0000}  {DateTime.Now:HH:mm:ss.fff}  {text}");
-    }
-
-    private void Wake()
-    {
-        if (_wake.CurrentCount == 0)
+        var observers = EventLogged;
+        if (observers is null) return;
+        var line=$"#{sequence:0000}  {DateTime.Now:HH:mm:ss.fff}  {text}";
+        foreach (EventHandler<string> observer in observers.GetInvocationList())
         {
-            try
+            try { observer(this,line); }
+            catch (Exception error)
             {
-                _wake.Release();
-            }
-            catch (ObjectDisposedException)
-            {
+                var message=error.Message;
+                Volatile.Write(ref _lastObserverFailure,new("EventLogged",error.GetType().Name,
+                    message.Length>512?message[..512]:message,DateTimeOffset.UtcNow));
+                Interlocked.Increment(ref _observerFailureCount);
             }
         }
+    }
+
+    internal void Wake()
+    {
+        try { _wake.Release(); }
+        catch (SemaphoreFullException) { /* Work is already pending: coalesce this notification. */ }
+        catch (ObjectDisposedException) { /* Closing owns the reader; no new work can start. */ }
     }
 }

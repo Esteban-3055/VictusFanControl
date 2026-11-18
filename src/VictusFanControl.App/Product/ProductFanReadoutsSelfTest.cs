@@ -9,6 +9,7 @@ internal static class ProductFanReadoutsSelfTest
         display.Observe(state,now);
         require(display.Cpu(state,now) is {Rpm:3000,Held:false}&&display.Gpu(state,now) is {Rpm:1500,Held:false},
             "Measured RPM were replaced by shared simulated request RPM.");
+        require(ProductCanvas.HomeFanRpmCaption(display.Cpu(state,now))=="RPM","A current measurement was labelled as retained.");
         var missing=state with{Snapshot=state.Snapshot! with{CpuFanRpm=null,GpuFanRpm=null}};
         display.Observe(missing,now);
         require(display.Cpu(missing,now) is {Rpm:3000,Held:true}&&display.Gpu(missing,now) is {Rpm:1500,Held:true}&&
@@ -45,6 +46,7 @@ internal static class ProductFanReadoutsSelfTest
         display.Observe(stopped,now.AddSeconds(3));
         require(display.Cpu(stopped,now.AddSeconds(3)) is {Rpm:0,Held:false}&&display.Gpu(stopped,now.AddSeconds(3)) is {Rpm:0,Held:false},
             "A genuine measured zero was ignored or remained marked as delayed after recovery.");
+        require(ProductCanvas.HomeFanRpmCaption(display.Cpu(stopped,now.AddSeconds(3)))=="RPM","Recovered measured zero remained labelled as retained.");
         Console.WriteLine("Fan readouts: PASS (independent last valid RPM, gaps, stale acquisition, partial updates, ordering, invalid/future samples, measured zero and unchanged control admission; presentation only).");
     }
 }

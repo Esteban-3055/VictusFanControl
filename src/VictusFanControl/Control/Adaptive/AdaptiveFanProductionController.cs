@@ -56,7 +56,7 @@ public sealed class AdaptiveFanProductionController
     private readonly int _automaticMaximumLevel;
     private readonly bool _useRawCpuThermalResponse;
     private readonly bool _productTelemetryTolerance;
-    private ProductProtectionSettings _protections = new();
+    private ProductProtectionSettings _protections = new(){HistoricalGpuThermalPolicy=true};
     public void ConfigureAutomaticProtections(ProductProtectionSettings protections)
     {
         ArgumentNullException.ThrowIfNull(protections);
@@ -64,7 +64,13 @@ public sealed class AdaptiveFanProductionController
         _protections = protections;
     }
     private readonly IExperimentalFanPolicy? _experimentalPolicy;
-    private FanConfiguration? _automaticConfiguration;
+    private FanConfiguration? _frozenAutomaticConfiguration;
+    private FanConfiguration? _automaticConfiguration
+    {
+        get=>Volatile.Read(ref _frozenAutomaticConfiguration);
+        set=>Volatile.Write(ref _frozenAutomaticConfiguration,value is null?null:FanConfigurationStore.Freeze(value));
+    }
+    public FanConfiguration? AppliedConfigurationSnapshot=>_automaticConfiguration;
     public FanConfiguration? AutomaticConfiguration => _automaticConfiguration is null ? null : FanConfigurationStore.Copy(_automaticConfiguration);
     public int AutomaticNormalPollingDelayMilliseconds => _automaticConfiguration?.Tuning.NormalPollingDelayMilliseconds ?? 1000;
     private readonly HardwareIdentity? _automaticHardware;
@@ -115,7 +121,7 @@ public sealed class AdaptiveFanProductionController
         if (automaticMaximumLevel is not (50 or 54) || automaticMaximumLevel == 54 &&
             (automaticMinimumLevel != 10 || automaticHardware is null ||
              coordinator.BackendCanWrite && coordinator.BackendCapabilities.MaximumLevel < 54))
-            throw new ArgumentException("Product 54/52 Automatic requires exact-target telemetry and a 54-level backend.",nameof(automaticMaximumLevel));
+            throw new ArgumentException("Product 54/54 Automatic requires exact-target telemetry and a 54-level backend.",nameof(automaticMaximumLevel));
         _automaticMaximumLevel = automaticMaximumLevel;
         _useRawCpuThermalResponse = useRawCpuThermalResponse;
         if (experimentalPolicy is not null && (!automaticExecutionAuthorized || automaticHardware is null ||

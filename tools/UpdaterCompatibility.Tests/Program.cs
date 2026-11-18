@@ -4,38 +4,55 @@ using VictusFanControl.Product;
 
 if(ProductRelease.Version!="1.2.9"||ProductRelease.IsPreview)throw new Exception("Wrong updater baseline.");
 var current=new Version(1,2,9);
+var expected=new Version(1,3,6);
+var previousVersions=Enumerable.Range(9,9).Select(i=>new Version(1,2,i)).Append(new Version(1,3,0)).Concat(Enumerable.Range(1,5).Select(i=>new Version(1,3,i))).ToArray();
 string Release(string tag,bool preview,bool draft=false)=>JsonSerializer.Serialize(new
 {
     tag_name=tag,prerelease=preview,draft,
-    assets=new[]{new{name="VictusFanControl-1.2.12-Setup-win-x64.exe",size=4096,state="uploaded",digest="sha256:"+new string('a',64),
-        browser_download_url=$"https://github.com/{ProductUpdates.Repository}/releases/download/{tag}/VictusFanControl-1.2.12-Setup-win-x64.exe"}}
+    assets=new[]{new{name=$"VictusFanControl-{tag[1..]}-Setup-win-x64.exe",size=4096,state="uploaded",digest="sha256:"+new string('a',64),
+        browser_download_url=$"https://github.com/{ProductUpdates.Repository}/releases/download/{tag}/VictusFanControl-{tag[1..]}-Setup-win-x64.exe"}}
 });
-var metadata="["+Release("v1.2.12",true)+"]";
-if(ProductUpdates.ParseReleases(metadata,current) is not null)throw new Exception("Stable channel admitted preview.");
-if(ProductUpdates.ParseReleases(metadata,current,true) is not {Version:var version,IsPrerelease:true}||version!=new Version(1,2,12))throw new Exception("1.2.9 cannot discover numeric preview.");
-if(ProductUpdates.ParseReleases("["+Release("v1.2.12-preview.4",true)+"]",current,true) is not null)throw new Exception("Baseline tag filter changed.");
-if(ProductUpdates.ParseReleases("["+Release("v1.2.12",true,true)+"]",current,true) is not null)throw new Exception("Draft became eligible.");
-if(ProductUpdates.ParseReleases(metadata,new Version(1,2,10),true)?.Version!=new Version(1,2,12))throw new Exception("1.2.10 cannot discover the next preview.");
-if(ProductUpdates.ParseReleases(metadata,new Version(1,2,11),true)?.Version!=new Version(1,2,12))throw new Exception("1.2.11 cannot discover the next preview.");
-Console.WriteLine("PASS original 1.2.9 updater: numeric v1.2.12 preview accepted with opt-in; stable channel, draft and suffix-tag fences preserved.");
+var metadata="["+Release("v1.3.6",false)+"]";
+foreach(var previous in previousVersions)
+foreach(var previews in new[]{false,true})
+    if(ProductUpdates.ParseReleases(metadata,previous,previews) is not {Version:var v,IsPrerelease:false}||v!=expected)
+        throw new Exception("Older version cannot discover stable 1.3.6.");
+var preview="["+Release("v1.3.6",true)+"]";
+if(ProductUpdates.ParseReleases(preview,current) is not null||ProductUpdates.ParseReleases(preview,current,true)?.Version!=expected)
+    throw new Exception("Preview opt-in fence changed.");
+if(ProductUpdates.ParseReleases("["+Release("v1.3.6-preview.1",true)+"]",current,true) is not null||
+    ProductUpdates.ParseReleases("["+Release("v1.3.6",false,true)+"]",current,true) is not null||
+    ProductUpdates.ParseReleases(metadata,expected,true) is not null)throw new Exception("Draft, suffix or installed-version fence changed.");
+Console.WriteLine("PASS original 1.2.9 updater: stable numeric 1.3.6 eligible from 1.2.9 through 1.3.5 without preview opt-in; draft/suffix/preview fences preserved.");
+var nextPreview="["+Release("v1.3.9",true)+","+Release("v1.3.6",false)+"]";
+foreach(var previous in previousVersions.Append(expected).Append(new Version(1,3,7)).Append(new Version(1,3,8)))
+{
+    var stable=ProductUpdates.ParseReleases(nextPreview,previous,false);
+    if(previous>=expected?stable is not null:stable?.Version!=expected)throw new Exception("Future preview changed the stable update channel.");
+    if(ProductUpdates.ParseReleases(nextPreview,previous,true) is not {IsPrerelease:true,Version:var pv}||pv!=new Version(1,3,9))
+        throw new Exception("Future preview no longer requires opt-in.");
+}
+Console.WriteLine("PASS original 1.2.9 updater: stable 1.3.6 eligible from 1.2.9 through 1.3.5 with either opt-in setting; future previews remain opt-in only.");
 if(args.Length==2&&args[0]=="--live")
 {
     using var deadline=new CancellationTokenSource(TimeSpan.FromMinutes(10));
-    var update=await ProductUpdates.CheckAsync(current,deadline.Token,true)??throw new Exception("Published preview unavailable to 1.2.9.");
-    if(update.Version!=new Version(1,2,12)||!update.IsPrerelease)throw new Exception("Unexpected published update.");
-    if(await ProductUpdates.CheckAsync(new Version(1,2,10),deadline.Token,true)!=update)throw new Exception("Previous preview cannot discover the same published installer.");
-    if(await ProductUpdates.CheckAsync(new Version(1,2,11),deadline.Token,true)!=update)throw new Exception("1.2.11 cannot discover the same published installer.");
-    if(await ProductUpdates.CheckAsync(current,deadline.Token,false) is not null)throw new Exception("Stable channel changed unexpectedly.");
+    var update=await ProductUpdates.CheckAsync(current,deadline.Token,false)??throw new Exception("Published stable unavailable to 1.2.9.");
+    if(update.Version!=expected||update.IsPrerelease)throw new Exception("Unexpected published update.");
+    var optIn=await ProductUpdates.CheckAsync(current,deadline.Token,true)??throw new Exception("Opt-in channel unavailable.");
+    foreach(var previous in previousVersions)
+    foreach(var previews in new[]{false,true})
+        if(await ProductUpdates.CheckAsync(previous,deadline.Token,previews)!=(previews?optIn:update))
+            throw new Exception("Previous version cannot discover the same stable installer.");
     var root=Path.GetFullPath(args[1]);Directory.CreateDirectory(root);
     var path=await ProductUpdates.DownloadCachedAsync(update,deadline.Token,root:root);
     await using(var verified=await ProductUpdates.OpenVerifiedInstallerAsync(update,deadline.Token,root))
         if(verified.Length!=update.Size)throw new Exception("Wrong download size.");
-    var confirmed=await ProductUpdates.ConfirmPublishedInstallerAsync(update,current,true,deadline.Token);
+    var confirmed=await ProductUpdates.ConfirmPublishedInstallerAsync(update,current,false,deadline.Token);
     if(confirmed!=update)throw new Exception("Published installer confirmation changed.");
-    var record=new{baseline="1.2.9",testedCurrentVersions=new[]{"1.2.9","1.2.10","1.2.11"},baselineSource="e8a58a5cb01eb673114a8dca0c5c0e925f55fddc",version=update.Version.ToString(),update.IsPrerelease,
-        url=update.Download.ToString(),update.Size,update.Sha256,verifiedSha256=Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant(),installerExecuted=false};
+    var record=new{baseline="1.2.9",testedCurrentVersions=previousVersions.Select(v=>v.ToString()).ToArray(),baselineSource="e8a58a5cb01eb673114a8dca0c5c0e925f55fddc",version=update.Version.ToString(),update.IsPrerelease,
+        previewOptInRequired=false,url=update.Download.ToString(),update.Size,update.Sha256,verifiedSha256=Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant(),installerExecuted=false};
     await File.WriteAllTextAsync(Path.Combine(root,"compatibility.json"),JsonSerializer.Serialize(record,new JsonSerializerOptions{WriteIndented=true}));
-    Console.WriteLine("PASS live 1.2.9 updater: discovery, preview opt-in, full installer download, SHA-256, retained cache and published metadata revalidation. Installer was not executed.");
+    Console.WriteLine("PASS live original 1.2.9 updater: stable discovery, full installer download, SHA-256, cache and published metadata revalidation. Installer was not executed.");
 }
 else if(args.Length!=0)throw new ArgumentException("Use --live CACHE_ROOT or no arguments.");
 

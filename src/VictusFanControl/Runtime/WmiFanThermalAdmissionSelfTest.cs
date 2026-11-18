@@ -40,17 +40,19 @@ internal static class WmiFanThermalAdmissionSelfTest
             return guard;
         }
         // Software handoffs are independent. Disabling them preserves real acquisition identity/freshness.
+        foreach(var historical in new[]{false,true})
         foreach(var cpuEnabled in new[]{false,true}) foreach(var gpuEnabled in new[]{false,true})
         {
             clock=0;
-            var adjustable=new Hp8C40AutomaticThermalAdmission(Hardware,()=>clock,new(){CpuThermalHandoff=cpuEnabled,GpuThermalHandoff=gpuEnabled});
+            var adjustable=new Hp8C40AutomaticThermalAdmission(Hardware,()=>clock,new(){CpuThermalHandoff=cpuEnabled,GpuThermalHandoff=gpuEnabled,HistoricalGpuThermalPolicy=historical});
             adjustable.Observe(Sample(Now()),Now());clock=100;
-            var critical=Sample(Now(),100,90);
+            var gpuCritical=historical?90:95.001;
+            var critical=Sample(Now(),100,gpuCritical);
             var admission=adjustable.Observe(critical,Now());
             Check(admission.EffectiveSafety.CustomControlPermitted==(!cpuEnabled&&!gpuEnabled),"Configured CPU/GPU handoff mismatch.");
             if(!cpuEnabled&&!gpuEnabled)
             {
-                for(int i=0;i<5;i++){clock+=1000;critical=Sample(Now(),100,90);Check(adjustable.Observe(critical,Now()).EffectiveSafety.CustomControlPermitted,"Disabled CPU deadline closed admission.");}
+                for(int i=0;i<5;i++){clock+=1000;critical=Sample(Now(),100,gpuCritical);Check(adjustable.Observe(critical,Now()).EffectiveSafety.CustomControlPermitted,"Disabled CPU deadline closed admission.");}
                 Check(adjustable.RemainingConfirmationMilliseconds is null,"Disabled thermal protection retained a confirmation budget.");
                 clock+=4000;Check(!adjustable.Preview(critical,Now()).EffectiveSafety.CustomControlPermitted,"Disabled thermal protection accepted stale telemetry.");
             }

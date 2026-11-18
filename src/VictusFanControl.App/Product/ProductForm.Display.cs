@@ -116,7 +116,7 @@ internal sealed partial class ProductForm
         Marshal.WriteInt32(pointer, 32, display.Bounds.Width);
         Marshal.WriteInt32(pointer, 36, display.Bounds.Height);
     }
-    internal object DisplayDiagnostic() => new { deviceDpi = DeviceDpi, display = ReadDisplayMetrics(),
+    internal object DisplayDiagnostic() => new { deviceDpi = DeviceDpi, display = ReadDisplayMetrics(),recoveryEpisode=_recoveryEpisode.Diagnostic(),
         bounds = Bounds, restoreBounds = RestoreBounds, minimumSize = MinimumSize,
         windowState = WindowState.ToString(), preferred = _windowLayout.PreferredSize, homeAnimation=_canvas.HomeAnimationDiagnostic() };
     [StructLayout(LayoutKind.Sequential)]

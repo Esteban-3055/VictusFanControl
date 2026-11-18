@@ -1,10 +1,10 @@
 namespace VictusFanControl.Hardware.Hp;
 
-/// <summary>Product command limits: CPU 54, GPU 52. Historical equal-only qualification constants remain unchanged.</summary>
+/// <summary>User-requested product command limits: CPU/GPU 54. Levels are nominal, not verified RPM.</summary>
 public static class Hp8C40ProductFanTargets
 {
     public const int MaximumLogicalLevel = 54;
-    public const int MaximumGpuLevel = 52;
+    public const int MaximumGpuLevel = 54;
     public static (int Cpu, int Gpu) FromLogical(int level)
     {
         if (level is <10 or >MaximumLogicalLevel) throw new ArgumentOutOfRangeException(nameof(level));

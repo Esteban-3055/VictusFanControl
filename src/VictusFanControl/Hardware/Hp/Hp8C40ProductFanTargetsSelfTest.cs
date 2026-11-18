@@ -16,7 +16,7 @@ internal static class Hp8C40ProductFanTargetsSelfTest
             var pair=Hp8C40ProductFanTargets.FromLogical(level);
             Check(session.Apply(level,true),"Preview target change lost.");
             Check(calls[^1].Payload.SequenceEqual(new byte[]{(byte)pair.Cpu,(byte)pair.Gpu,0,0}),"Wrong physical preview pair.");
-            Check(pair.Gpu<=52,"GPU preview exceeded 52.");
+            Check(pair.Gpu<=54,"GPU preview exceeded 54.");
             Check(WmiFanExperimentBoundary.IsAllowed(calls[^1],true,false,false,gui:true,productUpperRange:true),"Preview whitelist denied permitted pair.");
             Check(!session.Apply(level,true),"Unchanged preview target retransmitted.");
         }
@@ -38,6 +38,6 @@ internal static class Hp8C40ProductFanTargetsSelfTest
         Reject(()=>failedIntent.Apply(54,true));Check(writes==0&&!failedIntent.MayHaveWritten,"Intent failure dispatched preview hardware.");
         var rejected=new WmiFanSession(_=>7,_=>{},10,true);Reject(()=>rejected.Apply(54,true));
         Check(rejected.Phase==WmiFanSessionPhase.Recovering&&rejected.MayHaveWritten,"Rejected preview left normal writes open.");
-        Console.WriteLine("Upper-range preview: PASS (54/52 mapping, exhaustive pair whitelist, default/shadow/recovery/stop refusal, intent ordering, deduplication and release; fake IO only).");
+        Console.WriteLine("Upper-range preview: PASS (54/54 mapping, exhaustive pair whitelist, default/shadow/recovery/stop refusal, intent ordering, deduplication and release; fake IO only).");
     }
 }

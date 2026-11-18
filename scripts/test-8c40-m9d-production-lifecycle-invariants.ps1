@@ -82,8 +82,9 @@ foreach($needle in @(
 }
 
 $programBarrier=$appProgram.IndexOf('Hp8C40M9DProductionLifecycleQualificationTest.PhysicalExecutionAuthorized',[StringComparison]::Ordinal)
-$programModules=$appProgram.IndexOf('var modulesDirectory = ResolveModulesDirectory(args);',[StringComparison]::Ordinal)
-if($programBarrier-lt 0 -or $programModules-lt 0 -or $programBarrier-ge $programModules){
+$programModules=$appProgram.IndexOf('var modulesDirectory = hardwareTestModeCount==0',[StringComparison]::Ordinal)
+$programHistoricalResolver=$appProgram.IndexOf(': ResolveModulesDirectory(args);',[Math]::Max(0,$programModules),[StringComparison]::Ordinal)
+if($programBarrier-lt 0 -or $programModules-lt 0 -or $programBarrier-ge $programModules -or $programHistoricalResolver-le $programModules){
     throw 'M9D hard execution barrier must precede modules/backend construction.'
 }
 

@@ -13,6 +13,8 @@
   <ItemGroup>
     <ProjectReference Include="../VictusFanControl.ExternalCooling/VictusFanControl.ExternalCooling.csproj" />
     <Compile Include="../../tools/Shared/ProductRecovery*.cs" Link="Recovery/%(Filename).cs" />
+    <Compile Include="../../tools/Shared/ProductProcessPriority.cs" Link="Scheduling/ProductProcessPriority.cs" />
+    <Compile Include="../../tools/Shared/ProductShutdownOrder.cs" Link="Scheduling/ProductShutdownOrder.cs" />
     <EmbeddedResource Include="../../assets/rotors/home-fan.png" LogicalName="VictusFanControl.HomeFan.png" />
     <EmbeddedResource Include="../../assets/icons/*.ico" LogicalName="VictusFanControl.Icons.%(Filename).ico" />
     <ProjectReference Include="..\VictusFanControl\VictusFanControl.csproj" />

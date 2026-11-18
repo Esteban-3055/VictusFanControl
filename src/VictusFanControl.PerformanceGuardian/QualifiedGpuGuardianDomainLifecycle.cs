@@ -87,7 +87,8 @@ internal sealed class QualifiedGpuGuardianDomainLifecycle :
                 null,
             GpuStatus:
                 _lastStatus ??
-                _session.LastStatus);
+                _session.LastStatus,
+            RecoveryGpuSession: _session.ReturnedReleaseFailureSession);
 
     public ValueTask EnableAsync(
         bool cpuEnabled,

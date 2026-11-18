@@ -17,6 +17,9 @@ internal interface IWmiFanGuiGuardian : IAsyncDisposable
     void PersistIntent(int level);
     void Heartbeat();
     Task<FanWmiReleaseEvidence> ReleaseAsync(CancellationToken token);
+    Task<FanWmiReleaseEvidence> ConfirmCompletedReleaseAsync(CancellationToken token);
+    Task SetCtgpAsync(bool enabled, CancellationToken token) => enabled
+        ? Task.FromException(new NotSupportedException("cTGP no disponible en este guardián.")) : Task.CompletedTask;
 }
 
 /// <summary>
@@ -40,6 +43,12 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
     internal int? LastAcceptedLevel => _session.LastAcceptedLevel;
     internal (int Cpu,int Gpu)? LastAcceptedTargets => _session.LastAcceptedLevel is {} level ? (_productUpperRange ? Hp8C40ProductFanTargets.FromLogical(level) : (level,level)) : null;
     internal Func<TelemetrySnapshot?>? ProductTelemetryProvider { get; set; }
+    internal async Task SetCtgpAsync(bool enabled, CancellationToken token)
+    {
+        if (!enabled && !_active) return;
+        await EnterCustomModeAsync(token).ConfigureAwait(false);
+        await _guardian.SetCtgpAsync(enabled, token).ConfigureAwait(false);
+    }
     public event EventHandler<string>? CommandAccepted;
     public string Name => "HP 8C40 WMI-only / supervised requests; hardware ownership unverified";
     public bool CanWrite => true;
@@ -132,7 +141,17 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
         if (!_active)
             return;
         if (_reentryBlocked)
-            throw new InvalidOperationException("WMI session recovery is unresolved; release cannot be retried blindly.");
+        {
+            // A detached guardian may finish after the original wait failed.
+            // Observe its bound process/report only; never repeat native recovery.
+            WmiFanExperimentBoundary.BeginRecovery();
+            using var drain = CancellationTokenSource.CreateLinkedTokenSource(token);
+            drain.CancelAfter(TimeSpan.FromSeconds(10));
+            await HpWmiFanTelemetryReader.WaitForProductionQuiescenceAsync(drain.Token).ConfigureAwait(false);
+            ReleaseEvidence = await _guardian.ConfirmCompletedReleaseAsync(drain.Token).ConfigureAwait(false);
+            CompleteRelease();
+            return;
+        }
 
         _releaseInProgress = true;
         WmiFanExperimentBoundary.BeginRecovery();
@@ -166,7 +185,12 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
                 "guardian lease retained and re-entry blocked: " + guardianFailure.Message, guardianFailure);
         }
 
-        if (!ReleaseEvidence.GuardianLeaseRetired ||
+        CompleteRelease();
+    }
+
+    private void CompleteRelease()
+    {
+        if (ReleaseEvidence is null || !ReleaseEvidence.GuardianLeaseRetired ||
             (_session.MayHaveWritten && (!ReleaseEvidence.ReleaseRequestAccepted || !ReleaseEvidence.LegacyDefaultRequestAccepted)))
         {
             _releaseInProgress = false;

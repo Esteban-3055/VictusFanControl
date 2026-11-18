@@ -1,4 +1,4 @@
-﻿param([switch]$NoOpen,[int]$InstallerProcessId=0,[switch]$EnableStartupAutomatic,[switch]$PreserveStartupPreferences)
+﻿param([switch]$NoOpen,[int]$InstallerProcessId=0,[switch]$EnableStartupAutomatic,[switch]$PreserveStartupPreferences,[switch]$DesktopShortcut)
 $ErrorActionPreference='Stop'
 $OutputEncoding=[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false)
 if($EnableStartupAutomatic -and $PreserveStartupPreferences){throw 'Selecciona sólo una opción de inicio.'}
@@ -19,6 +19,11 @@ $others=@(Get-Process -Name 'VictusFanControl*' -ErrorAction SilentlyContinue | 
 if($others.Count -ne 0){throw 'Sal de VictusFanControl desde la bandeja antes de instalar. No se detienen procesos ni se eliminan journals.'}
 # Refuse unresolved ownership, even after a process disappeared. Never delete recovery records.
 $root=Join-Path $env:LOCALAPPDATA 'VictusFanControl'
+[IO.Directory]::CreateDirectory($root) | Out-Null
+# Both CLI and packaged installers share this non-waiting lock. A second
+# installer cannot change task/profile registration while this one owns it.
+$installLock=[IO.File]::Open((Join-Path $root 'installation.lock'),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+try {
 $performance=Join-Path $root 'Performance\HP-8C40-9D0R1LA-F18'
 foreach($name in @('cpu-power-session.json','gpu-clock-session.json')) {
     if(Test-Path -LiteralPath (Join-Path $performance $name)){throw "Resuelve la recuperación pendiente antes de instalar: $name"}
@@ -48,7 +53,10 @@ if(-not (Test-Path -LiteralPath $destination)) {
         New-Item -ItemType Directory -Path $stage -Force | Out-Null
         Copy-Item -Path (Join-Path $PSScriptRoot '*') -Destination $stage -Recurse
         & (Join-Path $stage 'Start-ProductGui.ps1') -Mode Verify
-        Move-Item -LiteralPath $stage -Destination $destination
+        # Directory.Move is a rename: it never nests staging inside an existing
+        # destination. A racing identical destination must pass every hash below.
+        try {[IO.Directory]::Move($stage,$destination)}
+        catch [IO.IOException] {if(-not [IO.Directory]::Exists($destination)){throw}}
     } finally {if(Test-Path -LiteralPath $stage){Remove-Item -LiteralPath $stage -Recurse -Force}}
 }
 # Check the destination against the trusted source before executing its launcher.
@@ -72,12 +80,18 @@ elseif($PreserveStartupPreferences){$start.Arguments+=' --preserve-product-start
 $process=[Diagnostics.Process]::Start($start)
 try{$process.WaitForExit();if($process.ExitCode -ne 0){throw 'No se configuró el inicio. Se conservó la instalación anterior; revisa el mensaje.'}}finally{$process.Dispose()}
 $shell=New-Object -ComObject WScript.Shell
-$shortcut=$shell.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Programs')) 'VictusFanControl.lnk'))
-$shortcut.TargetPath=Join-Path $app 'VictusFanControl.App.exe'
-$shortcut.Arguments='--modules-dir "'+(Join-Path $app 'modules')+'"'
-$shortcut.WorkingDirectory=$app
-$shortcut.IconLocation=(Join-Path $app 'VictusFanControl.App.exe')+',0'
-$shortcut.Save()
+$folders=@([Environment]::GetFolderPath('Programs'))
+$desktop=[Environment]::GetFolderPath('DesktopDirectory')
+if($desktop -and ($DesktopShortcut -or (Test-Path -LiteralPath (Join-Path $desktop 'VictusFanControl.lnk')))) { $folders+=$desktop }
+foreach($folder in $folders) {
+    $shortcut=$shell.CreateShortcut((Join-Path $folder 'VictusFanControl.lnk'))
+    $shortcut.TargetPath=Join-Path $app 'VictusFanControl.App.exe'
+    $shortcut.Arguments='--modules-dir "'+(Join-Path $app 'modules')+'"'
+    $shortcut.WorkingDirectory=$app
+    $shortcut.IconLocation=(Join-Path $app 'VictusFanControl.App.exe')+',0'
+    $shortcut.Save()
+}
 Write-Host "Instalado en $destination"
 Write-Host 'Perfiles y preferencias anteriores conservados. Primera instalación: inicio con Windows, minimizado y Automático. La apertura mantiene los requisitos de sensores, guardianes y recuperación.'
 if(-not $NoOpen){& (Join-Path $destination 'Start-ProductGui.ps1') -Mode Open}
+} finally {$installLock.Dispose()}

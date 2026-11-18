@@ -1,13 +1,18 @@
 """Loopback-only test bridge to the same C++ session engine used by ESP32 firmware."""
-import argparse, pathlib, socket, subprocess, time
+import argparse, contextlib, pathlib, socket, subprocess, time
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('host');args=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('host');p.add_argument('--configuration-report');args=p.parse_args()
     with socket.socket() as listener:
         listener.bind(('127.0.0.1',0));listener.listen(1);listener.settimeout(20)
         print(listener.getsockname()[1],flush=True)
-        with listener.accept()[0] as connection:
-            process=subprocess.Popen([str(pathlib.Path(args.host).resolve())],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        with listener.accept()[0] as connection, contextlib.ExitStack() as stack:
+            command=[str(pathlib.Path(args.host).resolve())]
+            report=subprocess.DEVNULL
+            if args.configuration_report:
+                command.append('--configuration')
+                report=stack.enter_context(open(args.configuration_report,'wb'))
+            process=subprocess.Popen(command,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=report)
             try:
                 connection.settimeout(3);pending=b'';deadline=time.monotonic()+20
                 while time.monotonic()<deadline:

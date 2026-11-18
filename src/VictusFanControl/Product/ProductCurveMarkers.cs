@@ -25,7 +25,7 @@ public static class ProductCurveMarkers
         var markers=new List<ProductDemandMarker>();
         var sameSource=applied is not null&&draft.Tuning.CpuTemperatureSource==applied.Tuning.CpuTemperatureSource&&draft.Tuning.HottestPerformanceCoreCount==applied.Tuning.HottestPerformanceCoreCount;
         if(live is not null&&Demand(draft,live,sameSource?cpuFilter:null) is { } preview)markers.Add(new(preview.Percent,preview.Level,false,preview));
-        if(applied is not null&&decisionSnapshot is not null&&requestedLevel is >=10 and <=50&&
+        if(applied is not null&&decisionSnapshot is not null&&requestedLevel is >=10 and <=54&&
             (acceptedObservation??Demand(applied,decisionSnapshot,cpuFilter)) is { } accepted)
             markers.Add(new(accepted.Percent,requestedLevel.Value,true,accepted));
         return markers;
@@ -50,7 +50,7 @@ public static class ProductCurveMarkers
         {
             if (live is not null && Input(live, axis, draft.Tuning) is { } previewInput && double.IsFinite(previewInput) && previewInput >= 0)
                 markers.Add(new(axis, previewInput, AdaptiveCurveProfiles.Interpolate(AdaptiveCurveProfiles.Curve(policy, axis), previewInput), false));
-            if (applied is not null && decisionSnapshot is not null && requestedLevel is >= 10 and <= 50 &&
+            if (applied is not null && decisionSnapshot is not null && requestedLevel is >= 10 and <= 54 &&
                 Input(decisionSnapshot, axis, applied.Tuning) is { } appliedInput && double.IsFinite(appliedInput) && appliedInput >= 0)
                 markers.Add(new(axis, appliedInput, requestedLevel.Value, true));
         }

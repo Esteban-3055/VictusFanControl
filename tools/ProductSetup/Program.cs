@@ -1,6 +1,3 @@
-using System.Diagnostics;
-using System.Security.Principal;
-
 namespace VictusSetup;
 
 internal static class Program
@@ -14,7 +11,7 @@ internal static class Program
             if (Environment.ExitCode == 0)
             {
                 ApplicationConfiguration.Initialize();
-                Environment.ExitCode = SetupForm.TestStartupChoice();
+                Environment.ExitCode = SetupForm.TestWizard();
             }
             if (Environment.ExitCode == 0 && typeof(Package).Assembly.GetManifestResourceInfo("payload.zip") is not null)
             {
@@ -28,128 +25,5 @@ internal static class Program
         ApplicationConfiguration.Initialize();
         try { Application.Run(new SetupForm(args)); }
         catch (Exception ex) { Environment.ExitCode = 1; MessageBox.Show(ex.Message, "Instalación no completada"); }
-    }
-}
-
-internal sealed class SetupForm : Form
-{
-    private readonly Label _status = new() { AutoSize = false, Left = 25, Top = 65, Width = 550, Height = 185 };
-    private readonly CheckBox _startupAutomatic = new() { Text = "Iniciar con Windows y activar Automático", Checked = false, Left = 25, Top = 262, Width = 550, Height = 26 };
-    private readonly Button _install = new() { Text = "Instalar / actualizar", Left = 320, Top = 305, Width = 180, Height = 38 };
-    private readonly Button _cancel = new() { Text = "Cerrar", Left = 510, Top = 305, Width = 75, Height = 38 };
-    private bool _working;
-    private readonly int? _ownerPid;
-    private readonly long? _ownerStart;
-    internal bool StartupAutomaticSelected => _startupAutomatic.Checked;
-    internal SetupForm(string[] args, string? profilesPath = null)
-    {
-        if (args.Length != 0)
-        {
-            if (args.Length != 6 || args[4] != "--owner-sid" || args[0] != "--wait-pid" || args[2] != "--wait-start" ||
-                !int.TryParse(args[1], out var pid) || pid <= 0 || !long.TryParse(args[3], out var ticks) || ticks <= 0)
-                throw new ArgumentException("Argumentos del instalador no válidos.");
-            using var identity = WindowsIdentity.GetCurrent();
-            if (identity.User?.Value != args[5]) throw new IOException("Actualiza con la misma cuenta de Windows. No uses las credenciales de otra cuenta para elevar el instalador.");
-            _ownerPid = pid; _ownerStart = ticks;
-        }
-        Text = "VictusFanControl v" + Package.Version + " · Instalador";
-        ClientSize = new(610, 370); FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; StartPosition = FormStartPosition.CenterScreen;
-        Controls.Add(new Label { Text = "Instalar VictusFanControl", Left = 25, Top = 20, AutoSize = true, Font = new Font(Font.FontFamily, 16, FontStyle.Bold) });
-        _status.Text = "Equipo: HP 8C40 / BIOS F.18.\n\nCierra VictusFanControl desde la bandeja. Se conservarán tus perfiles, registros y preferencias de inicio.\n\nPrimera instalación: inicio con Windows, minimizado y Automático. Se requiere .NET Desktop Runtime 8 x64 y PawnIO instalado. Usa tu misma cuenta de Windows.";
-        var profilesExist=File.Exists(profilesPath ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"VictusFanControl","product-profiles.json"));
-        _startupAutomatic.Checked=!profilesExist;
-        if(profilesExist)_startupAutomatic.Text="Activar inicio con Windows y Automático (opcional al actualizar)";
-        Controls.AddRange(new Control[] { _status, _startupAutomatic, _install, _cancel });
-        _cancel.Click += (_, _) => Close(); _install.Click += async (_, _) => await InstallAsync();
-        FormClosing += (_, e) => { if (_working) e.Cancel = true; };
-    }
-    internal static int TestStartupChoice()
-    {
-        var directory=Path.Combine(Path.GetTempPath(),"VictusSetup-ui-fixture-"+Guid.NewGuid().ToString("N"));
-        var path=Path.Combine(directory,"profiles.json");
-        try
-        {
-            Directory.CreateDirectory(directory);
-            using(var fresh=new SetupForm([],path))
-                if(!fresh.StartupAutomaticSelected)throw new InvalidOperationException("Fresh installer lost its startup default.");
-            // An existing preference file must select preservation, independent of what its saved Boolean says.
-            File.WriteAllText(path,"{\"activateAutomaticOnStart\":false}");
-            using(var update=new SetupForm([],path))
-                if(update.StartupAutomaticSelected)throw new InvalidOperationException("Update installer silently enabled Windows startup/Automatic.");
-            Console.WriteLine("Installer UI startup choice: PASS (fresh default and preservation of existing preferences; no install/registration/hardware IO).");return 0;
-        }
-        catch(Exception ex){Console.Error.WriteLine(ex);return 1;}
-        finally{if(Directory.Exists(directory))Directory.Delete(directory,true);}
-    }
-    private async Task InstallAsync()
-    {
-        if (_working) return;
-        _working = true; _install.Enabled = _cancel.Enabled = _startupAutomatic.Enabled = false;
-        string? directory = null;
-        try
-        {
-            _status.Text = "Esperando el cierre normal de la sesión anterior…";
-            if (_ownerPid is int pid)
-            {
-                Process? owner = null;
-                try { owner = Process.GetProcessById(pid); } catch (ArgumentException) { }
-                if (owner is not null)
-                {
-                    using (owner)
-                    {
-                        if (owner.StartTime.ToUniversalTime().Ticks != _ownerStart) throw new IOException("El identificador pertenece a otro proceso. Cierra el instalador y vuelve a intentarlo.");
-                        using var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(2));
-                        await owner.WaitForExitAsync(deadline.Token);
-                    }
-                }
-            }
-            await RequireDesktopRuntimeAsync();
-            _status.Text = "Verificando el contenido e instalando…";
-            directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VictusFanControl", "setup", Guid.NewGuid().ToString("N"));
-            await Task.Run(() => Package.ExtractEmbedded(directory));
-            var pending = VictusFanControl.Recovery.ProductRecoverySelection.Read();
-            if (pending.Pending)
-            {
-                var consent = MessageBox.Show(this, "Hay sesiones anteriores pendientes de recuperación.\n\n" + pending.Summary +
-                    "\n\nCierra otros controladores de CPU/GPU/ventiladores y aplicaciones de VictusFanControl. Se guardarán respaldos antes de liberar. No se activará Automático durante la recuperación. Si una llamada quedó incierta, será necesario Reiniciar Windows.\n\n¿Recuperar y continuar la instalación?",
-                    "Recuperar sesión anterior", MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
-                if (consent != DialogResult.Yes) throw new IOException("Instalación pausada. Los registros pendientes se conservaron; puedes recuperar al volver a instalar.");
-                _status.Text = "Recuperando la sesión anterior y guardando evidencia…";
-                var app = Path.Combine(directory, "app");
-                var recovered = await VictusFanControl.Recovery.ProductRecoveryClient.RunAsync(app, Path.Combine(app, "modules"), pending);
-                if (!recovered.Succeeded) throw new IOException(recovered.Detail + "\n\nEvidencia: " + recovered.EvidenceDirectory);
-                _status.Text = recovered.Detail + "\n\nEvidencia: " + recovered.EvidenceDirectory;
-            }
-            var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"))
-                { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
-            start.StandardOutputEncoding=start.StandardErrorEncoding=new System.Text.UTF8Encoding(false);
-            foreach (var value in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", Path.Combine(directory, "Install-VictusFanControl.ps1"), "-NoOpen", "-InstallerProcessId", Environment.ProcessId.ToString() }) start.ArgumentList.Add(value);
-            start.ArgumentList.Add(_startupAutomatic.Checked?"-EnableStartupAutomatic":"-PreserveStartupPreferences");
-            using var process = Process.Start(start) ?? throw new IOException("No se pudo abrir el instalador interno.");
-            var output = process.StandardOutput.ReadToEndAsync(); var error = process.StandardError.ReadToEndAsync();
-            await process.WaitForExitAsync();
-            var message = (await output) + (await error);
-            if (process.ExitCode != 0) throw new IOException(message);
-            _status.Text = "Instalación completada.\n\nAbre VictusFanControl desde el menú Inicio. Tus preferencias anteriores se conservaron.\n\n" + message;
-            _install.Visible = false; Environment.ExitCode = 0;
-        }
-        catch (Exception ex) { Environment.ExitCode = 1; _status.Text = "Instalación no completada.\n\n" + ex.Message; MessageBox.Show(this, ex.Message, "Instalación no completada", MessageBoxButtons.OK, MessageBoxIcon.Error); }
-        finally
-        {
-            _working = false; _install.Enabled = _cancel.Enabled = _startupAutomatic.Enabled = true;
-            if (directory is not null && Directory.Exists(directory)) { try { Directory.Delete(directory, true); } catch { } }
-        }
-    }
-    private static async Task RequireDesktopRuntimeAsync()
-    {
-        var dotnet = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "dotnet.exe");
-        if (File.Exists(dotnet))
-        {
-            using var process = Process.Start(new ProcessStartInfo(dotnet, "--list-runtimes") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true })!;
-            var text = await process.StandardOutput.ReadToEndAsync(); await process.WaitForExitAsync();
-            if (process.ExitCode == 0 && text.Split('\n').Any(l => l.StartsWith("Microsoft.WindowsDesktop.App 8.", StringComparison.Ordinal)) &&
-                text.Split('\n').Any(l => l.StartsWith("Microsoft.NETCore.App 8.", StringComparison.Ordinal))) return;
-        }
-        throw new IOException("Instala .NET Desktop Runtime 8 x64 y vuelve a abrir este EXE: https://dotnet.microsoft.com/download/dotnet/8.0");
     }
 }

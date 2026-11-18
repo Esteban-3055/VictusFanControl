@@ -167,6 +167,16 @@ public sealed record FanConfiguration
 /// <summary>Strict, atomic preference storage. Loading never selects a hardware mode.</summary>
 public static class FanConfigurationStore
 {
+    public static FanConfiguration Freeze(FanConfiguration source)
+    {
+        static IReadOnlyList<AdaptiveFanCurvePoint>? Points(IReadOnlyList<AdaptiveFanCurvePoint>? values)=>values is null?null:Array.AsReadOnly(values.ToArray());
+        var c=source.Profile.Config;
+        return source with {Profile=source.Profile with {Config=c with {
+            CpuTemperatureCurve=Points(c.CpuTemperatureCurve),GpuTemperatureCurve=Points(c.GpuTemperatureCurve),
+            CpuPowerCurve=Points(c.CpuPowerCurve),GpuPowerCurve=Points(c.GpuPowerCurve),
+            CpuLoadCurve=Points(c.CpuLoadCurve),GpuLoadCurve=Points(c.GpuLoadCurve)}},
+            UnifiedDemand=source.UnifiedDemand is {} demand?demand with{Curve=Points(demand.Curve)!}:null};
+    }
     private static readonly JsonSerializerOptions Json = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true,

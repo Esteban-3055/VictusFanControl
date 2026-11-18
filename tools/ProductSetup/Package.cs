@@ -7,8 +7,8 @@ namespace VictusSetup;
 
 internal static class Package
 {
-    internal const string Version = "1.2.12";
-    internal static void ExtractEmbedded(string destination)
+    internal const string Version = "1.14.1";
+    internal static string ExtractEmbedded(string destination)
     {
         var assembly = typeof(Package).Assembly;
         using var payload = assembly.GetManifestResourceStream("payload.zip") ?? throw new IOException("Este instalador no contiene un paquete de release.");
@@ -16,9 +16,9 @@ internal static class Package
         var expected = digest.ReadToEnd().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)[0];
         if (Convert.ToHexString(SHA256.HashData(payload)).ToLowerInvariant() != expected) throw new InvalidDataException("SHA-256 del paquete incorrecto.");
         payload.Position = 0;
-        Extract(payload, destination);
+        return Extract(payload, destination);
     }
-    internal static void Extract(Stream source, string destination)
+    internal static string Extract(Stream source, string destination)
     {
         using var archive = new ZipArchive(source, ZipArchiveMode.Read, leaveOpen: true);
         var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -39,9 +39,10 @@ internal static class Package
         using var manifestStream = manifestEntry.Open();
         using var manifest = JsonDocument.Parse(manifestStream);
         var root = manifest.RootElement;
+        var sourceHead = root.GetProperty("sourceHead").GetString();
         if (root.GetProperty("schemaVersion").GetInt32() != 1 || root.GetProperty("kind").GetString() != "VictusFanControl.ProductGuiRelease" ||
             root.GetProperty("version").GetString() != Version || root.GetProperty("appDirectory").GetString() != "app" ||
-            !root.GetProperty("finalReleaseReady").GetBoolean() || !Regex.IsMatch(root.GetProperty("sourceHead").GetString() ?? "", "^[0-9a-f]{40}$"))
+            !root.GetProperty("finalReleaseReady").GetBoolean() || sourceHead is null || !Regex.IsMatch(sourceHead, "^[0-9a-f]{40}$"))
             throw new InvalidDataException("Identidad de release incorrecta.");
         var listed = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { manifestEntry.FullName };
         foreach (var file in root.GetProperty("files").EnumerateArray())
@@ -64,5 +65,6 @@ internal static class Package
             using var input = entry.Open(); using var output = new FileStream(target, FileMode.CreateNew);
             input.CopyTo(output);
         }
+        return sourceHead;
     }
 }

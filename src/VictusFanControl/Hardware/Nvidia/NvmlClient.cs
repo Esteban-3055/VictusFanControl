@@ -82,17 +82,21 @@ internal sealed class NvmlClient :
     private IntPtr _device;
     private bool _initialized;
     private bool _disposed;
+    private Action<string>? _initializationProgress;
 
     public NvmlClient(
         string? preferredDeviceName = null,
-        bool requirePreferredDevice = false)
+        bool requirePreferredDevice = false,Action<string>? initializationProgress = null)
     {
         _preferredDeviceName = preferredDeviceName;
         _requirePreferredDevice = requirePreferredDevice;
+        _initializationProgress=initializationProgress;
+        _initializationProgress?.Invoke("LibraryLoading");
         _library = LoadNvmlLibrary();
 
         try
         {
+            _initializationProgress?.Invoke("LibraryLoaded");
             _init = GetDelegate<NvmlInitDelegate>("nvmlInit_v2");
             _shutdown = GetDelegate<NvmlShutdownDelegate>("nvmlShutdown");
             _getCount = GetDelegate<NvmlDeviceGetCountDelegate>("nvmlDeviceGetCount_v2", "nvmlDeviceGetCount");
@@ -150,16 +154,14 @@ internal sealed class NvmlClient :
                 TryGetDelegate<NvmlDeviceGetFieldValuesDelegate>(
                     "nvmlDeviceGetFieldValues");
 
+            _initializationProgress?.Invoke("ExportsLoaded");
             InitializeDevice();
+            _initializationProgress=null;
         }
         catch
         {
-            if (_initialized)
-            {
-                _shutdown?.Invoke();
-            }
-
-            NativeLibrary.Free(_library);
+            try { if (_initialized) _shutdown?.Invoke(); }
+            finally { NativeLibrary.Free(_library); }
             throw;
         }
     }
@@ -580,18 +582,13 @@ internal sealed class NvmlClient :
             return;
         }
 
-        if (_initialized)
+        try { if (_initialized) _shutdown?.Invoke(); }
+        finally
         {
-            _shutdown?.Invoke();
-            _initialized = false;
+            _initialized=false;
+            try { if (_library!=IntPtr.Zero)NativeLibrary.Free(_library); }
+            finally { _disposed=true; }
         }
-
-        if (_library != IntPtr.Zero)
-        {
-            NativeLibrary.Free(_library);
-        }
-
-        _disposed = true;
     }
 
     private GpuSample ReadSampleWithRetries()
@@ -675,9 +672,11 @@ internal sealed class NvmlClient :
 
     private void InitializeDevice()
     {
+        _initializationProgress?.Invoke("NvmlInitialization");
         ThrowIfError(_init(), "nvmlInit_v2");
         _initialized = true;
 
+        _initializationProgress?.Invoke("DeviceEnumeration");
         ThrowIfError(_getCount(out var count), "nvmlDeviceGetCount");
         if (count == 0)
         {
@@ -689,6 +688,7 @@ internal sealed class NvmlClient :
 
         for (uint index = 0; index < count; index++)
         {
+            if(index==0)_initializationProgress?.Invoke("DeviceOpen");
             ThrowIfError(_getHandle(index, out var candidate), "nvmlDeviceGetHandleByIndex");
             var candidateName = ReadDeviceName(candidate);
 
