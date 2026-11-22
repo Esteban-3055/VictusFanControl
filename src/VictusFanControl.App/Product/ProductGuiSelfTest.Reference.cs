@@ -18,8 +18,11 @@ internal static partial class ProductGuiSelfTest
             using var icons=new ProductIcons();
             Require(icons.Program.Width==32&&icons.Default.Width>0&&icons.Automatic.Width>0&&icons.AutomaticMuted.Width>0&&icons.Error.Width>0,
                 "The original multi-resolution icon containers could not load.");
-            using var form=new Form{AutoScaleMode=AutoScaleMode.None,FormBorderStyle=FormBorderStyle.None,StartPosition=FormStartPosition.Manual,Location=Point.Empty};
-            var canvas=new ProductCanvas{Profiles=profiles,Dock=DockStyle.Fill,StartupKnown=true,StartupEnabled=true};
+            // Windows caps a top-level window to the desktop's tracking limits.
+            // Keep a small host and size the child canvas independently so a
+            // 3344px render remains 3344px on a smaller hosted CI desktop too.
+            using var form=new Form{AutoScaleMode=AutoScaleMode.None,FormBorderStyle=FormBorderStyle.None,StartPosition=FormStartPosition.Manual,Location=Point.Empty,ClientSize=new(1040,660)};
+            var canvas=new ProductCanvas{Profiles=profiles,Dock=DockStyle.None,StartupKnown=true,StartupEnabled=true};
             var externalSettings=new ExternalCoolingSettings();
             var manager=new ExternalCoolingManager(new TelemetryExportService(()=>canvas.State,new WindowsPhysicalMemoryUsage()),()=>null);
             using var external=new ExternalCoolingPage(canvas,externalSettings,manager,()=>false,(_,_,_,_)=>Task.CompletedTask);
@@ -36,7 +39,7 @@ internal static partial class ProductGuiSelfTest
             var frames=new List<object>();
             foreach(var size in new[]{new Size(1672,941),new Size(1040,660),new Size(2090,1176),new Size(2508,1412),new Size(3344,1882)})
             {
-                form.ClientSize=size;Application.DoEvents();
+                canvas.Size=size;Application.DoEvents();
                 foreach(var page in Enum.GetValues<ProductPage>())
                 {
                     var now=DateTimeOffset.UtcNow;var state=ProductHomeTelemetrySelfTest.StateAt(now) with
