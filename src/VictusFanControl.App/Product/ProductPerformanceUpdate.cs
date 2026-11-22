@@ -7,6 +7,30 @@ namespace VictusFanControl.App;
 
 internal static class ProductPerformanceUpdate
 {
+    internal static (bool Cpu,bool Gpu) ChangedActiveDomains(PerformanceGuiSessionConfiguration? before,PerformanceGuiSessionConfiguration next)=>
+        (next.CpuEnabled&&(before is null||!before.CpuEnabled||before.AcPl1Watts!=next.AcPl1Watts||before.AcPl2Watts!=next.AcPl2Watts||
+            before.BatteryPl1Watts!=next.BatteryPl1Watts||before.BatteryPl2Watts!=next.BatteryPl2Watts),
+         next.GpuEnabled&&(before is null||!before.GpuEnabled||before.AcGpuMaximumMHz!=next.AcGpuMaximumMHz||before.BatteryGpuMaximumMHz!=next.BatteryGpuMaximumMHz));
+    internal static bool RequestedDomainsReady(PerformanceGuiSessionConfiguration? before,PerformanceGuiSessionConfiguration next,PerformanceGuardianResponse status)
+    {
+        var changed=ChangedActiveDomains(before,next);
+        return (!changed.Cpu||status.CpuState=="Active")&&(!changed.Gpu||status.GpuState=="ActiveUnverified");
+    }
+    internal static bool HasIndependentTelemetry(TelemetrySnapshot? snapshot,DateTimeOffset now,
+        PerformanceGuiSessionConfiguration? before,PerformanceGuiSessionConfiguration next)
+    {
+        var needed=ChangedActiveDomains(before,next);
+        if(!needed.Cpu&&!needed.Gpu)return true; // Withdrawal is not admission of new control.
+        if(snapshot is not{} s||now<s.Timestamp||now-s.Timestamp>=s.MaximumControlAge)return false;
+        bool Fresh(DateTimeOffset? at)=>now>=(at??s.Timestamp)&&now-(at??s.Timestamp)<s.MaximumControlAge&&
+            (s.RetainedTelemetry is null||(at??s.Timestamp)==s.Timestamp);
+        bool Range(double? v,double low,double high)=>v is{} d&&double.IsFinite(d)&&d>=low&&d<=high;
+        return (!needed.Cpu||s.CpuCoreTelemetryComplete&&s.CpuCoreTemperatures.Select(c=>c.CoreIndex).Distinct().Count()==s.CpuCoreTemperatures.Count&&
+            s.CpuCoreTemperatures.All(c=>c.CoreIndex>=0&&c.LogicalProcessorIndex>=0&&double.IsFinite(c.TemperatureC)&&c.TemperatureC is >=0 and <=125)&&
+            Range(s.CpuControlTemperatureC,10,110)&&Range(s.CpuPackagePowerW,0,500)&&Fresh(s.CpuThermalSampledAtUtc)&&Fresh(s.CpuPowerSampledAtUtc))&&
+            (!needed.Gpu||s.GpuName==VictusFanControl.Hardware.Hp.Hp8C40TargetProfile.ExpectedGpuName&&Range(s.GpuTemperatureC,10,105)&&
+                Range(s.GpuPowerW,0,300)&&Fresh(s.GpuThermalSampledAtUtc)&&Fresh(s.GpuPowerSampledAtUtc));
+    }
     internal static bool HasCurrentTelemetry(TelemetrySnapshot? snapshot, DateTimeOffset now) => snapshot is { IsComplete: true, RetainedTelemetry: null } &&
         now >= snapshot.Timestamp && now - snapshot.Timestamp <= SafetyGate.MaximumTelemetryAge &&
         snapshot.HasFreshControlSensorsAt(now) && snapshot.IsFanTelemetryFreshAt(now);

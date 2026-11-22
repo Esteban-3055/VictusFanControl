@@ -61,7 +61,7 @@ struct NtcDiagnostic {
 } ntcDiagnostic;
 uint32_t ntcValidSamples=0, ntcInvalidSamples=0, ntcLastInvalidAt=0;
 const char* ntcLastInvalidReason="none";
-struct Command { bool valid; int request; uint32_t at; double demand=-1; bool manual=false,hasConfig=false; victus::ExternalConfig config; };
+struct Command { bool valid; int request; uint32_t at; double demand=-1; bool manual=false,hasConfig=false; victus::ExternalConfig config; int independentMode=0;double independentValue=-1; };
 QueueHandle_t commands;
 String ssid,password;
 std::string storedCurveRevision;
@@ -89,7 +89,8 @@ void controlTask(void*) {
         Command command{};
         if (xQueueReceive(commands,&command,0)==pdTRUE) {
             if(command.hasConfig) controller.configure(command.config);
-            controller.receive(command.valid,command.request,command.demand,command.manual,command.at);
+            if(command.independentMode!=0)controller.receiveIndependent(command.valid,command.independentMode,command.independentValue,command.at);
+            else controller.receive(command.valid,command.request,command.demand,command.manual,command.at);
         }
         int duty=controller.tick(millis(),currentAmbient());
         if (board::EnablePwm) {
@@ -199,6 +200,7 @@ void network(uint32_t now) {
             hyperxLcd.observe(session->latest.hyperxPct,session->latest.hyperxSampledUtc,session->latest.hyperxAge,millis());
             Command command{session->remoteRequest && board::EnablePwm,session->latest.request,millis()};
             command.demand=session->latest.demand;command.manual=session->latest.manual;
+            command.independentMode=session->latest.independentMode;command.independentValue=session->latest.independentValue;
             command.hasConfig=session->hasConfiguration;command.config=session->configuration;
             xQueueOverwrite(commands,&command);
             input.clear();reading=false;lastFrameAt=millis();output=std::move(response)+"\n";writeAt=millis();return;

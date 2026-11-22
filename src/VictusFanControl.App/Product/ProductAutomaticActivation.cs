@@ -84,19 +84,19 @@ internal sealed class ProductAutomaticSourceTransition
     internal ProductAutomaticSourceTransition(Func<long>? clock = null) => _clock = clock ?? (() => Environment.TickCount64);
     internal void Reset() { _started = null; _candidate = null; _previousResponse = null; _samples = 0; }
     internal bool Observe(string source, string selected, PerformanceGuiSessionConfiguration expected,
-        PerformanceGuiSessionConfiguration? applied, PerformanceGuardianResponse? status, bool fresh)
+        PerformanceGuiSessionConfiguration? applied, PerformanceGuardianResponse? status, bool fresh,bool requirePerformance=true)
     {
-        if (source is not ("Ac" or "Battery") || status is null ||
-            !ProductAutomaticActivation.PerformanceHealthy(expected,applied,status,fresh))
+        if (source is not ("Ac" or "Battery") || requirePerformance&&(status is null ||
+            !ProductAutomaticActivation.PerformanceHealthy(expected,applied,status,fresh)))
             throw new InvalidOperationException("Transición Automatic sin fuente válida o confirmación vigente de CPU/GPU; volver a Firmware.");
         var now = _clock();
-        if (!_started.HasValue && source == selected && ProductAutomaticActivation.PerformanceReady(expected, applied, status, fresh, source)) return true;
-        if (!_started.HasValue) { _started = now; _previousResponse = status.RequestId; }
+        if (!_started.HasValue && source == selected && (!requirePerformance||ProductAutomaticActivation.PerformanceReady(expected, applied, status, fresh, source))) return true;
+        if (!_started.HasValue) { _started = now; _previousResponse = status?.RequestId; }
         if (now < _started.Value || now - _started.Value >= MaximumMilliseconds)
             throw new InvalidOperationException("Transición AC/Batería no confirmada en ocho segundos; volver a Firmware.");
-        if (_candidate != source) { _candidate = source; _candidateSince = now; _samples = 0; _previousResponse = status.RequestId; }
+        if (_candidate != source) { _candidate = source; _candidateSince = now; _samples = 0; _previousResponse = status?.RequestId; }
         ++_samples;
-        return _samples >= 2 && now - _candidateSince >= 1000 && status.RequestId != _previousResponse &&
-            ProductAutomaticActivation.PerformanceReady(expected, applied, status, fresh, source);
+        return _samples >= 2 && now - _candidateSince >= 1000 && (!requirePerformance||status?.RequestId != _previousResponse &&
+            ProductAutomaticActivation.PerformanceReady(expected, applied, status, fresh, source));
     }
 }

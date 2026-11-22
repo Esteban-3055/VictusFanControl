@@ -1,4 +1,12 @@
-# VictusFanControl v1.3.2
+# VictusFanControl v1.15.0 · Preliminar
+
+Preview 1.15.0 includes independent CPU/GPU, cTGP and external-base controls,
+selectable legacy coordination, scoped recovery and the new reference-based interface.
+Software validation does not establish a new physical qualification of the target.
+See the [function guide](docs/INDEPENDENT-FUNCTIONS-USER-GUIDE.md),
+[implementation and findings](docs/INDEPENDENT-FUNCTIONS-IMPLEMENTATION.md), and
+[interface verification](docs/INTERFACE-IMPLEMENTATION.md). The release overview below
+is retained for the previously published version.
 
 [Español](README.es.md) · [Stable release](https://github.com/Esteban-3055/VictusFanControl/releases/tag/v1.3.2) · [Release notes](release/RELEASE-NOTES-v1.3.2.md) · [Operating guide](docs/PRODUCT_V1.md)
 
@@ -6,19 +14,19 @@ Windows fan control and CPU/GPU preferences for **HP 8C40 / 9D0R1LA / BIOS F.18*
 
 ## Install and update
 
-Download **VictusFanControl-1.3.2-Setup-win-x64.exe** from Releases or check for updates in the application. Requires Windows 11 x64, .NET Desktop Runtime 8 x64, PawnIO and NVIDIA/NVML. The installer preserves saved curves and profiles; unresolved sessions retain their recovery records and block new control.
+Download the **VictusFanControl setup EXE matching the release version** from Releases or check for updates in the application. Requires Windows 11 x64, .NET Desktop Runtime 8 x64, PawnIO and NVIDIA/NVML. The installer preserves saved curves and profiles; unresolved sessions retain their recovery records and block new control.
 
-The ZIP alternative is **VictusFanControl-1.3.2-win-x64.zip**. Extract all files, exit the previous app from its tray menu, and run `Start-ProductGui.ps1 -Mode Install` as administrator with the same Windows account. Closing the window minimizes it; **Exit** in the tray releases control.
+The ZIP alternative carries the same release version. Extract all files, exit the previous app from its tray menu, and run `Start-ProductGui.ps1 -Mode Install` as administrator with the same Windows account. Closing the window minimizes it; **Exit** in the tray releases control.
 
 ## Current behavior
 
 - High process priority by default for the app and production Guardians; telemetry publication no longer scans recovery files on the sensor worker. [Changes and validation](docs/RELEASE-1.3.2-VALIDATION.md).
 - Confirms late WMI release using the original owner without repeating native commands. Automatic startup waits for the inventory check; logs distinguish automatic and manual retries.
 - Retains the 1.3.1 Windows startup checkbox fix, final cleanup and exact-session GPU recovery. [Earlier cause and validation](docs/RELEASE-1.3.1-VALIDATION.md).
-- AC/Battery profiles, internal fan curve, CPU/GPU limits and live demand/applied markers. Internal logical fan levels are CPU 10–54 and GPU up to 52; external output is independent, 0–255.
+- AC/Battery profiles, internal fan curve, CPU/GPU limits and live demand/applied markers. Internal logical fan levels are CPU/GPU 10–54. External output spans 0–255; its connection is independent, while remote actuation currently follows accepted internal fan control.
 - Optional minimized startup and Automatic activation after three distinct fresh observations. Preparation refreshes stale telemetry through the coordinated reader. Late interface states cannot replace a newer published state.
 - AC/Battery reconciliation requires fresh Guardian confirmation and retains its bounded transition. A Windows battery indication alone does not prove physical unplugging.
-- Internal CPU thermal protections remain active. GPU handoff is strictly above 95 °C; CPU consumption above 60 W alone does not disable habitual Automatic. GPU range is configurable up to 2535 MHz.
+- Software CPU/GPU thermal handoff follows the applied Protection preferences. When enabled, habitual GPU handoff is strictly above 95 °C; CPU consumption above 60 W alone does not disable habitual Automatic. Firmware thermal protections are unchanged. GPU range is configurable up to 2535 MHz.
 - Definitive session recovery and bounded automatic resumption retain evidence and refuse uncertain native reentry. A driver call that never returns cannot be universally recovered without restarting Windows.
 - No TZ01/DTT3 acquisition or direct EC access in normal product operation.
 
@@ -26,7 +34,7 @@ The ZIP alternative is **VictusFanControl-1.3.2-win-x64.zip**. Extract all files
 
 Firmware adds Wi-Fi and mDNS retries for a stalled connection after a network interruption. Load it separately to get that improvement; updating Windows does not update the board. The Windows fixes also work with the previous firmware. [Reconnection and limits](docs/ESP32-WIFI-RECOVERY.md).
 
-Download **VictusBase-ESP32C3-v1.3.2-Arduino-sketch.zip** from the same release. Extract and open `VictusBaseESP32C3/VictusBaseESP32C3.ino`; PWM is enabled. Use Espressif core **3.3.2**, ArduinoJson **6.21.5**, **ESP32C3 Dev Module**, flash **4 MB**, USB CDC enabled, and full flash erase disabled to retain pairing/NVS.
+Download the **VictusBase ESP32C3 Arduino sketch ZIP matching the release**. Extract and open `VictusBaseESP32C3/VictusBaseESP32C3.ino`; PWM is enabled. Use Espressif core **3.3.2**, ArduinoJson **6.21.5**, **ESP32C3 Dev Module**, flash **4 MB**, USB CDC enabled, and full flash erase disabled to retain pairing/NVS.
 
 The external controller runs EMA, hysteresis and ramps on ESP32; Windows supplies the settings and telemetry. Ambient temperature is informational. On disconnect, output ramps toward **130/255**. LCD cycle: CPU/GPU + ambient 30 s; CPU/GPU/RAM usage 5 s; demand + applied PWM 5 s; PC/Wi-Fi 5 s. Missing or stale readings show `--`.
 

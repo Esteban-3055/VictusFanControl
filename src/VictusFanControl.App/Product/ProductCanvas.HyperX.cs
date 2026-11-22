@@ -14,7 +14,7 @@ internal sealed partial class ProductCanvas
         Action("lcd","Pantalla LCD",new(1483,85,164,45),p.Tab==2);
         var s=p.Reading;var now=p.PresentedAt;bool fresh=s.Fresh(now);
         Card(g,new(310,153,1337,105));
-        var color=fresh?Green:s.ReceiverPresent?Yellow:Muted;
+        var color=fresh?Ink:s.ReceiverPresent?Yellow:Muted;
         using(var b=new SolidBrush(color))g.FillEllipse(b,334,181,16,16);
         DrawText(g,"HyperX Cloud Flight",365,171,28,Ink,850,true);
         DrawText(g,s.Status,334,218,19,Muted,850);
@@ -43,7 +43,7 @@ internal sealed partial class ProductCanvas
                 if(i==0)Bar(g,new(x+24,398,width-48,7),fresh?s.Percent:null,100,Accent);
             }
             Card(g,new(310,445,1337,235));DrawText(g,"Estado de los audífonos",334,465,27,null,1260,true);
-            DrawText(g,"Receptor USB",334,519,20,Muted,250);DrawText(g,s.ReceiverPresent?"Detectado":"No disponible",620,519,23,s.ReceiverPresent?Green:Muted,310);
+            DrawText(g,"Receptor USB",334,519,20,Muted,250);DrawText(g,s.ReceiverPresent?"Detectado":"No disponible",620,519,23,s.ReceiverPresent?Ink:Muted,310);
             DrawText(g,"Encendido",1004,519,20,Muted,180);DrawText(g,s.Powered is null?"Desconocido":s.Powered.Value?"Encendidos":"Apagados",1210,519,23,Ink,410);
             DrawText(g,"Lectura de batería cada 60 s. Los cambios del micrófono se reciben al accionar su botón.",334,575,21,Muted,1250);
             DrawText(g,s.Muted is null?"Pulsa el botón de silencio para identificar el estado inicial del micrófono.":"Puedes ajustar los avisos en Notificaciones y su presentación en Pantalla LCD.",334,621,19,Muted,1250);

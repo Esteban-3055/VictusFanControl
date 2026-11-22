@@ -7,6 +7,11 @@ namespace VictusFanControl.App;
 
 internal static partial class ProductGuiSelfTest
 {
+    internal static int RunProtectionChecks()
+    {
+        try { TestProtections((ok, detail) => { if (!ok) throw new InvalidOperationException(detail); }); return 0; }
+        catch (Exception error) { Console.Error.WriteLine(error); return 1; }
+    }
     private static void TestProtections(Action<bool,string> require)
     {
         var preferences=new ProductProfiles{Protections=new(){CpuThermalHandoff=false,GpuThermalHandoff=false,PowerEnvelopeHandoff=false,ResumeAutomatic=false}};
@@ -19,6 +24,9 @@ internal static partial class ProductGuiSelfTest
             require(form.Draft.Protections==preferences.Protections&&form.Dirty,"Protection switches did not edit independent preferences.");
             var beforeRetired=ProductProfilesStore.Serialize(form.Draft);form.HandleCommand("protections-power");
             require(ProductProfilesStore.Serialize(form.Draft)==beforeRetired,"Retired consumption command modified preferences.");
+            // Show the real mismatch: a saved/edited choice is not the active
+            // session policy. The immediate resume-off veto is separate.
+            form.Canvas.State=form.Canvas.State with{FanMode="Automatic",FanAuthority="Custom",Runtime="Healthy",AppliedProtections=new()};
             form.Canvas.Page=ProductPage.Protections;form.ClientSize=new(1040,660);form.PerformLayout();form.Canvas.Refresh();
             using var image=new Bitmap(form.Canvas.Width,form.Canvas.Height);form.Canvas.DrawToBitmap(image,new(0,0,image.Width,image.Height));
             var renderDirectory=Path.Combine("logs","product-gui-self-test");Directory.CreateDirectory(renderDirectory);

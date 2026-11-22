@@ -44,6 +44,16 @@ internal sealed partial class ProductForm
     }
     internal Task RetryAutomaticAsync(bool applyProtections=false, bool unattended=false, ProductProfiles? preferences=null)
     {
+        if(_canvas.State.SharedWmiRecoveryPending)
+        {
+            // Replacing an owner cannot resolve an unknown native result.
+            // Keep the unrelated supervisors available until exact recovery
+            // or explicit global exit, without dispatching a replacement.
+            _recoveryEpisode.Finish(ownerConfirmed:false);_automaticResumption.Cancel();
+            _canvas.AutomaticRetryAvailable=false;
+            _canvas.Notice="WMI tiene una operación pendiente de confirmar. Se conservan los controles independientes; Automático espera la recuperación de WMI.";
+            _canvas.Invalidate();return Task.CompletedTask;
+        }
         if(_automaticRetryTask is not null)return _automaticRetryTask;
         if(_closing||_restarting||IsDisposed||_canvas.Busy||_systemSuspended||(!applyProtections&&!_canvas.State.LifecycleBlocked)||!_canvas.AutomaticRetryAvailable||
             !_canvas.State.AutomaticAuthorized||_displayOff||_automaticReview is not null)return Task.CompletedTask;
@@ -55,18 +65,25 @@ internal sealed partial class ProductForm
         var retryReason = unattended ? "Reanudación automática" : "Reintento manual de Automático";
         _presentationTimer.Stop();_startupAutomatic?.Cancel(retryReason);
         var before=_canvas.State;
-        var releasedRuntime=(_runtime??_shutdownRuntimeOwner) as ProductRuntime;
+        var retiringRuntime=_runtime??_shutdownRuntimeOwner;
+        var releasedRuntime=retiringRuntime as ProductRuntime;
         // Reserve the coordinator task before synchronous cleanup/factory fixtures
         // can finish and clear the reservation.
         await Task.Yield();
         try
         {
-            _runtime?.FenceLifecycle(retryReason);
+            _runtime?.FenceFanRetry(retryReason);
             DetachRuntime();
             _canvas.Notice="Liberando la interrupción anterior antes de preparar Automático…";_canvas.Invalidate();
-            // Drain every pending operation and release all domains; never reuse a faulted controller/worker.
-            await ShutdownRuntimeAsync(confirmLateReadDrain:true);_recoveryEpisode.ConfirmOwnerReleased();
-            if(!_isolatedRuntime)ProductSessionRestart.EnsureNoRecoveryRecords();
+            // Replace the fan controller/worker after drainage. The separate
+            // CPU/GPU owner may continue only with fresh, exact session proof.
+            await ShutdownRuntimeAsync(confirmLateReadDrain:true,fanRetry:true);_recoveryEpisode.ConfirmOwnerReleased();
+            if(retiringRuntime is IProductFanRetry retained)
+            {
+                await retained.VerifyRetainedPerformanceAsync();
+                if(!_isolatedRuntime)ProductSessionRestart.EnsureNoFanRecoveryRecords();
+            }
+            else if(!_isolatedRuntime)ProductSessionRestart.EnsureNoRecoveryRecords();
             if(_closing||_exitRequested)return;
             if(_displayOff||_restartLifecycleInterrupted)throw new IOException("Reintento cancelado por suspensión o pantalla apagada.");
             var diagnostic=Path.Combine(_restartDirectory??AppLog.SessionDirectory,"diagnostic-before-automatic-retry-"+Guid.NewGuid().ToString("N")+".zip");
@@ -75,8 +92,23 @@ internal sealed partial class ProductForm
             if(_closing||_exitRequested)return;
             if(_displayOff||_restartLifecycleInterrupted)throw new IOException("Reintento cancelado por un cambio de energía.");
             var preferences=ProductProfilesStore.Copy(requestedPreferences??Draft);
-            var next=await (_retryRuntimeFactory?.Invoke(preferences)??Task.Run<IProductRuntime>(()=>new ProductRuntime(_modules,preferences,releasedRuntime:releasedRuntime)));
+            IProductRuntime next;
+            try
+            {
+                next=await (_retryRuntimeFactory?.Invoke(preferences)??Task.Run<IProductRuntime>(()=>new ProductRuntime(_modules,preferences,releasedRuntime:releasedRuntime,
+                    preservePerformanceFromReleasedRuntime:releasedRuntime is not null)));
+            }
+            catch(Exception preparationError) when(releasedRuntime is not null&&!preferences.FunctionPolicies().StopAutomaticOnPerformanceFailure&&
+                !_closing&&!_exitRequested&&!_displayOff&&!_restartLifecycleInterrupted)
+            {
+                // The old fan runtime has already drained and its retained owner
+                // was verified above. Keep healthy independent services usable
+                // even when construction of a writable fan backend fails.
+                next=await Task.Run<IProductRuntime>(()=>new ProductRuntime(_modules,preferences,releasedRuntime:releasedRuntime,
+                    preservePerformanceFromReleasedRuntime:true,fanControlUnavailableReason:"Ventiladores no disponibles: "+preparationError.Message));
+            }
             _runtime=next;_runtimeShutdown=null;_shutdownRuntimeOwner=null;_lifecycleRelease=Task.CompletedTask;_startupFailure=null;
+            _runtimeShutdownPreservesPerformance=false;
             if(_closing||_exitRequested||_displayOff||_restartLifecycleInterrupted)
             {
                 await ShutdownRuntimeAsync();

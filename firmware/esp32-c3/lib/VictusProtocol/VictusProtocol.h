@@ -34,6 +34,8 @@ struct Measurement {
     bool valid = false;
     std::string source = "Unknown";
     bool manual = false;
+    int independentMode=0;
+    double independentValue=-1;
     // Source age at capture plus monotonic residence on the ESP32. Missing
     // timestamps never become fresh merely because a signed frame arrived.
     uint32_t receivedAt = 0;

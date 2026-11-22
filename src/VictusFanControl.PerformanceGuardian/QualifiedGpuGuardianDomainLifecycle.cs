@@ -88,7 +88,8 @@ internal sealed class QualifiedGpuGuardianDomainLifecycle :
             GpuStatus:
                 _lastStatus ??
                 _session.LastStatus,
-            RecoveryGpuSession: _session.ReturnedReleaseFailureSession);
+            RecoveryGpuSession: _session.ReturnedReleaseFailureSession,
+            GpuSession: _session.CurrentSessionId);
 
     public ValueTask EnableAsync(
         bool cpuEnabled,
@@ -385,13 +386,15 @@ internal static class QualifiedGpuGuardianDomainLifecycleSelfTest
         using var lifecycle=new QualifiedGpuGuardianDomainLifecycle(backend,journal,GpuClockPresetSet.UserRequestedVictus);
         lifecycle.EnableAsync(false,true,PerformancePowerSourceKind.Ac,CancellationToken.None).GetAwaiter().GetResult();
         var before=journal.Load()!;
+        Require(lifecycle.Snapshot.GpuSession==before.SessionId&&lifecycle.Snapshot.CpuSession is null,
+            "GPU status did not expose its exact durable session identity");
         lifecycle.UpdatePresets(new(new(true,210,1801),new(true,210,1101)),PerformancePowerSourceKind.Ac);
         Require(journal.Load()!.SessionId==before.SessionId&&backend.LastRequest==new GpuClockLimitRequest(210,1801)&&backend.ResetCalls==0,
             "live GPU update reset hardware or replaced the journal session");
-        Require(lifecycle.HandleConfirmedSourceChange(PerformancePowerSourceKind.Battery).Succeeded&&backend.LastRequest==new GpuClockLimitRequest(210,1101),
+        Require(lifecycle.HandleConfirmedSourceChange(PerformancePowerSourceKind.Battery).Succeeded&&backend.LastRequest==new GpuClockLimitRequest(210,1101)&&lifecycle.Snapshot.GpuSession==before.SessionId,
             "source transition lost live GPU presets");
         lifecycle.ReleaseAsync(false,true,"LIVE_UPDATE_TEST",CancellationToken.None).GetAwaiter().GetResult();
-        Require(backend.ResetCalls==1&&journal.Load() is null,"live GPU update broke normal final Reset");
+        Require(backend.ResetCalls==1&&journal.Load() is null&&lifecycle.Snapshot.GpuSession is null,"live GPU update broke normal final Reset or retained a retired identity");
         output.WriteLine("PASS live GPU presets retain journal session, use direct Set and one final Reset");
     }
 

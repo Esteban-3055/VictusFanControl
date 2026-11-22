@@ -6,17 +6,19 @@ internal sealed class RecoveryPreviewCache : IAsyncDisposable
     private sealed record ScanResult(PerformanceRecoveryPreview Value,long CompletedAt);
     private static readonly object SharedSync=new();
     private static Task<ScanResult>? _sharedScan;
+    private static Task<ScanResult>? _sharedPerformanceScan;
     private readonly object _sync=new();
     private readonly Func<PerformanceRecoveryPreview>? _fixtureRead;
     private readonly Func<long> _clock;
     private readonly long _maximumAge;
+    private readonly bool _performanceOnly;
     private Task<ScanResult>? _scan,_observed;
     private PerformanceRecoveryPreview? _value;
     private long _completedAt;
     private bool _disposed;
     private static readonly PerformanceRecoveryPreview Unknown=new(true,"Comprobando registros de recuperación en segundo plano…"){Checking=true};
-    internal RecoveryPreviewCache(Func<PerformanceRecoveryPreview>? read=null,Func<long>? clock=null,long maximumAge=5000)
-    {_fixtureRead=read;_clock=clock??(()=>Environment.TickCount64);_maximumAge=maximumAge;}
+    internal RecoveryPreviewCache(Func<PerformanceRecoveryPreview>? read=null,Func<long>? clock=null,long maximumAge=5000,bool performanceOnly=false)
+    {_fixtureRead=read;_clock=clock??(()=>Environment.TickCount64);_maximumAge=maximumAge;_performanceOnly=performanceOnly;}
     private Task<ScanResult> StartScan()
     {
         Task<ScanResult> Start(Func<PerformanceRecoveryPreview> read)=>Task.Factory.StartNew(()=>
@@ -28,6 +30,12 @@ internal sealed class RecoveryPreviewCache : IAsyncDisposable
         if(_fixtureRead is not null)return Start(_fixtureRead);
         lock(SharedSync)
         {
+            if(_performanceOnly)
+            {
+                if(_sharedPerformanceScan is null||_sharedPerformanceScan.IsCompleted)
+                    _sharedPerformanceScan=Start(()=>PerformanceRecoveryPreview.Read(PerformanceRecoveryPreview.DirectoryPath));
+                return _sharedPerformanceScan;
+            }
             if(_sharedScan is null||_sharedScan.IsCompleted)_sharedScan=Start(()=>PerformanceRecoveryPreview.Read());
             return _sharedScan;
         }

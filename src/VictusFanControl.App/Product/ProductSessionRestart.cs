@@ -60,10 +60,15 @@ internal static class ProductSessionRestart
 
     internal static void EnsureNoRecoveryRecords()
     {
-        if(VictusFanControl.Recovery.ProductRecoveryInventory.ReadFans().Count>0)throw new IOException("Hay sesiones anteriores pendientes; usa Recuperar sesión definitiva antes de reiniciar el controlador.");
+        EnsureNoFanRecoveryRecords();
         var directory=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"VictusFanControl","Performance",CpuPowerProductDefaults.TargetProfileId);
-        EnsureAbsent(new[]{Path.Combine(directory,"cpu-power-session.json"),Path.Combine(directory,"gpu-clock-session.json"),
-            WmiFanGuiGuardianHost.LeasePath,WmiFanGuiGuardianHost.LegacyLeasePath,WmiFanExperiment.LeasePath});
+        EnsureAbsent(new[]{Path.Combine(directory,"cpu-power-session.json"),Path.Combine(directory,"gpu-clock-session.json")});
+    }
+    internal static void EnsureNoFanRecoveryRecords()
+    {
+        if(VictusFanControl.Recovery.ProductRecoveryInventory.ReadFans(ignoreCurrentOwner:false).Count>0)
+            throw new IOException("Hay sesiones de ventiladores pendientes; usa Recuperar sesión definitiva antes de reiniciar el controlador.");
+        EnsureAbsent(new[]{WmiFanGuiGuardianHost.LeasePath,WmiFanGuiGuardianHost.LegacyLeasePath,WmiFanExperiment.LeasePath});
     }
     internal static void EnsureAbsent(IEnumerable<string> paths)
     {

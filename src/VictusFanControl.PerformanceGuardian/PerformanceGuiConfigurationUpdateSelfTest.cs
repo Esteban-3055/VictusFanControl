@@ -55,6 +55,11 @@ internal static class PerformanceGuiConfigurationUpdateSelfTest
             Require(!domains.Snapshot.LastCpuEnabled&&domains.Snapshot.LastGpuEnabled,"Display-On reenabled an explicitly disabled CPU.");
             output.WriteLine("PASS GUI source status fallback through lifecycle wrapper; display-Off blocks reconciliation; display-On retains independent selection.");
             output.WriteLine("PASS live update source and display/standby fences; fake IO only");
+            reader.Source=PerformancePowerSourceKind.Unknown;var releases=0;
+            standby.ExecuteDomainRelease(()=>releases++,()=> (false,false));
+            Require(releases==1&&!source.Snapshot.CpuEnabled&&!source.Snapshot.GpuEnabled,
+                "Explicit withdrawal required source confirmation or retained a source callback mask.");
+            output.WriteLine("PASS domain withdrawal is serialized through lifecycle/source owners without admission of new limits.");
             return 0;
         }
         catch(Exception ex){output.WriteLine("Live performance update self-test: FAIL "+ex);return 1;}

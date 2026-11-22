@@ -11,6 +11,7 @@ internal static class PerformanceGuardianProtocol
     internal const string Hello = "HELLO";
     internal const string EnableSession = "ENABLE_SESSION";
     internal const string UpdateConfiguration = "UPDATE_CONFIGURATION";
+    internal const string ReleaseDomains = "RELEASE_DOMAINS";
     internal const string DisableSession = "DISABLE_SESSION";
     internal const string Status = "STATUS";
     internal const string Shutdown = "SHUTDOWN";
@@ -48,7 +49,9 @@ internal sealed record PerformanceGuardianResponse(
     string? PowerSource = null,
     string? RuntimeFailure = null,
     PerformanceGuiSessionConfiguration? Configuration = null,
-    Guid? RecoveryGpuSession = null);
+    Guid? RecoveryGpuSession = null,
+    Guid? CpuSession = null,
+    Guid? GpuSession = null);
 
 internal sealed class PerformanceGuardianProtocolException :
     IOException

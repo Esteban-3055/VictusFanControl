@@ -1,8 +1,8 @@
 # Iconos definitivos
 
-Originales proporcionados por el usuario en `iconos.zip` (10 de octubre de 2026). Se conserva cada PNG sin alteración. `manifest.json` registra los nombres y SHA-256 originales, y los de cada ICO derivado.
+Originales nuevos proporcionados por el usuario en noviembre de 2026, conservados también en `output/interface-references-20261121`. Se copia cada PNG sin alteración. `manifest.json` registra los nombres y SHA-256 originales, y los de cada ICO derivado.
 
-El icono adicional de micrófono silenciado fue proporcionado el 5 de noviembre de 2026. Su PNG también se conserva sin alteración.
+La identidad normal, Automático, Automático silenciado y fallo corresponden a las cuatro imágenes nuevas. La imagen normal se comparte con el estado Firmware/Manual/preparación. Sus colores originales y transparencia se mantienen.
 
 | Archivo | Uso |
 |---|---|
@@ -14,4 +14,4 @@ El icono adicional de micrófono silenciado fue proporcionado el 5 de noviembre 
 
 El fallo tiene prioridad sobre el silencio. Sin confirmación de silencio, o con el receptor desconectado/los audífonos apagados, se conserva el icono normal de Automático. La presentación utiliza los eventos HyperX existentes, independientemente de activar avisos de silencio, sin consultas USB adicionales.
 
-Los ICO se convierten con Pillow, conservando RGBA, en 16, 20, 24, 32, 40, 48, 64, 128 y 256 píxeles. La GUI los incorpora como recursos y los libera al cerrar; no depende de archivos de imagen instalados por separado.
+`scripts/prepare-monochrome-assets.ps1` empaqueta las imágenes RGBA en ICO con 16, 20, 24, 32, 40, 48, 64, 128 y 256 píxeles mediante System.Drawing y entradas PNG. No aplica tintes ni redibuja los símbolos. La GUI los incorpora como recursos y los libera al cerrar; no depende de archivos de imagen instalados por separado. El rotor se copia sin modificar a `assets/rotors/home-fan.png` y su renderizador ya no cambia sus colores según el estado.

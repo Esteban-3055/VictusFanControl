@@ -1,5 +1,6 @@
 using System.Globalization;
 using VictusFanControl.ExternalCooling;
+using VictusFanControl.Product;
 
 namespace VictusFanControl.App;
 
@@ -14,6 +15,8 @@ internal sealed class ExternalCurvePage(ProductCanvas canvas,Func<ExternalCoolin
     internal bool Busy {get;private set;}
     internal bool Dirty=>Draft!=_saved;
     internal int Preview {get;private set;}=50;
+    internal ProductExternalOutputMode ControlSource=>canvas.State.FunctionCoordinationExplicit?
+        canvas.State.FunctionPolicies.ExternalOutputMode:ProductExternalOutputMode.FollowInternalFans;
     internal string Notice {get;private set;}="Configuración independiente del notebook · 18 Hz · salida lógica 0–255.";
     internal string AppliedState
     {
@@ -28,7 +31,7 @@ internal sealed class ExternalCurvePage(ProductCanvas canvas,Func<ExternalCoolin
         }
     }
     internal IReadOnlyList<ExternalCurveMarker> Markers(DateTimeOffset now) =>
-        ExternalCurveMarkers.Build(Draft,_saved,diagnostics(),now);
+        ExternalCurveMarkers.Build(Draft,_saved,diagnostics(),now,ControlSource);
     internal void EditNode(int index,double input,int output)
     {
         if(Busy||index<0||index>=Draft.Points.Length||!double.IsFinite(input))return;
@@ -87,6 +90,7 @@ internal sealed class ExternalCurvePage(ProductCanvas canvas,Func<ExternalCoolin
                 dialog.ShowDialog(canvas.FindForm());canvas.Invalidate();return;
             }
         }
+        if(id.StartsWith("plot-node-",StringComparison.Ordinal))id=id[5..];
         if(id.StartsWith("node-",StringComparison.Ordinal)&&int.TryParse(id[5..],out var node))Selected=Math.Clamp(node,0,Draft.Points.Length-1);
         else switch(id)
         {

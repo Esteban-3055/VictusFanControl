@@ -107,7 +107,8 @@ internal sealed class CombinedGuardianDomainLifecycle :
                     cpu.CpuStatus,
                 GpuStatus:
                     gpu.GpuStatus,
-                RecoveryGpuSession: gpu.RecoveryGpuSession);
+                RecoveryGpuSession: gpu.RecoveryGpuSession,
+                CpuSession: cpu.CpuSession,GpuSession: gpu.GpuSession);
         }
     }
 

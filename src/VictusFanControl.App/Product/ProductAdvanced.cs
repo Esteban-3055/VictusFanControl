@@ -42,18 +42,31 @@ internal sealed partial class ProductCanvas
 {
     internal int AdvancedTab { get; set; }
     internal AdaptiveFanTuning DraftTuning=>Profiles.Ac.Fan.Tuning;
+    internal int? AvailablePerformanceCoreCount => FreshSnapshot is {RetainedTelemetry:null} snapshot &&
+        CpuDemandTemperature.Select(snapshot,CpuDemandTemperatureSource.PerformanceCoreAverage) is not null
+            ? snapshot.CpuCoreTemperatures.Count(c=>c.CoreType=="Performance") : null;
+    internal ProductTuningField? EditableTuningField(string key)
+    {
+        var field=ProductAdvancedSettings.Find(key);
+        return field?.Key=="cores" ? AvailablePerformanceCoreCount is {} count ? field with {Max=count} : null : field;
+    }
     internal bool TuningPending=>Profiles.Battery.Fan.Tuning!=DraftTuning||State.AppliedAutomaticConfiguration?.Tuning!=DraftTuning;
     internal bool CanApplyTuning=>!Busy&&!State.PerformanceUpdating&&!State.LifecycleBlocked&&!State.AutomaticPreparing&&State.AutomaticSourceTransition is null&&
-        State.Target=="HP-8C40-9D0R1LA-F18"&&State.Runtime=="Healthy"&&FreshSnapshot is not null&&
+        State.Target=="HP-8C40-9D0R1LA-F18"&&State.Runtime=="Healthy"&&FreshSnapshot is {} snapshot&&
+        CpuDemandTemperature.Select(snapshot,DraftTuning.CpuTemperatureSource,DraftTuning.HottestPerformanceCoreCount) is not null&&
         (State.FanMode=="Firmware"&&State.FanAuthority=="Firmware"||State.AutomaticAuthorized&&State.FanMode=="Automatic"&&State.FanAuthority=="Custom");
     private void TuningRow(Graphics g,ProductTuningField f,float y)
     {
+        var editable=EditableTuningField(f.Key);
+        var enabled=editable is not null;
+        f=editable??f;
         var value=f.Read(DraftTuning);DrawText(g,f.Label,342,y+10,21,null,473);
-        Button(g,"tuning-"+f.Key+"-minus","−",new(820,y,45,43));
-        Button(g,"tuning-"+f.Key+"-text",f.Format(value),new(873,y,167,43));
-        Button(g,"tuning-"+f.Key+"-plus","+",new(1048,y,45,43));
+        Button(g,"tuning-"+f.Key+"-minus","−",new(820,y,45,43),enabled:enabled);
+        Button(g,"tuning-"+f.Key+"-text",f.Format(value),new(873,y,167,43),enabled:enabled);
+        Button(g,"tuning-"+f.Key+"-plus","+",new(1048,y,45,43),enabled:enabled);
         var applied=State.AppliedAutomaticConfiguration?.Tuning;
-        DrawText(g,$"Rango {f.Min}–{f.Max} {f.Unit}"+(applied is null?"":$" · motor: {f.Format(f.Read(applied))}"),342,y+43,16,Muted,735);
+        DrawText(g,(enabled?$"Rango {f.Min}–{f.Max} {f.Unit}":"Espera una lectura completa de P-Cores para editar")+
+            (applied is null?"":$" · motor: {f.Format(f.Read(applied))}"),342,y+43,16,Muted,735);
     }
     private void Advanced(Graphics g)
     {
@@ -70,8 +83,10 @@ internal sealed partial class ProductCanvas
             string[] sources=["Paquete / núcleo más caliente","Media de todos los núcleos","Media de P-Cores","Media de los N P-Cores más calientes"];
             for(int i=0;i<4;i++)Button(g,"tuning-source-"+i,sources[i],new(342,319+i*66,751,51),(int)DraftTuning.CpuTemperatureSource==i);
             TuningRow(g,ProductAdvancedSettings.Fields[0],591);
-            var count=FreshSnapshot?.CpuCoreTemperatures.Count(c=>c.CoreType=="Performance");
-            DrawText(g,count is >0?$"P-Cores detectados: {count}":"P-Cores detectados: sin lectura vigente",342,690,20,Muted,750);
+            var count=AvailablePerformanceCoreCount;
+            var outside=count is {} available&&DraftTuning.HottestPerformanceCoreCount>available;
+            DrawText(g,count is >0?$"P-Cores detectados: {count}"+(outside?$" · Ajusta N: el valor guardado es {DraftTuning.HottestPerformanceCoreCount}":""):
+                "P-Cores detectados: sin lectura vigente",342,690,20,outside?Yellow:Muted,750);
             DrawText(g,"La emergencia siempre usa el paquete o núcleo más caliente, cualquiera sea la fuente de demanda.",342,742,21,Yellow,750);
         }
         else
@@ -88,8 +103,8 @@ internal sealed partial class ProductCanvas
             if(AdvancedTab==3)
             {
                 Button(g,"tuning-remember",DraftTuning.RememberThermalDemand?"✓  Conservar picos en el filtro":"○  Filtrar sin conservar el pico térmico",new(342,519,751,48),DraftTuning.RememberThermalDemand);
-                DrawText(g,"Rango físico: 10–50 · subida térmica: 4 niveles · bajada: 1 nivel",342,600,21,Muted,750);
-                DrawText(g,"Protección de revisión: CPU ≥95 °C, recuperación <95 °C en 2 s; CPU ≥99 °C inmediata. GPU >82 °C inmediata.",342,654,21,Yellow,750,height:80);
+                DrawText(g,$"Rango nominal: 10–{State.ManualMaximumLevel} · subida térmica: 4 niveles · bajada: 1 nivel",342,600,21,Muted,750);
+                DrawText(g,AutomaticThermalPolicySummary,342,654,19,Yellow,750,height:80);
                 DrawText(g,"Estos umbrales de respuesta adelantan la ventilación. Las protecciones, la frescura y la autoridad permanecen obligatorias.",342,745,20,Muted,750);
             }
         }
@@ -108,9 +123,9 @@ internal sealed partial class ProductForm
 {
     internal bool TryEditTuningValue(string key,string text,out string error)
     {
-        error="";var f=ProductAdvancedSettings.Find(key);
+        error="";var f=_canvas.EditableTuningField(key);
         if(_canvas.Busy||_closing||IsDisposed){error="Espera a que termine la operación actual.";return false;}
-        if(f is null){error="Ajuste desconocido.";return false;}
+        if(f is null){error=key=="cores"?"Espera una lectura completa y vigente de P-Cores para editar N.":"Ajuste desconocido.";return false;}
         if(!double.TryParse(text.Trim().Replace(',','.'),NumberStyles.AllowLeadingSign|NumberStyles.AllowDecimalPoint,CultureInfo.InvariantCulture,out var value)||
             !double.IsFinite(value)||value<f.Min||value>f.Max||f.Integer&&value!=Math.Truncate(value))
         {error=$"Introduce un valor {(f.Integer?"entero ":"")}entre {f.Min} y {f.Max}.";return false;}
@@ -151,7 +166,7 @@ internal sealed partial class ProductForm
             if(id=="tuning-adaptive"){StageTuning(_canvas.DraftTuning with{AdaptiveDescentEnabled=!_canvas.DraftTuning.AdaptiveDescentEnabled});return true;}
             if(id=="tuning-remember"){StageTuning(_canvas.DraftTuning with{RememberThermalDemand=!_canvas.DraftTuning.RememberThermalDemand});return true;}
             var suffix=id.EndsWith("-text")?5:id.EndsWith("-minus")?6:id.EndsWith("-plus")?5:0;
-            var f=suffix==0?null:ProductAdvancedSettings.Find(id[7..^suffix]);if(f is null)return true;
+            var f=suffix==0?null:_canvas.EditableTuningField(id[7..^suffix]);if(f is null)return true;
             if(id.EndsWith("-text"))
             {
                 using var dialog=new ProductNumericDialog(f.Label+" ("+f.Unit+")",f.Read(_canvas.DraftTuning),f.Min,f.Max,

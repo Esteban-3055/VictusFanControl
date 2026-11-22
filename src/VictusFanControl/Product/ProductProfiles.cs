@@ -97,6 +97,9 @@ public sealed record ProductProfiles
     public bool CpuEnabled { get; init; } = true;
     public bool GpuEnabled { get; init; } = true;
     public bool CtgpEnabled { get; init; }
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]
+    public ProductFunctionPolicies? Functions {get;init;}
+    public ProductFunctionPolicies FunctionPolicies()=>Functions??ProductFunctionPolicies.Legacy(new(CpuEnabled,GpuEnabled,CtgpEnabled,false));
     public bool StartMinimized { get; init; }
     public bool ActivateAutomaticOnStart { get; init; }
     public bool RecoverSessionsAutomatically { get; init; } = true;
@@ -113,6 +116,7 @@ public sealed record ProductProfiles
     {
         if (DefaultCurveRevision is not (1 or 2) || SchemaVersion is not(1 or 2) || Ac is null || Battery is null || Protections is null) throw new InvalidDataException("Esquema de perfiles incompatible.");
         Ac.Validate(ProductPowerProfile.Ac); Battery.Validate(ProductPowerProfile.Battery);
+        Functions?.Validate();
         if(SchemaVersion==2&&(Ac.Fan.UnifiedDemand is null||Battery.Fan.UnifiedDemand is null))throw new InvalidDataException("Cada fuente requiere su curva única de demanda.");
     }
     public PerformanceGuiSessionConfiguration PerformanceConfiguration() => new()
@@ -261,12 +265,19 @@ public static class ProductProfilesStore
                     using var original=new MemoryStream(bytes,writable:false);
                     using var reader=new StreamReader(original,System.Text.Encoding.UTF8,detectEncodingFromByteOrderMarks:true);
                     using var document=JsonDocument.Parse(reader.ReadToEnd());
+                    var migrateFunctions=profiles.Functions is not null&&!document.RootElement.TryGetProperty("functions",out _);
                     if(document.RootElement.ValueKind==JsonValueKind.Object&&document.RootElement.TryGetProperty("schemaVersion",out var schema)&&
                         schema.ValueKind==JsonValueKind.Number&&schema.TryGetInt32(out var version)&&(version==1||!document.RootElement.TryGetProperty("defaultCurveRevision",out _)))
                     {
                         var backup=path+(version==1?".v1-backup-":".pre-v1-backup-")+Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes))[..12].ToLowerInvariant()+".json";
                         if(File.Exists(backup)){if(!File.ReadAllBytes(backup).SequenceEqual(bytes))throw new IOException("El respaldo v1 existente no coincide; no se reemplazó el original.");}
                         else {using var stream=new FileStream(backup,FileMode.CreateNew,FileAccess.Write,FileShare.None);stream.Write(bytes);stream.Flush(flushToDisk:true);}
+                    }
+                    else if(migrateFunctions)
+                    {
+                        var backup=path+".pre-functions-"+Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes))[..12].ToLowerInvariant()+".json";
+                        if(File.Exists(backup)){if(!File.ReadAllBytes(backup).SequenceEqual(bytes))throw new IOException("El respaldo de funciones no coincide; no se reemplaza el original.");}
+                        else{using var stream=new FileStream(backup,FileMode.CreateNew,FileAccess.Write,FileShare.None);stream.Write(bytes);stream.Flush(true);}
                     }
                 }
                 catch(JsonException){/* A corrupt original is not a legacy profile to migrate. */}

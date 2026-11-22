@@ -16,7 +16,9 @@ internal static class WmiFanGuiIntegrationSelfTest
             var boundaryRoot = Path.Combine(Path.GetTempPath(), "VFC-WmiBoundary-" + Guid.NewGuid().ToString("N"));
             var boundaryA = Path.Combine(boundaryRoot, "a");
             var boundaryB = Path.Combine(boundaryRoot, "b");
-            WmiFanExperimentBoundary.Enable(boundaryA, true, gui: true);
+            WmiFanExperimentBoundary.Enable(boundaryA, true, gui: true,
+                fixtureNativeMutexName: WmiFanExperimentBoundary.FixtureNativeMutexName(boundaryRoot));
+            await TestUnsentAdmissionAsync();
             WmiFanExperimentBoundary.BeginRecovery();
             WmiFanExperimentBoundary.RearmGuiAfterSuccessfulRelease(boundaryA, boundaryB);
             if (WmiFanExperimentBoundary.Recovering ||
@@ -81,7 +83,7 @@ internal static class WmiFanGuiIntegrationSelfTest
                 var marker = Path.Combine(draining.SessionDirectory, "native-inflight.json");
                 var native = Task.Run(() =>
                 {
-                    using var mutex = new Mutex(false, @"Global\VictusFanControl.WmiFanExperiment.Native");
+                    using var mutex = new Mutex(false, WmiFanExperimentBoundary.FixtureNativeMutexName(draining.SessionDirectory));
                     mutex.WaitOne();
                     try
                     {
@@ -149,6 +151,33 @@ internal static class WmiFanGuiIntegrationSelfTest
         catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
     }
 
+    private static async Task TestUnsentAdmissionAsync()
+    {
+        if (WmiFanExperimentBoundary.NativeMutexName == WmiFanExperimentBoundary.ProductionNativeMutexName)
+            throw new IOException("Fixture would share the installed program's native mutex.");
+        using var entered = new ManualResetEventSlim();
+        using var finish = new ManualResetEventSlim();
+        var owner = Task.Run(() =>
+        {
+            using var mutex = new Mutex(false, WmiFanExperimentBoundary.NativeMutexName);
+            mutex.WaitOne();
+            try { entered.Set(); if (!finish.Wait(TimeSpan.FromSeconds(10))) throw new IOException("Admission holder did not finish."); }
+            finally { mutex.ReleaseMutex(); }
+        });
+        var sent = 0;
+        try
+        {
+            if (!entered.Wait(TimeSpan.FromSeconds(5))) throw new IOException("Admission holder did not start.");
+            var busy = false;
+            try { WmiFanExperimentBoundary.Serialize(Hp8C40BiosFanControl.BuildGetFanLevelRequest(), () => { sent++; return new(0, []); }); }
+            catch (WmiNativeSlotBusyException) { busy = true; }
+            if (!busy || sent != 0 || File.Exists(Path.Combine(WmiFanExperimentBoundary.SessionDirectory!, "native-inflight.json")))
+                throw new IOException("Admission timeout invoked or tracked native work, or lost its typed classification.");
+        }
+        finally { finish.Set(); await owner; }
+        Console.WriteLine("PASS: real isolated mutex admission timeout is typed and dispatches zero native operations; production mutex never used.");
+    }
+
     private static async Task TestCompletedReleaseAsync()
     {
         var client = new WmiFanGuiGuardianClient(fixture: true);
@@ -169,7 +198,7 @@ internal static class WmiFanGuiIntegrationSelfTest
         {
             var occupied = Task.Run(() =>
             {
-                using var mutex = new Mutex(false, @"Global\VictusFanControl.WmiFanExperiment.Native");
+                using var mutex = new Mutex(false, WmiFanExperimentBoundary.FixtureNativeMutexName(client.SessionDirectory));
                 mutex.WaitOne();
                 try { entered.Set(); if (!finish.Wait(TimeSpan.FromSeconds(10))) throw new IOException("Late-release fixture timed out."); }
                 finally { mutex.ReleaseMutex(); }
@@ -190,7 +219,8 @@ internal static class WmiFanGuiIntegrationSelfTest
         var original = File.ReadAllText(client.ReportPath);
         var mutations = new (string Property, object Value)[]
         {
-            ("SchemaVersion",2), ("OwnerPid",0), ("OwnerStartUtcTicks",0L), ("TargetProfileId","foreign"),
+            ("SchemaVersion",1), ("OwnerPid",0), ("OwnerStartUtcTicks",0L), ("TargetProfileId","foreign"),
+            ("GuardianPid",0), ("GuardianStartUtcTicks",0L), ("SessionDirectory","foreign"), ("RecoveryCompleted",false),
             ("DirectEcProhibited",false), ("IndependentFirmwareOwnershipVerified",true),
             ("GuardianLeaseRetired",false), ("ReleaseRequestAccepted",false),
             ("LegacyDefaultRequestAccepted",false), ("Failure","unconfirmed")
@@ -202,6 +232,11 @@ internal static class WmiFanGuiIntegrationSelfTest
             File.WriteAllText(client.ReportPath, report.ToJsonString());
             await MustRejectAsync(property);
         }
+        foreach (var invalid in new[] { "{", "null", "[]", "{}", "{\"SchemaVersion\":\"2\"}" })
+        {
+            File.WriteAllText(client.ReportPath, invalid);
+            await MustRejectAsync("malformed report " + invalid);
+        }
         File.WriteAllText(client.ReportPath, original);
         foreach (var name in new[] { "native-inflight.json", "native-uncertain.signal", "fixture-lease.json" })
         {
@@ -209,11 +244,50 @@ internal static class WmiFanGuiIntegrationSelfTest
             File.WriteAllText(marker, "fixture");
             try { await MustRejectAsync(name); } finally { File.Delete(marker); }
         }
+        var recovered = System.Text.Json.Nodes.JsonNode.Parse(original)!;
+        recovered["SupervisionFailure"] = "original supervision failure; cleanup independently verified";
+        var policyFailure = new CtgpStatus("RecoveryRequired", false, true, "fixture external policy change", DateTimeOffset.UtcNow);
+        recovered["SupervisionCtgp"] = JsonSerializer.SerializeToNode(policyFailure);
+        recovered["OwnerPid"] = 0;
+        File.WriteAllText(client.ReportPath, recovered.ToJsonString());
+        if (client.Ctgp?.Failure is not null) throw new IOException("Foreign owner supplied a cTGP fault.");
+        recovered["OwnerPid"] = Environment.ProcessId;
+        File.WriteAllText(client.ReportPath, recovered.ToJsonString());
+        if (client.Ctgp?.Failure != policyFailure.Failure) throw new IOException("Restored final state hid the original cTGP policy fault.");
+        var manual = false;
+        try { ProductRuntime.EnsureCtgpConfirmation(client.Ctgp, ref manual); } catch (InvalidOperationException) { }
+        if (!manual) throw new IOException("Missed policy fault lost its manual recovery latch after clean restoration.");
+        recovered["SupervisionCtgp"] = JsonSerializer.SerializeToNode(policyFailure with { FailureKind = "ObservationAdmissionTimeout" });
+        File.WriteAllText(client.ReportPath, recovered.ToJsonString());
+        manual = false;
+        try { ProductRuntime.EnsureCtgpConfirmation(client.Ctgp, ref manual); } catch (InvalidOperationException) { }
+        if (manual) throw new IOException("Recovered admission timeout was promoted to an external policy fault.");
+        recovered["SupervisionCtgp"] = JsonSerializer.SerializeToNode(policyFailure);
+        File.WriteAllText(client.ReportPath, recovered.ToJsonString());
         var completed = await client.ConfirmCompletedReleaseAsync(default);
         if (!completed.GuardianLeaseRetired || !completed.ReleaseRequestAccepted || completed.IndependentFirmwareOwnershipVerified)
             throw new IOException("Late completion receipt did not retain truthful release evidence.");
+        if (!ProductRuntime.CaptureCtgpFault(false, null, completed))
+            throw new IOException("Verified release discarded a policy fault missed by all GUI status polls.");
+        var exported = Path.Combine(client.SessionDirectory, "after-release-diagnostic.zip");
+        ProductDiagnostics.Export(exported, new ProductRuntimeState
+        {
+            CtgpState = "RecoveryRequired", CtgpFailure = policyFailure.Failure, CtgpFaulted = true, CtgpObservation = policyFailure,
+            AppliedProtections = new() { CpuThermalHandoff = false },
+            LastFanGuardianReportPath = client.LastReleasedReportPath
+        }, new(), null);
+        using (var zip = System.IO.Compression.ZipFile.OpenRead(exported))
+        {
+            if (File.Exists(Path.Combine(client.SessionDirectory, "fixture-lease.json")) ||
+                zip.GetEntry("wmi/last-released/guardian-report.json") is null || zip.GetEntry("wmi/last-released/ctgp-status.json") is null)
+                throw new IOException("Diagnostic lost cTGP evidence after verified lease retirement.");
+            using var summary = JsonDocument.Parse(zip.GetEntry("gui-state.json")!.Open());
+            if (!summary.RootElement.GetProperty("ctgp").GetProperty("CtgpFaulted").GetBoolean() ||
+                summary.RootElement.GetProperty("appliedProtections").GetProperty("CpuThermalHandoff").GetBoolean())
+                throw new IOException("Diagnostic omitted original cTGP failure or misrepresented the applied handoff policy.");
+        }
         await client.DisposeAsync();
-        Console.WriteLine("PASS: late detached guardian completion after interrupted release wait; live process, ten invalid report fields, retained lease and native markers rejected without new release; zero hardware IO.");
+        Console.WriteLine("PASS: late detached guardian completion after interrupted wait; live process, foreign guardian/session, invalid report fields, retained lease and native markers rejected; supervision error alone does not reject independently completed release. Zero hardware IO.");
     }
 
     internal static async Task<int> RunFixtureOwnerAsync(string directory)

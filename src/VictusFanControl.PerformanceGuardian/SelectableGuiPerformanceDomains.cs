@@ -2,7 +2,8 @@ using VictusFanControl.Performance;
 
 namespace VictusFanControl.PerformanceGuardian;
 
-internal interface IGuardianSelectableDomains : IGuardianConfigurableDomains { }
+internal interface IGuardianSelectableDomains : IGuardianConfigurableDomains
+{void ReleaseDomains(bool cpu,bool gpu);}
 
 internal sealed record GuiPerformanceDomain(IGuardianDomainLifecycle Lifecycle,
     Action<PerformanceGuiSessionConfiguration,PerformancePowerSourceKind> Update,
@@ -32,7 +33,7 @@ internal sealed class SelectableGuiPerformanceDomains : IGuardianDomainLifecycle
         initialSource,releaseReason,retiredCpuWrites+(cpu?.Lifecycle.Snapshot.CpuHardwareWriteAttempts??0),
         retiredGpuWrites+(gpu?.Lifecycle.Snapshot.GpuHardwareWriteAttempts??0),cpu?.Lifecycle.Snapshot.CpuState??"Disabled",
         gpu?.Lifecycle.Snapshot.GpuState??"Disabled",cpu?.Lifecycle.Snapshot.CpuStatus,gpu?.Lifecycle.Snapshot.GpuStatus,
-        gpu?.Lifecycle.Snapshot.RecoveryGpuSession);
+        gpu?.Lifecycle.Snapshot.RecoveryGpuSession,cpu?.Lifecycle.Snapshot.CpuSession,gpu?.Lifecycle.Snapshot.GpuSession);
 
     public ValueTask EnableAsync(bool cpuEnabled,bool gpuEnabled,PerformancePowerSourceKind source,CancellationToken token)
     {
@@ -52,9 +53,17 @@ internal sealed class SelectableGuiPerformanceDomains : IGuardianDomainLifecycle
         if(!active||source is not(PerformancePowerSourceKind.Ac or PerformancePowerSourceKind.Battery))
             throw new InvalidOperationException("Domain changes require a live session and confirmed source.");
         var failures=new List<Exception>();
-        try{UpdateCpu(next,source);}catch(Exception error){failures.Add(new InvalidOperationException("CPU: "+error.Message,error));}
-        try{UpdateGpu(next,source);}catch(Exception error){failures.Add(new InvalidOperationException("GPU: "+error.Message,error));}
+        if(!SameCpu(Configuration,next))try{UpdateCpu(next,source);}catch(Exception error){failures.Add(new InvalidOperationException("CPU: "+error.Message,error));}
+        if(!SameGpu(Configuration,next))try{UpdateGpu(next,source);}catch(Exception error){failures.Add(new InvalidOperationException("GPU: "+error.Message,error));}
         if(failures.Count!=0)throw new AggregateException("Domain update incomplete; actual committed selections are retained.",failures);
+    }
+    public void ReleaseDomains(bool releaseCpu,bool releaseGpu)
+    {
+        ObjectDisposedException.ThrowIf(disposed,this);
+        var failures=new List<Exception>();
+        if(releaseCpu)try{UpdateCpu(Configuration with{CpuEnabled=false},PerformancePowerSourceKind.Unknown);}catch(Exception error){failures.Add(error);}
+        if(releaseGpu)try{UpdateGpu(Configuration with{GpuEnabled=false},PerformancePowerSourceKind.Unknown);}catch(Exception error){failures.Add(error);}
+        if(failures.Count>0)throw new AggregateException("Domain release incomplete; unresolved owners are retained.",failures);
     }
     private void UpdateCpu(PerformanceGuiSessionConfiguration next,PerformancePowerSourceKind source)
     {

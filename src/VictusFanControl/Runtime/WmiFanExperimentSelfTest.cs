@@ -118,7 +118,8 @@ internal static class WmiFanExperimentSelfTest
                 "Experiment must default to shadow.");
 
             // Real low-level constructor refusal, before any module I/O.
-            WmiFanExperimentBoundary.Enable(directory, true);
+            WmiFanExperimentBoundary.Enable(directory, true,
+                fixtureNativeMutexName: WmiFanExperimentBoundary.FixtureNativeMutexName(directory));
             WmiFanThermalAdmissionSelfTest.TestBoundary();
             Reject(() => { using var ec = new AcpiEcReader("missing-experiment-fixture.bin"); });
             Check(WmiOnlyInvestigationPolicy.DeniedEcAccesses == 1, "EC boundary did not record rejection.");
@@ -136,6 +137,21 @@ internal static class WmiFanExperimentSelfTest
             });
             Check(nullReply is null && !File.Exists(Path.Combine(directory, "native-inflight.json")),
                 "A returned null response was confused with unfinished native execution.");
+            var dispatchLog=Path.Combine(directory,"native-dispatch.jsonl");
+            using(var full=File.Open(dispatchLog,FileMode.Create,FileAccess.Write,FileShare.None))
+            {
+                full.Write(System.Text.Encoding.UTF8.GetBytes("older-native-evidence\n"));
+                full.SetLength(WmiFanExperimentBoundary.NativeDispatchMaximumSegmentBytes);
+            }
+            var dispatched=0;
+            WmiFanExperimentBoundary.InvokeNative<object?>(rpm,()=>{dispatched++;return null;});
+            Check(dispatched==1&&new FileInfo(dispatchLog+".1").Length==WmiFanExperimentBoundary.NativeDispatchMaximumSegmentBytes&&
+                File.ReadLines(dispatchLog+".1").First()=="older-native-evidence"&&
+                new FileInfo(dispatchLog).Length<4096&&!File.Exists(Path.Combine(directory,"native-inflight.json")),
+                "Diagnostic rotation changed invocation count, lost previous evidence or retained a false native marker.");
+            using(var lastDispatch=System.Text.Json.JsonDocument.Parse(File.ReadAllText(dispatchLog)))
+                Check(lastDispatch.RootElement.GetProperty("commandType").GetUInt32()==rpm.CommandType,"Rotated native dispatch lost its request identity.");
+            Console.WriteLine("PASS: native dispatch history rotates at five MiB without replaying calls, dropping the previous segment or changing ownership markers; fake IO only.");
             Reject(() => WmiFanExperimentBoundary.InvokeNative<object?>(rpm, () => throw new IOException("native timeout")));
             Check(File.Exists(Path.Combine(directory, "native-inflight.json")), "A native exception lost its uncertainty marker.");
             File.Delete(Path.Combine(directory, "native-inflight.json")); // Fixture teardown only; no real call was made.

@@ -23,6 +23,9 @@ internal static class ProductCtgpSelfTest
         control.Restore(); Require(fake.Writes.Count == 2, "Completed restoration was repeated.");
         fake.Ac = true; control.Apply(true); control.Apply(false);
         Require(fake.Writes.Count == 4 && !control.Status.Active, "Explicit source re-entry/release failed.");
+        fake.AdapterWatts=65;Reject(()=>control.Apply(true));
+        Require(fake.Writes.Count==4&&fake.AdapterQueries==3&&!control.NeedsRestore,
+            "Adapter qualification was cached across a new cTGP acquisition.");
 
         fake = new() { Ac = false }; control = fake.Create(); control.Apply(true);
         Require(fake.Writes.Count == 0 && fake.Qualifications == 0 && control.Status.State == "AcOnly", "Battery enabled cTGP.");
@@ -41,6 +44,21 @@ internal static class ProductCtgpSelfTest
         fake = new() { ThrowAfterEnable = true }; control = fake.Create(); Reject(() => control.Apply(true));
         Require(control.NeedsRestore && fake.Policy[0] == 1, "Ambiguous enable lost recovery obligation.");
         control.Restore(); Require(!control.NeedsRestore && fake.Policy[0] == 0, "Ambiguous enable was not restored.");
+        fake = new(); control = fake.Create(); control.Apply(true);
+        var confirmed = control.Status;
+        fake.BusyRead = true;
+        var deferred = false;
+        try { control.Observe(); } catch (CtgpObservationDeferredException) { deferred = true; }
+        Require(deferred && control.Status is { Active: true, Managed: true, Failure: null, WaitingReason: not null } &&
+            control.Status.Utc == confirmed.Utc && fake.Writes.Count == 1 && control.NeedsRestore,
+            "Unsent observation renewed proof, changed ownership, replayed a setter or became a policy failure.");
+        fake.BusyRead = false; control.Observe();
+        Require(control.Status is { Active: true, WaitingReason: null, Failure: null } && fake.Writes.Count == 1,
+            "Successful observation did not clear waiting state without rewriting policy.");
+        fake.BusyRead = true; fake.Ac = false;
+        try { control.Observe(); throw new Exception("Expected restoration read admission failure."); }
+        catch (WmiNativeSlotBusyException) { }
+        Require(control.NeedsRestore, "Busy restoration was treated as a retryable active observation.");
         fake = new(); Hp8C40CtgpControl.RestoreRecorded(r =>
         {
             Require(r.CommandType != 0x22 || r.Payload[0] == 0, "Recorded recovery enabled cTGP.");
@@ -60,6 +78,27 @@ internal static class ProductCtgpSelfTest
         try { ProductRuntime.EnsureCtgpConfirmation(new("RecoveryRequired",false,true,"External policy changed",DateTimeOffset.UtcNow),ref policyFault); }
         catch(InvalidOperationException) { }
         Require(policyFault,"An explicit cTGP policy failure lost its manual-recovery latch.");
+        var readUnavailable = new CtgpObservationUnavailableException(new(new()));
+        fake = new(); control = fake.Create(); control.Apply(true); control.Fail(readUnavailable);
+        policyFault = false;
+        try { ProductRuntime.EnsureCtgpConfirmation(control.Status, ref policyFault); }
+        catch (InvalidOperationException) { }
+        Require(!policyFault && control.Status.AllowsAutomaticRetry && control.NeedsRestore,
+            "Expired read admission became a permanent policy fault or discarded its restore obligation.");
+        var receipt = new FanWmiReleaseEvidence(true, true, true, false, "fixture-report", "SUPERVISION_FAILURE")
+            { SupervisionCtgp = control.Status };
+        Require(!ProductRuntime.CaptureCtgpFault(false, control.Status, receipt) &&
+            ProductRuntime.CaptureCtgpFault(true, control.Status, receipt),
+            "Interruption/release classification made an admission wait permanent or cleared an earlier policy fault.");
+        control.Fail(new TimeoutException("unclassified timeout"));
+        try { ProductRuntime.EnsureCtgpConfirmation(control.Status, ref policyFault); }
+        catch (InvalidOperationException) { }
+        Require(policyFault && !control.Status.AllowsAutomaticRetry, "An unclassified timeout was automatically retried.");
+        Require(ProductRuntime.CaptureCtgpFault(false, null, receipt with { SupervisionCtgp = control.Status }),
+            "A final release without a live observation lost a policy failure.");
+        Require(ProductRuntime.CtgpPresentationState(true,true,VictusFanControl.Control.Adaptive.AdaptiveFanProductionMode.Firmware,false,"Ac",null)=="Faulted" &&
+            ProductRuntime.CtgpPresentationState(true,false,VictusFanControl.Control.Adaptive.AdaptiveFanProductionMode.Firmware,false,"Ac",control.Status)=="RecoveryRequired",
+            "cTGP presentation hid a released fault or claimed that pending restoration was completed.");
         var activeStatus=new CtgpStatus("Active",true,true,null,DateTimeOffset.UtcNow);
         Require(activeStatus.ConfirmsSelection(true,DateTimeOffset.UtcNow),"Valid Active acknowledgement was rejected.");
         foreach(var invalid in new[]{activeStatus with{Active=false},activeStatus with{Managed=false},
@@ -129,6 +168,8 @@ internal static class ProductCtgpSelfTest
             Require(statusReader.Ctgp is {Active:true},"Initial current observation missing.");
             WmiFanExperiment.WriteJson(observationPath,fresh with{Utc=fresh.Utc.AddSeconds(-30)});
             Require(statusReader.Ctgp?.Utc==fresh.Utc,"An older file replaced the confirmed current observation.");
+            WmiFanExperiment.WriteJson(observationPath,fresh with{Utc=fresh.Utc.AddSeconds(-30),Failure="older failure"});
+            Require(statusReader.Ctgp is {Active:true,Failure:null},"An older failure replaced a newer live confirmation.");
             File.WriteAllText(observationPath,"{");
             Require(statusReader.Ctgp?.Utc==fresh.Utc,"A malformed replacement discarded the recent observation.");
             await Task.Delay(CtgpStatus.ConfirmationLifetime+TimeSpan.FromMilliseconds(50));
@@ -143,13 +184,15 @@ internal static class ProductCtgpSelfTest
 
     private sealed class Fake
     {
-        internal bool Ac = true, RejectQualification, RejectIntent, RejectRestore, ThrowAfterEnable;
+        internal bool Ac = true, RejectQualification, RejectIntent, RejectRestore, ThrowAfterEnable, BusyRead;
         internal byte[] Policy = [0, 1, 1, 0];
         internal int Qualifications, Intents;
+        internal int AdapterWatts=200,AdapterQueries;
         internal List<byte[]> Writes = [];
         internal Hp8C40CtgpControl Create() => new(r =>
         {
-            if (r.CommandType == 0x28) { var data = new byte[128]; data[0] = 200; return new(0, data); }
+            if (r.CommandType == 0x21 && BusyRead) throw new WmiNativeSlotBusyException();
+            if (r.CommandType == 0x28) { AdapterQueries++;var data = new byte[128]; data[0] = (byte)(AdapterWatts&255);data[1]=(byte)(AdapterWatts>>8);return new(0, data); }
             if (r.CommandType == 0x22)
             {
                 Writes.Add(r.Payload.ToArray());

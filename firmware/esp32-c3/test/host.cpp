@@ -72,7 +72,9 @@ int main(int argc,char** argv) {
             std::string value;serializeJson(snapshot,value);std::cerr<<value<<std::endl;
         }
         if(session->hasConfiguration)controller.configure(session->configuration);
-        controller.receive(session->remoteRequest,session->latest.request,session->latest.demand,session->latest.manual,now());controller.tick(now(),ambient);
+        if(session->latest.independentMode!=0)controller.receiveIndependent(session->remoteRequest,session->latest.independentMode,session->latest.independentValue,now());
+        else controller.receive(session->remoteRequest,session->latest.request,session->latest.demand,session->latest.manual,now());
+        controller.tick(now(),ambient);
         if(argc==2 && std::string(argv[1])=="--configuration" && session->hasConfiguration) {
             // Test-only receipt evidence, after configure(). No production wire extension.
             const auto& c=session->configuration;

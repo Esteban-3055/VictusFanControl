@@ -134,10 +134,10 @@ internal sealed partial class ProductCanvas
         var now=DateTimeOffset.UtcNow;var s=FreshSnapshot;
         DrawHomeFans(g);
         DrawText(g,"Estado del sistema",1200,174,24,null,421,true);
-        DrawText(g,s is not null?"Telemetría disponible":State.Runtime=="Healthy"?"Esperando datos vigentes":State.Runtime,1200,219,22,s is not null?Green:Yellow,420);
-        DrawText(g,"CPU · "+AppliedCpu(),1200,260,19,DomainColor(State.CpuState,Green),420);
+        DrawText(g,s is not null?"Telemetría disponible":State.Runtime=="Healthy"?"Esperando datos vigentes":State.Runtime,1200,219,22,s is not null?Ink:Yellow,420);
+        DrawText(g,"CPU · "+AppliedCpu(),1200,260,19,DomainColor(State.CpuState,Ink),420);
         DrawText(g,"GPU · "+AppliedGpu(),1200,299,19,DomainColor(State.GpuState,Accent),420);
-        DrawText(g,"Ventiladores · "+State.FanAuthority,1200,338,19,Muted,420);
+        DrawText(g,"Ventiladores · "+FanAuthorityText(State.FanAuthority),1200,338,19,Muted,420);
         var held=CpuFanReading(now)?.Held==true || GpuFanReading(now)?.Held==true;
         DrawText(g,held?"Animación con últimas RPM; sin lectura actual":"Giro según RPM de cada ventilador",1200,377,17,held?Yellow:Muted,420);
 
@@ -176,7 +176,7 @@ internal sealed partial class ProductCanvas
         var points=new List<PointF>();
         void Flush()
         {
-            if(points.Count>1)g.DrawLines(pen,points.ToArray());
+            if(points.Count>1){var trace=points.ToArray();DrawTraceGlow(g,trace,Accent);g.DrawLines(pen,trace);}
             else if(points.Count==1){using var dot=new SolidBrush(Accent);g.FillEllipse(dot,points[0].X-2,points[0].Y-2,4,4);}
             points.Clear();
         }

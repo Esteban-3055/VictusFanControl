@@ -41,17 +41,19 @@ internal static partial class ProductGuiSelfTest
             TestStabilityHardening(Require);
             TestExitFailureRegressions(Require);TestStartupFailurePaths(Require);TestForcedSessionRecovery(Require);
             TestBackgroundRecovery(Require);TestManualAutomaticRetry(Require);TestProtections(Require);TestUnattendedAutomaticRetry(Require);
+            TestScopedFanRetry(Require);
             TestStartupAutomatic(Require);TestSessionRestart(Require);return 0;
         }
         catch(Exception error){Console.Error.WriteLine(error);return 1;}
     }
     private static void TestCoalescedAutomaticIntent(Action<bool,string> require)
     {
-        foreach(var scenario in new[]{"confirmed","already-active","cancelled","failed"})
+        foreach(var scenario in new[]{"confirmed","already-active","cancelled","failed","committed-change","cancelled-committed-change","unanswered-update"})
         {
             var old=new RecordingRuntime{AutomaticModeFailure=scenario=="failed"?"activation rejected":null};var next=new RecordingRuntime();var created=0;
+            ProductProfiles? retriedPreferences=null;
             using var form=new ProductForm("fixture://coalesced-intent",fixture:old,fixtureProfiles:new(),
-                retryRuntimeFactory:p=>{created++;require(p.Ac.CpuPl1Watts==35,"Coalesced intent used a later draft.");return Task.FromResult<IProductRuntime>(next);});
+                retryRuntimeFactory:p=>{created++;retriedPreferences=p;return Task.FromResult<IProductRuntime>(next);});
             form.Show();Application.DoEvents();
             var now=DateTimeOffset.UtcNow;
             var ready=new ProductRuntimeState{Target="HP-8C40-9D0R1LA-F18",AutomaticAuthorized=true,CanApplyPerformance=true,Runtime="Healthy",Source="Ac",FanMode="Firmware",FanAuthority="Firmware",
@@ -60,24 +62,37 @@ internal static partial class ProductGuiSelfTest
             {old.StateOverride=ready with{FanMode="Automatic",AutomaticResumeProfiles=ProductProfilesStore.Freeze(new())};form.EditValue("pl1",38);}
             old.Publish(ready);form.HandleCommand("fan-mode-2");require(old.Commands==1,"Automatic intent fixture did not issue its explicit request.");
             form.EditValue("pl1",38);
-            if(scenario=="cancelled")form.HandleCommand("firmware");
+            if(scenario.StartsWith("cancelled",StringComparison.Ordinal))form.HandleCommand("firmware");
             Task.Run(()=>
             {
-                if(scenario!="failed")old.Publish(ready with{PublicationSequence=10,FanMode="Automatic",FanAuthority="Custom"});
-                old.Publish(ready with{PublicationSequence=11,LifecycleBlocked=true,LifecycleBlockReason="interrupted before paint"});
+                var committed=scenario.EndsWith("committed-change",StringComparison.Ordinal)?ProductProfilesStore.Freeze(new ProductProfiles
+                    {CpuEnabled=false,GpuEnabled=false,Ac=ProductProfiles.DefaultProfile(ProductPowerProfile.Ac) with{CpuPl1Watts=28,GpuMaximumMHz=1100}}):null;
+                if(scenario!="failed")old.Publish(ready with{PublicationSequence=10,FanMode="Automatic",FanAuthority="Custom",AutomaticResumeProfiles=committed});
+                old.Publish(ready with{PublicationSequence=11,LifecycleBlocked=true,LifecycleBlockReason="interrupted before paint",AutomaticResumeProfiles=committed,
+                    AutomaticResumptionBlocked=scenario=="unanswered-update"});
             }).GetAwaiter().GetResult();
             require(form.PendingRuntimeCallbacks==1,"Coalesced intent fixture did not hold the UI.");Application.DoEvents();
             require(form.Canvas.State.PublicationSequence==11,"Interrupted latest state was not presented.");
             form.TryAutomaticResumption(Environment.TickCount64+10001);
-            if(scenario is "confirmed" or "already-active")
+            if(scenario is "confirmed" or "already-active" or "committed-change")
             {
                 PumpUntil(()=>created==1&&!form.Canvas.Busy,"Confirmed activation intent was lost when its Automatic frame was coalesced.");
                 require(old.Disposals==1&&next.Starts==1&&next.Commands==0,"Coalesced intent skipped drain or fresh reentry qualification.");
+                require(retriedPreferences?.CpuEnabled!=(scenario=="committed-change"),"Coalesced interruption re-enabled a CPU limit the user had disabled.");
+                require(retriedPreferences?.GpuEnabled!=(scenario=="committed-change"),"Coalesced interruption re-enabled a GPU limit the user had disabled.");
+                require(retriedPreferences?.Ac.CpuPl1Watts==(scenario=="committed-change"?28:35),"Coalesced intent lost the committed profile or used a later draft.");
+                if(scenario=="committed-change")require(retriedPreferences?.Ac.GpuMaximumMHz==1100,"Coalesced interruption lost the committed GPU preset.");
             }
             else require(created==0&&old.Disposals==0,"Unconfirmed or cancelled intent requested recovery.");
             var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Coalesced intent fixture did not exit.");
         }
-        Console.WriteLine("PASS confirmed Automatic intent survives coalesced UI frames with frozen preferences; failed activation and user cancellation cannot arm recovery; no control before fresh qualification.");
+        Console.WriteLine("PASS confirmed Automatic intent survives coalesced UI frames with frozen preferences; failed activation, unanswered updates and user cancellation cannot arm recovery; no control before fresh qualification.");
+    }
+
+    internal static int RunAutomaticIntentChecks()
+    {
+        try { TestCoalescedAutomaticIntent((ok, detail) => { if (!ok) throw new InvalidOperationException(detail); }); return 0; }
+        catch (Exception error) { Console.Error.WriteLine(error); return 1; }
     }
     private static void TestStabilityHardening(Action<bool,string> require)
     {

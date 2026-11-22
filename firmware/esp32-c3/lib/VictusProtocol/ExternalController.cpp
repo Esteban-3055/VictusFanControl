@@ -37,6 +37,11 @@ void ExternalController::receive(bool allowed,int request,double demand,bool man
         if(active) admitted=now;
     }
 }
+void ExternalController::receiveIndependent(bool allowed,int mode,double value,uint32_t now) {
+    active=allowed&&configured&&std::isfinite(value)&&value>=0&&
+        ((mode==1&&value<=255&&value==std::floor(value))||(mode==2&&value<=100));
+    if(active) {command=mode==1?value:config.evaluate(value);admitted=now;}
+}
 int ExternalController::tick(uint32_t now,double /*ambient*/) {
     const bool first=!initialized;
     if(first) { initialized=true;previous=startedAt=now; }

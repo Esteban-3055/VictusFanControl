@@ -53,7 +53,13 @@ try {
     Copy-Item -LiteralPath $resolved['IntelMSR.bin'] -Destination (Join-Path $appModules 'IntelMSR.bin') -Force
     Copy-Item -LiteralPath $resolved['LpcACPIEC.bin'] -Destination (Join-Path $appModules 'LpcACPIEC.bin') -Force
     Copy-Item -LiteralPath $resolved['LpcACPIEC.bin'] -Destination (Join-Path $watchdogModules 'LpcACPIEC.bin') -Force
-} finally { Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue }
+} finally {
+    $tempBase=[IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\')+'\'
+    $resolvedTemp=[IO.Path]::GetFullPath($temp)
+    if(-not $resolvedTemp.StartsWith($tempBase,[StringComparison]::OrdinalIgnoreCase) -or
+        [IO.Path]::GetFileName($resolvedTemp) -notmatch '^VFC-P14\.3-[0-9a-f]{32}$') { throw 'Refusing cleanup outside the dedicated RC temporary directory.' }
+    Remove-Item -LiteralPath $resolvedTemp -Recurse -Force -ErrorAction SilentlyContinue
+}
 
 Copy-Item -LiteralPath (Join-Path $repoRoot 'release\p14-software-rc.json') -Destination (Join-Path $releaseDir 'p14-software-rc.json') -Force
 Copy-Item -LiteralPath (Join-Path $repoRoot 'release\p14-publish-layout.json') -Destination (Join-Path $releaseDir 'p14-publish-layout.json') -Force

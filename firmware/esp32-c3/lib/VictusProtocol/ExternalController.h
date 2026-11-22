@@ -25,6 +25,7 @@ public:
     static constexpr int DisconnectedOutput = 130;
     void configure(const ExternalConfig& value);
     void receive(bool allowed,int request,double demand,bool manual,uint32_t now);
+    void receiveIndependent(bool allowed,int mode,double value,uint32_t now);
     int tick(uint32_t now,double ambient);
     bool remote() const { return active; }
     int requested() const { return static_cast<int>(std::lround(target)); }

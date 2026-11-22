@@ -73,7 +73,9 @@ internal static partial class ProductGuiSelfTest
                 var navigation=form.Canvas.Hits.Where(h=>h.Id.StartsWith("page-")).OrderBy(h=>h.Bounds.Y).ToArray();
                 var externalIndex=Array.FindIndex(navigation,h=>h.Id=="page-"+(int)ProductPage.ExternalCooling);
                 ExternalCoolingSelfTest.Require(externalIndex>0&&navigation[externalIndex-1].Label=="Avanzado"&&navigation[externalIndex+1].Label=="Curva Externa"&&navigation[externalIndex+2].Label=="HyperX Battery"&&navigation[externalIndex+3].Label=="Actualizaciones"&&
-                    navigation.All(h=>h.Bounds.Bottom<882)&&!form.Canvas.Hits.Any(h=>h.Id=="external-cooling"),"External cooling navigation order/fit missing or obsolete Settings entry retained.");
+                    navigation.All(h=>h.Bounds.Bottom<882)&&form.Canvas.Hits.Any(h=>h.Id=="external-settings-page")&&
+                    !form.Canvas.Hits.Any(h=>h.Id.StartsWith("external-mode-",StringComparison.Ordinal)),
+                    "External cooling navigation order/fit or Settings summary link is invalid; detailed controls must stay on their own page.");
                 using(var image=new Bitmap(form.Width,form.Height)){form.DrawToBitmap(image,new(Point.Empty,form.Size));image.Save(Path.Combine(root,"settings.png"),ImageFormat.Png);}
                 var formCount=Application.OpenForms.Count;
                 form.HandleCommand("page-"+(int)ProductPage.ExternalCooling);Application.DoEvents();
@@ -131,7 +133,7 @@ internal static partial class ProductGuiSelfTest
                 ExternalCoolingSelfTest.Require(page.Details&&!page.Key.Visible&&page.Message.Contains("ackSequence")&&!page.Message.Contains(newKey)&&form.Canvas.Hits.Single(h=>h.Id=="external-copy").Enabled,"Diagnostics/copy admission includes no valid operational message or leaked key.");
                 RenderPage("external-page-details.png");
                 form.HandleCommand("external-overview");form.Canvas.State=form.Canvas.State with{Source="Battery"};form.Canvas.Refresh();RenderPage("external-page-battery.png");
-                ExternalCoolingSelfTest.Require(form.Canvas.Accent==ProductCanvas.Yellow&&ProductProfilesStore.Serialize(form.Draft)==profilesBefore&&form.Canvas.Dirty==dirtyBefore&&runtime.Commands==0,"External draft/theme affected notebook profiles or authority.");
+                ExternalCoolingSelfTest.Require(form.Canvas.Accent==ProductCanvas.Ink&&ProductProfilesStore.Serialize(form.Draft)==profilesBefore&&form.Canvas.Dirty==dirtyBefore&&runtime.Commands==0,"External draft/theme affected notebook profiles or authority.");
                 var before=Volatile.Read(ref received);form.Hide();
                 PumpUntil(()=>Volatile.Read(ref received)>=before+2,"Minimize/tray stopped telemetry.");
                 var watch=System.Diagnostics.Stopwatch.StartNew();var suspend=form.HandlePowerEventAsync(4);

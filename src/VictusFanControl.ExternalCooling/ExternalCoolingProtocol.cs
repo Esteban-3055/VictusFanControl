@@ -30,6 +30,7 @@ public sealed record DeviceExtensions
 }
 public sealed record DeviceStatus
 {
+    public int? IndependentControlVersion {get;init;}
     public int? ExternalCurveVersion {get;init;}
     public int? ExternalMinimumOutput {get;init;}
     public string? AppliedConfigRevision {get;init;}
@@ -125,6 +126,10 @@ public static class ExternalCoolingProtocol
                 if(!hd.TryGetProperty(field,out _))throw new InvalidDataException("Missing HyperX display preference.");
         }
         var t=Payload<ExportTelemetry>(frame);
+        if(frame.Payload.TryGetProperty("independentExternal",out var independentJson)&&independentJson.ValueKind!=JsonValueKind.Null)
+            foreach(var key in new[]{"mode","duty","demandPercent","sampledAtUtc"})
+                if(independentJson.ValueKind!=JsonValueKind.Object||!independentJson.TryGetProperty(key,out _))
+                    throw new InvalidDataException("Incomplete independent external request.");
         try{t.HyperxDisplay?.Validate();}catch(ArgumentException e){throw new InvalidDataException("Invalid HyperX display preferences.",e);}
         try{t.ExternalConfiguration?.Validate();}
         catch(ArgumentException ex){throw new InvalidDataException("Invalid external configuration.",ex);}
@@ -156,6 +161,13 @@ public static class ExternalCoolingProtocol
             if(at>t.CapturedAtUtc)throw new InvalidDataException("Future acquisition.");
         bool Fresh(DateTimeOffset? at)=>at is {} value && value!=default &&
             t.CapturedAtUtc>=value && (t.CapturedAtUtc-value).TotalMilliseconds<MaximumSourceAgeMilliseconds;
+        if(t.IndependentExternal is{} independent)
+        {
+            if(t.SolicitudValida||t.ReplyToDeviceSequence is not >0||t.RequestEvidence!="Unavailable"||
+                (independent.Mode=="Fixed" ? independent.Duty is not(>=0 and <=255)||independent.DemandPercent.HasValue||independent.SampledAtUtc.HasValue :
+                 independent.Mode=="Curve" ? independent.Duty.HasValue||ExportTelemetry.Range(independent.DemandPercent,0,100) is null||!Fresh(independent.SampledAtUtc) : true))
+                throw new InvalidDataException("Invalid independent external request.");
+        }
         if(t.SolicitudValida && (!Fresh(t.SampledAtUtc)||!Fresh(t.CpuTempSampledAtUtc)||!Fresh(t.GpuTempSampledAtUtc)||
             t.CpuTempC is null||t.GpuTempC is null||
             t.ModoSolicitado=="Automatic"&&(!Fresh(t.DecisionAtUtc)||t.DemandaPct is null)))
@@ -166,7 +178,7 @@ public static class ExternalCoolingProtocol
     {
         if(frame.Type!="deviceStatus")throw new InvalidDataException("Expected deviceStatus.");
         var d=Payload<DeviceStatus>(frame);
-        if(d.ExternalCurveVersion is <1 or >65535||d.AppliedDuty is <0 or >255||d.ExternalRequest is <0 or >255||
+        if(d.IndependentControlVersion is not(null or 1)||d.ExternalCurveVersion is <1 or >65535||d.AppliedDuty is <0 or >255||d.ExternalRequest is <0 or >255||
             d.ExternalMinimumOutput is not(null or 0 or 30)||
             d.AppliedConfigRevision is{} revision&&(revision.Length!=32||revision.Any(c=>!char.IsAsciiDigit(c)&&c is not(>='a' and <='f'))))
             throw new InvalidDataException("Invalid external curve status.");

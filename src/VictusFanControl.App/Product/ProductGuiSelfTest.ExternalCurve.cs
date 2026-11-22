@@ -37,6 +37,14 @@ internal static partial class ProductGuiSelfTest
             var point=new Point((int)((form.Canvas.Width-1672*scale)/2+(hit.Bounds.X+hit.Bounds.Width/2)*scale),(int)((form.Canvas.Height-941*scale)/2+(hit.Bounds.Y+hit.Bounds.Height/2)*scale));
             form.Canvas.PointerDown(point);form.Canvas.PointerUp(point);
         }
+        form.HandleCommand("external-curve-points");form.Canvas.Refresh();
+        foreach(var id in new[]{"external-curve-node-2","external-curve-plot-node-2"})
+        {
+            var before=curve.Draft.Points[2].Output;Click(id);form.Canvas.Refresh();form.Canvas.HandleKey(Keys.Up);
+            Require(curve.Selected==2&&curve.Draft.Points[2].Output==before+1,"Table/plot focus lost the selected point or its arrow-key adjustment");
+        }
+        form.HandleCommand("external-curve-plot-node-1");Require(curve.Selected==1,"Accessible plot action selected a different point");
+        form.HandleCommand("external-curve-tuning");form.Canvas.Refresh();
         Click("external-curve-value-rise-plus");Require(curve.Draft.Rise==19,"Visible + did not edit external setting");
         Click("external-curve-value-rise-minus");Require(curve.Draft.Rise==18,"Visible - did not edit external setting");
         Require(curve.EditNumeric("filter","1650") is null&&curve.Draft.FilterMs==1650,"Exact external numeric edit failed");
@@ -132,6 +140,28 @@ internal static partial class ProductGuiSelfTest
         var requestCurve=curve with{Input=1};
         Require(ExternalCurveMarkers.Build(requestCurve,requestCurve,diagnostics,now)[0].Input==50,"Accepted request marker not normalized");
         Require(ExternalCurveMarkers.Build(requestCurve,requestCurve,diagnostics with{AcknowledgedTelemetry=telemetry with{SolicitudValida=false}},now).Count==0,"Unaccepted request plotted");
+        var ownTelemetry=telemetry with{ModoSolicitado="Firmware",Solicitud=null,SolicitudValida=false,DemandaPct=null,DecisionAtUtc=null,
+            IndependentExternal=new("Curve",null,50,now)};
+        var own=diagnostics with{AcknowledgedTelemetry=ownTelemetry,Device=status with{IndependentControlVersion=1}};
+        var ownPoints=ExternalCurveMarkers.Build(requestCurve,requestCurve,own,now,ProductExternalOutputMode.TemperatureCurve);
+        Require(ownPoints.Count==2&&ownPoints[0].Input==50&&ownPoints[1].Output==64,"Own temperature curve lost its acknowledged source or applied duty in Firmware");
+        Require(ExternalCurveMarkers.Build(curve,curve,own with{AcknowledgedTelemetry=ownTelemetry with{IndependentExternal=new("Curve",null,50,now.AddMilliseconds(-5000))}},now).Count==0,
+            "Expired independent input retained a marker");
+        Require(ExternalCurveMarkers.Build(curve,curve,diagnostics with{AcknowledgedTelemetry=telemetry with{IndependentExternal=new("Fixed",100,null,null)}},now).Count==0,
+            "Fixed output was falsely presented as an applied curve");
+        Require(ExternalCurveMarkers.Build(curve,curve,diagnostics,now,ProductExternalOutputMode.TemperatureCurve).Count==0&&
+            ExternalCurveMarkers.Build(curve,curve,own,now,ProductExternalOutputMode.FollowInternalFans).Count==0,
+            "Previous acknowledged source was combined with a newly applied mode");
+        using(var canvas=new ProductCanvas{Size=new(1672,941),Page=ProductPage.ExternalCurve})
+        {
+            var draft=new ProductProfiles{Functions=new ProductFunctionPolicies().Independent()};canvas.Profiles=draft;
+            canvas.State=new(){FunctionCoordinationExplicit=true,FunctionPolicies=draft.FunctionPolicies()};
+            canvas.ExternalCurve=new(canvas,()=>new ExternalCoolingSettings{Curve=requestCurve},_=>Task.FromResult<string?>(null),()=>own);
+            using var image=new Bitmap(canvas.Width,canvas.Height);canvas.DrawToBitmap(image,new(Point.Empty,canvas.Size));
+            Require(!canvas.Hits.Any(h=>h.Id is "external-curve-demand" or "external-curve-request" or "external-curve-minimum" or "external-curve-maximum"),
+                "Independent source exposed legacy input selectors that do not control its output");
+            image.Save("logs/external-cooling-self-test/external-curve-independent-source.png");
+        }
     }
 
 }

@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using VictusFanControl.ExternalCooling;
 using VictusFanControl.Telemetry;
+using VictusFanControl.Product;
 
 namespace VictusFanControl.App;
 
@@ -28,6 +29,16 @@ internal sealed class WindowsPhysicalMemoryUsage : IPhysicalMemoryUsage
 /// <summary>Read-only adapter. No controller reference, hardware reader or retained presentation value.</summary>
 internal sealed class TelemetryExportService(Func<ProductRuntimeState> state, IPhysicalMemoryUsage memory,Func<HyperXSnapshot>? hyperx=null,Func<HyperxDisplayConfiguration>? hyperxDisplay=null) : ITelemetryExportSource
 {
+    internal static bool IndependentTemperaturesReady(TelemetrySnapshot? sample,DateTimeOffset now)
+    {
+        if(sample is not{} s||!s.CpuCoreTelemetryComplete||now<s.Timestamp||now-s.Timestamp>=s.MaximumControlAge)return false;
+        bool Fresh(DateTimeOffset? at)=>now>=(at??s.Timestamp)&&now-(at??s.Timestamp)<s.MaximumControlAge&&
+            (s.RetainedTelemetry is null||(at??s.Timestamp)==s.Timestamp);
+        return s.CpuCoreTemperatures.Select(c=>c.CoreIndex).Distinct().Count()==s.CpuCoreTemperatures.Count&&
+            s.CpuCoreTemperatures.All(c=>c.CoreIndex>=0&&double.IsFinite(c.TemperatureC)&&c.TemperatureC is >=10 and <=125)&&
+            ExportTelemetry.Range(s.CpuControlTemperatureC,10,125).HasValue&&ExportTelemetry.Range(s.GpuTemperatureC,10,105).HasValue&&
+            Fresh(s.CpuThermalSampledAtUtc)&&Fresh(s.GpuThermalSampledAtUtc);
+    }
     public ExportTelemetry Capture(DateTimeOffset now)
     {
         var s=state(); var sample=s.Snapshot;
@@ -66,12 +77,31 @@ internal sealed class TelemetryExportService(Func<ProductRuntimeState> state, IP
         }
         else if (s.FanMode=="Manual") accepted &= s.ManualAuthorized && s.ManualAppliedLevel.HasValue && s.ManualAppliedLevel==s.FanLevel;
         else accepted=false;
+        IndependentExternalRequest? independent=null;
+        if(s.FunctionCoordinationExplicit)
+        {
+            var binding=s.FunctionPolicies.ExternalCooling.Binding;
+            var enabled=s.FunctionRequests.ExternalCooling&&!s.PerformanceLifecycleBlocked&&
+                (binding!=ProductFunctionBinding.FollowAutomatic||s.FanMode=="Automatic"&&!s.LifecycleBlocked)&&
+                (binding!=ProductFunctionBinding.FollowInternalFans||s.FanMode is "Automatic" or "Manual"&&!s.LifecycleBlocked);
+            if(!enabled||s.FunctionPolicies.ExternalOutputMode!=ProductExternalOutputMode.FollowInternalFans)accepted=false;
+            if(enabled&&s.FunctionPolicies.ExternalOutputMode==ProductExternalOutputMode.Fixed)
+                independent=new("Fixed",s.FunctionPolicies.ExternalFixedOutput,null,null);
+            else if(enabled&&s.FunctionPolicies.ExternalOutputMode==ProductExternalOutputMode.TemperatureCurve&&
+                IndependentTemperaturesReady(sample,now)&&sample is{} thermal)
+            {
+                var cpu=thermal.CpuControlTemperatureC!.Value;var gpu=thermal.GpuTemperatureC!.Value;
+                var at=new[]{thermal.CpuThermalSampledAtUtc??thermal.Timestamp,thermal.GpuThermalSampledAtUtc??thermal.Timestamp}.Min();
+                independent=new("Curve",null,Math.Max(Math.Clamp((cpu-40)/50*100,0,100),Math.Clamp((gpu-35)/46*100,0,100)),at);
+            }
+        }
         var ram=ExportTelemetry.Range(memory.ReadPercent(),0,100);
         var cpuAt=sample?.CpuThermalSampledAtUtc ?? sample?.Timestamp;
         var gpuAt=sample?.GpuThermalSampledAtUtc ?? sample?.Timestamp;
         return new()
         {
             CapturedAtUtc=now, SampledAtUtc=live?sample!.Timestamp:null, DecisionAtUtc=decisionAt,
+            IndependentExternal=independent,
             HyperxDisplay=hyperxDisplay?.Invoke(),
             // Legacy LCD firmware has no retained-value marker while the PC is
             // online. Project the stored number for display at this frame time;

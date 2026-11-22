@@ -1,6 +1,12 @@
 # Base externa / ESP32 — fase Windows
 
-Implementación para VictusFanControl basada en v1.2.9. No incluye firmware ni prueba física
+La rama de desarrollo actual separa conexión/LCD de la salida del actuador. Sus modos
+independientes, capacidades y diferencia entre apagar/parar están en la
+[guía de funciones](INDEPENDENT-FUNCTIONS-USER-GUIDE.md). El resto de este documento
+conserva las instrucciones de la fase Windows original; sus versiones publicadas no
+representan una entrega de la nueva rama.
+
+Implementación original para VictusFanControl basada en v1.2.9. No incluye firmware ni prueba física
 del ESP32. El módulo comienza deshabilitado; el programa puede iniciar sin dispositivo.
 Es independiente de WMI, SafetyGate, ventiladores internos y Performance Control.
 

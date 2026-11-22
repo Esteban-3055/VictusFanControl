@@ -43,6 +43,10 @@ internal static class Program
                 return await PerformanceGuiSessionHost.RunAsync(args, fixture: true, fixtureUnknownReleaseFailure: true).ConfigureAwait(false);
             if (args.Length > 0 && args[0] == "--gui-fixture-update-failure")
                 return await PerformanceGuiSessionHost.RunAsync(args, fixture: true, fixtureUpdateFailure: true).ConfigureAwait(false);
+            if (args.Length > 0 && args[0] == "--gui-fixture-partial-update")
+                return await PerformanceGuiSessionHost.RunAsync(args, fixture: true, fixturePartialUpdate: true).ConfigureAwait(false);
+            if (args.Length > 0 && args[0] == "--gui-fixture-lost-update-reply")
+                return await PerformanceGuiSessionHost.RunAsync(args, fixture: true, fixtureLostUpdateReply: true).ConfigureAwait(false);
             if (args.Length > 0 && args[0] == "--gui-session")
                 return await PerformanceGuiSessionHost.RunAsync(args).ConfigureAwait(false);
             if (args.Length == 1 &&

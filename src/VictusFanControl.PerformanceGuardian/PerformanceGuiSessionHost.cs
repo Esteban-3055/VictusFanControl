@@ -12,7 +12,8 @@ namespace VictusFanControl.PerformanceGuardian;
 internal static class PerformanceGuiSessionHost
 {
     internal static async Task<int> RunAsync(string[] args, bool fixture = false, bool fixtureEnableFailure = false, bool fixtureUpdateFailure = false,
-        bool fixtureReleaseFailure = false, bool fixtureUnknownReleaseFailure = false, bool fixtureLostReply = false)
+        bool fixtureReleaseFailure = false, bool fixtureUnknownReleaseFailure = false, bool fixtureLostReply = false,
+        bool fixturePartialUpdate = false, bool fixtureLostUpdateReply = false)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
         var values = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -31,12 +32,12 @@ internal static class PerformanceGuiSessionHost
             Guid.Parse(Get("--nonce")), int.Parse(Get("--owner-pid")), long.Parse(Get("--owner-start")), Get("--report"), null);
         if (fixture)
         {
-            var recording = new GuiFixtureDomains(fixtureEnableFailure, fixtureUpdateFailure, configuration, fixtureReleaseFailure, fixtureUnknownReleaseFailure);
+            var recording = new GuiFixtureDomains(fixtureEnableFailure, fixtureUpdateFailure, configuration, fixtureReleaseFailure, fixtureUnknownReleaseFailure, fixturePartialUpdate);
             using var runtime = new GuardianPerformancePowerSourceRuntime(new GuiFixtureSource(),
                 new RecordingGuardianCpuSourceTransitionSink(), new RecordingGuardianGpuSourceTransitionSink(),
                 new WindowsGuardianPowerSourceNotificationListenerFactory(),allowEmptySelection:true);
             return await new PerformanceGuardianHost(options with { MutexName = "Local\\VFC.GuiFixture." + options.SessionNonce.ToString("N") }, recording, runtime)
-                { DropRecoveryReplyInFixture=fixtureLostReply }
+                { DropRecoveryReplyInFixture=fixtureLostReply, DropUpdateReplyInFixture=fixtureLostUpdateReply }
                 .RunAsync(CancellationToken.None).ConfigureAwait(false);
         }
         using var identity = WindowsIdentity.GetCurrent();
@@ -98,26 +99,37 @@ internal static class PerformanceGuiSessionHost
     }
 
     private sealed class GuiFixtureDomains(bool failEnable, bool failUpdate, PerformanceGuiSessionConfiguration initial,
-        bool failRelease, bool unknownRelease) : IGuardianDomainLifecycle, IGuardianSelectableDomains
+        bool failRelease, bool unknownRelease, bool partialUpdate) : IGuardianDomainLifecycle, IGuardianSelectableDomains
     {
         private readonly RecordingGuardianDomainLifecycle _recording = new();
         private bool _active;
         private bool _releaseFailed;
         private readonly Guid _session = Guid.NewGuid();
+        private readonly Guid _cpuSession=Guid.NewGuid(),_gpuSession=Guid.NewGuid();
         public PerformanceGuiSessionConfiguration Configuration { get; private set; } = initial;
+        public void ReleaseDomains(bool cpu,bool gpu)
+        {Configuration=Configuration with{CpuEnabled=cpu?false:Configuration.CpuEnabled,GpuEnabled=gpu?false:Configuration.GpuEnabled};}
         public void UpdateConfiguration(PerformanceGuiSessionConfiguration next, PerformancePowerSourceKind source)
         {
             next.Validate();
             if (!_active || source != PerformancePowerSourceKind.Ac)
                 throw new InvalidOperationException("Fixture update admission rejected.");
             if (failUpdate) throw new IOException("Synthetic update failure; prior committed configuration retained.");
+            if(partialUpdate)
+            {
+                Configuration=Configuration with{CpuEnabled=next.CpuEnabled,AcPl1Watts=next.AcPl1Watts,AcPl2Watts=next.AcPl2Watts,
+                    BatteryPl1Watts=next.BatteryPl1Watts,BatteryPl2Watts=next.BatteryPl2Watts};
+                throw new IOException("Synthetic GPU update rejection after independently committed CPU change; zero hardware IO.");
+            }
             Configuration = next;
         }
         public GuardianDomainLifecycleSnapshot Snapshot => _recording.Snapshot with
         {
             CpuState = _releaseFailed ? "Disabled" : _active&&Configuration.CpuEnabled ? "Active" : "Disabled",
             GpuState = _releaseFailed ? "RecoveryRequired" : _active&&Configuration.GpuEnabled ? "ActiveUnverified" : "Disabled",
-            RecoveryGpuSession = _releaseFailed && failRelease ? _session : null
+            RecoveryGpuSession = _releaseFailed && failRelease ? _session : null,
+            CpuSession = _active&&Configuration.CpuEnabled?_cpuSession:null,
+            GpuSession = _active&&Configuration.GpuEnabled?_gpuSession:null
         };
         public ValueTask EnableAsync(bool cpuEnabled, bool gpuEnabled, PerformancePowerSourceKind source, CancellationToken token)
         {

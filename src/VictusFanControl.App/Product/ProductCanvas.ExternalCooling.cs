@@ -16,7 +16,7 @@ internal sealed partial class ProductCanvas
         Action("details","Diagnóstico",new(1416,85,231,45),p.Details);
         var d=p.Status;
         var state=d.State switch{ExternalCoolingConnectionState.Disabled=>"Deshabilitada",ExternalCoolingConnectionState.Disconnected=>"Desconectada",ExternalCoolingConnectionState.Connecting=>"Conectando",ExternalCoolingConnectionState.Authenticating=>"Autenticando",ExternalCoolingConnectionState.Connected=>"Conectada",ExternalCoolingConnectionState.Reconnecting=>"Reconectando",_=>"Error de conexión"};
-        var color=d.State==ExternalCoolingConnectionState.Connected?Green:d.State==ExternalCoolingConnectionState.Error?Red:p.Active?Yellow:Muted;
+        var color=d.State==ExternalCoolingConnectionState.Connected?Ink:d.State==ExternalCoolingConnectionState.Error?Red:p.Active?Yellow:Muted;
         Card(g,new(310,153,1337,145));
         using(var b=new SolidBrush(color))g.FillEllipse(b,334,181,16,16);
         DrawText(g,state,365,172,29,color,730,true);
@@ -62,7 +62,7 @@ internal sealed partial class ProductCanvas
         Action("reveal",p.Key.UseSystemPasswordChar?"Mostrar clave nueva":"Ocultar clave",new(1004,630,260,32),!p.Key.UseSystemPasswordChar,p.Key.TextLength>0);
         Action("forget","Olvidar emparejamiento",new(1280,630,341,32),false,p.Paired&&!p.ForgetPending);
         Card(g,new(310,697,1337,57));DrawText(g,p.Notice,334,707,18,Muted,1285,height:40);
-        DrawText(g,p.Busy?"Operación en curso…":p.Dirty?"Hay cambios sin guardar en la base externa":"Configuración de la base externa guardada",334,766,18,p.Dirty?Yellow:Green,1250);
+        DrawText(g,p.Busy?"Operación en curso…":p.Dirty?"Hay cambios sin guardar en la base externa":"Configuración de la base externa guardada",334,766,18,p.Dirty?Yellow:Ink,1250);
         Action("discard","Descartar cambios",new(334,805,300,48),false,p.Dirty);
         Action("save","Guardar cambios",new(650,805,400,48),true,p.Dirty);
         Action("connection",p.Active?"Desconectar":p.Dirty?"Guardar y conectar":"Conectar",new(1066,805,555,48),!p.Active,p.Active||p.CanConnect);

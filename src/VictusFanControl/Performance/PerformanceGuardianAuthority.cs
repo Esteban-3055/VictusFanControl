@@ -157,6 +157,10 @@ internal sealed class PerformanceGuardianAuthority
 
             PerformanceGuardianProtocol.DisableSession =>
                 HandleDisable(),
+            PerformanceGuardianProtocol.ReleaseDomains =>
+                SessionEnabled && request.Configuration is null && (request.CpuEnabled==true || request.GpuEnabled==true)
+                    ? Accept("DOMAIN_RELEASE_AUTHORIZED", "Release may only withdraw selected CPU/GPU domains.")
+                    : Reject("RELEASE_REQUIRES_SESSION", "Release requires an enabled owner and a nonempty release mask, without presets."),
 
             PerformanceGuardianProtocol.Status =>
                 Accept(

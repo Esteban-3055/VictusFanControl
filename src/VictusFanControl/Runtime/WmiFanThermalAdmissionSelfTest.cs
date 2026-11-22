@@ -306,7 +306,7 @@ internal static class WmiFanThermalAdmissionSelfTest
         using var waiting = new ManualResetEventSlim();
         var holder = Task.Run(() =>
         {
-            using var mutex = new Mutex(false, @"Global\VictusFanControl.WmiFanExperiment.Native");
+            using var mutex = new Mutex(false, WmiFanExperimentBoundary.NativeMutexName);
             if (!mutex.WaitOne(TimeSpan.FromSeconds(5))) throw new Exception("Fixture could not hold native mutex.");
             try { held.Set(); release.Wait(TimeSpan.FromSeconds(5)); }
             finally { mutex.ReleaseMutex(); }

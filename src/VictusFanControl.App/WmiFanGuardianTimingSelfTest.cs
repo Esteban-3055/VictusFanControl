@@ -54,6 +54,65 @@ internal static class WmiFanGuardianTimingSelfTest
         await DelayedObservationAsync();
         await TimedOutObservationAsync();
         await LockedStatusReleaseAsync();
+        await SupervisionFailureReleaseAsync();
+        await DeferredObservationAsync(persistent: false);
+        await DeferredObservationAsync(persistent: true);
+    }
+
+    private static async Task DeferredObservationAsync(bool persistent)
+    {
+        var (folder, args) = CreateActiveFixture();
+        var attempts = 0;
+        var clock = Stopwatch.StartNew();
+        var guardian = WmiFanGuiGuardianHost.RunAsync(args, fixture: true, fixtureBeforeObservation: () =>
+        {
+            if (Interlocked.Increment(ref attempts) == 1 || persistent)
+                throw new CtgpObservationDeferredException(new WmiNativeSlotBusyException());
+        });
+        try
+        {
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(12));
+            if (persistent)
+            {
+                var exit = await guardian.WaitAsync(deadline.Token);
+                CheckRelease(folder, exit, "CTGP_OBSERVATION_UNAVAILABLE", expectStatusFailure: false);
+                using var report = JsonDocument.Parse(File.ReadAllText(Path.Combine(folder, "guardian-report.json")));
+                var failure = report.RootElement.GetProperty("SupervisionCtgp").Deserialize<CtgpStatus>();
+                Require(failure is { AllowsAutomaticRetry: true } && attempts > 2 && clock.Elapsed.TotalSeconds >= 4,
+                    "Repeated admission failures renewed the deadline or lost their recoverable classification.");
+            }
+            else
+            {
+                while (Volatile.Read(ref attempts) < 2) await Task.Delay(20, deadline.Token);
+                await Task.Delay(100, deadline.Token);
+                Require(!guardian.IsCompleted && !File.Exists(Path.Combine(folder, "stop.signal")) &&
+                    CtgpPublication.TryRead<CtgpStatus>(Path.Combine(folder, "ctgp-status.json")) is { Active: true, Failure: null },
+                    "A transient unsent observation terminated a healthy session.");
+            }
+        }
+        finally
+        {
+            WmiFanGuiGuardianHost.RequestStop(folder, "CLIENT_RELEASE");
+            await guardian.WaitAsync(TimeSpan.FromSeconds(15));
+        }
+        Require(await guardian == 0, "Deferred observation did not complete verified release.");
+        Console.WriteLine(persistent
+            ? "PASS: persistent unsent cTGP observations expire at the original five-second deadline, retain retry intent and restore before release; zero hardware IO."
+            : "PASS: transient unsent cTGP observation retries without terminating supervision or replaying an enable; zero hardware IO.");
+    }
+
+    private static async Task SupervisionFailureReleaseAsync()
+    {
+        var (folder, args) = CreateActiveFixture();
+        var exit = await WmiFanGuiGuardianHost.RunAsync(args, fixture: true,
+            fixtureBeforeObservation: () => throw new IOException("fixture supervision failure after READY"));
+        CheckRelease(folder, exit, "SUPERVISION_FAILURE", expectStatusFailure: false);
+        using var report = JsonDocument.Parse(File.ReadAllText(Path.Combine(folder, "guardian-report.json")));
+        Require(report.RootElement.GetProperty("SupervisionFailure").GetString() == "fixture supervision failure after READY" &&
+            report.RootElement.GetProperty("Failure").ValueKind == JsonValueKind.Null &&
+            report.RootElement.GetProperty("RecoveryCompleted").GetBoolean(),
+            "Original supervision error masked successful recovery or was discarded.");
+        Console.WriteLine("PASS: runtime supervision failure is preserved separately from verified cleanup; no permanent recovery fence after completed release (zero hardware IO).");
     }
 
     private static async Task DelayedObservationAsync()

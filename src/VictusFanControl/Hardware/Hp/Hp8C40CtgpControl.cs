@@ -10,6 +10,11 @@ namespace VictusFanControl.Hardware.Hp;
 
 internal sealed record CtgpCommand(Guid Id, int OwnerPid, long OwnerStartUtcTicks, bool Enabled);
 internal sealed record CtgpReply(Guid Id, CtgpStatus Status);
+internal sealed class CtgpObservationDeferredException(WmiNativeSlotBusyException inner)
+    : TimeoutException("cTGP: lectura pendiente de acceso WMI; no se envió la consulta.", inner);
+internal sealed class CtgpObservationUnavailableException(CtgpObservationDeferredException inner)
+    : TimeoutException("cTGP: venció la confirmación mientras esperaba acceso WMI.", inner);
+internal sealed class CtgpActivationDeferredException(string reason) : IOException(reason);
 internal static class CtgpPublication
 {
     internal static T? TryRead<T>(string path) where T : class
@@ -26,6 +31,11 @@ internal static class CtgpPublication
 }
 internal sealed record CtgpStatus(string State, bool Active, bool Managed, string? Failure, DateTimeOffset Utc)
 {
+    public string? WaitingReason { get; init; }
+    public string? FailureKind { get; init; }
+    internal bool AllowsAutomaticRetry => State == "RecoveryRequired" && !Active && Managed && Failure is not null &&
+        FailureKind == "ObservationAdmissionTimeout";
+    internal bool RequiresManualRecovery => Failure is not null && !AllowsAutomaticRetry;
     internal static readonly TimeSpan ConfirmationLifetime = TimeSpan.FromSeconds(5);
     internal bool FreshAt(DateTimeOffset now) => now >= Utc && now - Utc <= ConfirmationLifetime;
     internal bool ConfirmsSelection(bool enabled, DateTimeOffset now) => Failure is null && FreshAt(now) &&
@@ -55,11 +65,11 @@ internal sealed class Hp8C40CtgpControl
         if (!_qualified)
         {
             _qualify();
-            var adapter = Send(0x28, [0, 0, 0, 0], 128);
-            if (adapter.Length < 2 || adapter[0] + 256 * adapter[1] != 200)
-                throw new InvalidOperationException("cTGP requiere el cargador HP de 200 W validado.");
             _qualified = true;
         }
+        var adapter = Send(0x28, [0, 0, 0, 0], 128);
+        if (adapter.Length < 2 || adapter[0] + 256 * adapter[1] != 200)
+            throw new InvalidOperationException("cTGP requiere el cargador HP de 200 W validado en cada nueva activación.");
         if (!Read().SequenceEqual(new byte[] { 0, 1, 1, 0 }))
             throw new InvalidOperationException("La política HP inicial difiere de la calificada; cTGP no se modifica.");
         _persistIntent(); // Durable before the setter; a failure prevents dispatch.
@@ -75,7 +85,16 @@ internal sealed class Hp8C40CtgpControl
     {
         if (!_owned) { Status = Status with { Utc = DateTimeOffset.UtcNow }; return; }
         if (!_ac()) { Restore(); SetStatus("AcOnly", false); return; }
-        if (!Read().SequenceEqual(new byte[] { 1, 1, 1, 0 }))
+        byte[] policy;
+        try { policy = Read(); }
+        catch (WmiNativeSlotBusyException ex)
+        {
+            // A skipped read is not evidence of a policy change. Keep the
+            // ORIGINAL confirmation date; the GUI's freshness fence still applies.
+            Status = Status with { WaitingReason = ex.Message };
+            throw new CtgpObservationDeferredException(ex);
+        }
+        if (!policy.SequenceEqual(new byte[] { 1, 1, 1, 0 }))
         {
             _externallyLost = true;
             throw new InvalidOperationException("Otra política cambió cTGP; se libera sin reactivarlo.");
@@ -94,7 +113,13 @@ internal sealed class Hp8C40CtgpControl
         SetStatus("Restored", false);
     }
 
-    internal void Fail(Exception error) => Status = new("RecoveryRequired", false, _owned, error.Message, DateTimeOffset.UtcNow);
+    internal void Fail(Exception error) => Status = new("RecoveryRequired", false, _owned, error.Message, DateTimeOffset.UtcNow)
+    { FailureKind = error is CtgpObservationUnavailableException ? "ObservationAdmissionTimeout" : null };
+    internal void DeferActivation(WmiNativeSlotBusyException error)
+    {
+        if(_owned)throw new InvalidOperationException("Una política adquirida no puede pasar a espera de activación.");
+        Status=new("Waiting",false,false,null,DateTimeOffset.UtcNow){WaitingReason=error.Message};
+    }
     internal static void RestoreRecorded(Func<HpBiosRequest, HpBiosResponse> send)
     {
         var recovery = new Hp8C40CtgpControl(send, () => true, () => { }, () => { }) { _owned = true };

@@ -34,6 +34,20 @@ int controllerTests() {
     for(uint32_t v=1;v<=255;++v)
         require(board::LedcDutyFrom8Bit(v)>board::LedcDutyFrom8Bit(v-1),"strictly increasing LEDC scale");
     auto c=config();require(c.valid(),"default config");
+    {
+        auto independentConfig=c;independentConfig.input=1;independentConfig.filterMs=0;independentConfig.hysteresis=0;
+        independentConfig.downHoldMs=0;independentConfig.startMs=0;
+        victus::ExternalController independent;independent.configure(independentConfig);
+        independent.receiveIndependent(true,1,0,0);independent.tick(0,NAN);
+        require(independent.remote()&&independent.requested()==0,"independent fixed zero differs from withdrawal");
+        independent.receiveIndependent(true,1,255,1000);independent.tick(1000,NAN);
+        require(independent.remote()&&independent.requested()==255,"independent fixed duty is not a notebook level");
+        independent.receiveIndependent(true,2,50,2000);independent.tick(2000,NAN);
+        require(independent.remote()&&independent.requested()==130,"independent curve uses percent even with logical-input configuration");
+        independent.tick(4000,NAN);require(!independent.remote(),"independent request lease expires at two seconds");
+        independent.receiveIndependent(true,1,256,5000);require(!independent.remote(),"independent fixed duty is bounded");
+        independent.receiveIndependent(true,2,NAN,5001);require(!independent.remote(),"invalid independent demand is rejected");
+    }
     require(c.evaluate(0)==30&&c.evaluate(100)==255&&c.evaluate(50)==130,"curve interpolation");
     auto bad=c;bad.points[2].input=25;require(!bad.valid(),"duplicate input");
     bad=c;bad.points[0].output=-1;require(!bad.valid(),"below min");

@@ -29,10 +29,10 @@ internal static class WmiFanGuiGuardianHost
     internal static string LegacyLeasePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
         "VictusFanControl", "WatchdogM4", "state", "lease.json");
 
-    internal static async Task<int> RunAsync(string[] args, bool fixture = false, Action? fixtureBeforeObservation = null)
+    internal static async Task<int> RunAsync(string[] args, bool fixture = false, Action? fixtureBeforeObservation = null,Action? fixtureCtgpQualification=null)
     {
         // Separate explicit fixture entry point never initializes hardware.
-        if (!fixture && fixtureBeforeObservation is not null) throw new ArgumentException("Observation injection requires fixture mode.");
+        if (!fixture && (fixtureBeforeObservation is not null||fixtureCtgpQualification is not null)) throw new ArgumentException("Injection requires fixture mode.");
         if (args.Length != 7 || args[1] != "--session-dir" || args[3] != "--owner-pid" || args[5] != "--owner-start")
             throw new ArgumentException("Invalid WMI GUI guardian arguments.");
         var directory = Path.GetFullPath(args[2]);
@@ -54,6 +54,8 @@ internal static class WmiFanGuiGuardianHost
         var releaseAccepted = false;
         var legacyAccepted = false;
         string? failure = null;
+        string? supervisionFailure = null;
+        CtgpStatus? supervisionCtgp = null;
         string? ctgpStatusPublicationFailure = null;
         var reason = "STARTUP_FAILURE";
         var baseline = 0L;
@@ -71,11 +73,13 @@ internal static class WmiFanGuiGuardianHost
         }
         HpOmenBiosWmiClient? transport = null;
         byte[] fixturePolicy = [0, 1, 1, 0];
+        var fixtureRequests=fixture?new List<HpBiosRequest>():null;
         bool Ac() => fixture || new WindowsPerformancePowerSourceReader().Read().Source == PerformancePowerSourceKind.Ac;
         var ctgp = new Hp8C40CtgpControl(r =>
         {
             if (fixture)
             {
+                fixtureRequests!.Add(r);
                 if (r.CommandType == 0x22) fixturePolicy = r.Payload.ToArray();
                 var data = r.CommandType == 0x28 ? new byte[128] : fixturePolicy.ToArray();
                 if (r.CommandType == 0x28) data[0] = 200;
@@ -90,11 +94,13 @@ internal static class WmiFanGuiGuardianHost
                     throw new InvalidOperationException("cTGP: AC, propietario o sesión dejaron de estar disponibles.");
             });
             return (transport ??= new HpOmenBiosWmiClient()).SendWithResponse(r);
-        }, Ac, () => { if (!fixture) Hp8C40CtgpQualification.Verify(); }, () =>
+        }, Ac, () => { if (!fixture) Hp8C40CtgpQualification.Verify();else fixtureCtgpQualification?.Invoke(); }, () =>
             WmiFanExperiment.WriteJson(Path.Combine(directory, "ctgp-intent.json"), new
             { OwnerPid = ownerPid, OwnerStartUtcTicks = ownerStart, Original = new byte[] { 0, 1, 1, 0 }, Utc = DateTimeOffset.UtcNow }));
         Guid lastCtgpRequest = Guid.Empty;
+        Guid lastFanDomainRequest=Guid.Empty;
         var nextCtgpObservation = TimeSpan.Zero;
+        var lastCtgpConfirmation = TimeSpan.Zero;
         void PublishCtgp()
         {
             // A failed presentation update neither refreshes the last status nor
@@ -118,6 +124,7 @@ internal static class WmiFanGuiGuardianHost
                 GuardianPid = current.Id, GuardianStartUtcTicks = current.StartTime.ToUniversalTime().Ticks,
                 DirectEcProhibited = true, LeasePath = leasePath
             });
+            reason = "SUPERVISION_FAILURE";
             timing.Check(clock.Elapsed, WmiFanGuardianClockSample.Read());
             while (true)
             {
@@ -131,6 +138,45 @@ internal static class WmiFanGuiGuardianHost
                 if (monitor.TimedOut(now)) { reason = "HEARTBEAT_EXPIRED"; break; }
                 if (!fixture && HasAcpiFault(baseline)) { reason = "ACPI_13_OR_15"; break; }
                 CheckLifecycle();
+                if(CtgpPublication.TryRead<WmiFanDomainCommand>(Path.Combine(directory,"fan-domain-command.json")) is{} fanCommand&&fanCommand.Id!=lastFanDomainRequest)
+                {
+                    if(fanCommand.Id==Guid.Empty||fanCommand.FanSession==Guid.Empty||fanCommand.OwnerPid!=ownerPid||fanCommand.OwnerStartUtcTicks!=ownerStart)
+                        throw new IOException("La orden de liberación de ventiladores no corresponde al propietario.");
+                    lastFanDomainRequest=fanCommand.Id;
+                    using(var slot=WmiFanExperimentBoundary.EnterRecoverySlot(directory,TimeSpan.FromSeconds(10),
+                        mutexName:fixture?WmiFanExperimentBoundary.FixtureNativeMutexName(directory):null))
+                    {
+                        var fanAccepted=false;var defaultAccepted=false;
+                        var intentPath=Path.Combine(directory,"write-intent.json");
+                        if(File.Exists(intentPath))
+                        {
+                            using var intent=JsonDocument.Parse(File.ReadAllText(intentPath));var i=intent.RootElement;
+                            if(i.GetProperty("OwnerPid").GetInt32()!=ownerPid||i.GetProperty("OwnerStartUtcTicks").GetInt64()!=ownerStart||
+                                i.GetProperty("FanSession").GetGuid()!=fanCommand.FanSession)
+                                throw new IOException("La intención de ventiladores cambió antes de su liberación.");
+                            var recovery=new WmiFanSession(r=>
+                            {
+                                if(fixture)fixtureRequests!.Add(r);
+                                var rc=fixture?0:(transport??=new HpOmenBiosWmiClient()).Send(r);
+                                if(rc==0&&r.CommandType==0x2E)fanAccepted=true;
+                                if(rc==0&&r.CommandType==0x1A)defaultAccepted=true;
+                                return rc;
+                            },_=>throw new InvalidOperationException("El supervisor solo puede liberar ventiladores."));
+                            recovery.Recover();
+                            if(!fanAccepted||!defaultAccepted)throw new IOException("HP no aceptó la liberación de ventiladores.");
+                            // The accepted fan release must not be replayed if a
+                            // subsequent independent policy observation fails.
+                            File.Delete(intentPath);
+                        }
+                        if(File.Exists(Path.Combine(directory,"native-inflight.json"))||File.Exists(Path.Combine(directory,"native-uncertain.signal")))
+                            throw new IOException("Resultado nativo incierto; no se acredita la liberación.");
+                        ctgp.Observe();lastCtgpConfirmation=clock.Elapsed;PublishCtgp();
+                        using var child=Process.GetCurrentProcess();
+                        WmiFanExperiment.WriteJson(Path.Combine(directory,"fan-domain-reply.json"),new WmiFanDomainReply(1,fanCommand.Id,
+                            fanCommand.FanSession,ownerPid,ownerStart,child.Id,child.StartTime.ToUniversalTime().Ticks,
+                            Hp8C40TargetProfile.Instance.Id,directory,true,fanAccepted,defaultAccepted,true,ctgp.Status,DateTimeOffset.UtcNow));
+                    }
+                }
                 var commandPath = Path.Combine(directory, "ctgp-command.json");
                 if (CtgpPublication.TryRead<CtgpCommand>(commandPath) is { } command)
                 {
@@ -139,8 +185,17 @@ internal static class WmiFanGuiGuardianHost
                     if (command.Id != lastCtgpRequest)
                     {
                         lastCtgpRequest = command.Id;
-                        try { ctgp.Apply(command.Enabled); CheckLifecycle(); PublishCtgp(); }
-                        catch (Exception ex) { ctgp.Fail(ex); PublishCtgp(); throw; }
+                        try { ctgp.Apply(command.Enabled); CheckLifecycle(); lastCtgpConfirmation = clock.Elapsed; PublishCtgp(); }
+                        catch(WmiNativeSlotBusyException ex) when(!ctgp.NeedsRestore)
+                        {ctgp.DeferActivation(ex);PublishCtgp();}
+                        catch (Exception ex)
+                        {
+                            ctgp.Fail(ex); PublishCtgp();
+                            // A refused qualification has not acquired cTGP. Only
+                            // owned or uncertain native work closes the shared resource.
+                            if(ctgp.NeedsRestore||File.Exists(Path.Combine(directory,"native-inflight.json"))||
+                                File.Exists(Path.Combine(directory,"native-uncertain.signal")))throw;
+                        }
                         WmiFanExperiment.WriteJson(Path.Combine(directory, "ctgp-reply.json"), new CtgpReply(command.Id, ctgp.Status));
                     }
                 }
@@ -149,6 +204,7 @@ internal static class WmiFanGuiGuardianHost
                 if (clock.Elapsed >= nextCtgpObservation)
                 {
                     var observationStarted = clock.Elapsed;
+                    var observationDeferred = false;
                     try
                     {
                         if (ctgp.NeedsRestore || fixtureBeforeObservation is not null)
@@ -171,12 +227,30 @@ internal static class WmiFanGuiGuardianHost
                         }
                         else ctgp.Observe();
                         CheckLifecycle();
+                        lastCtgpConfirmation = clock.Elapsed;
+                        PublishCtgp();
+                    }
+                    catch (CtgpObservationDeferredException ex)
+                    {
+                        CheckLifecycle();
+                        if (ctgp.Status is not { State: "Active", Active: true, Managed: true, Failure: null } ||
+                            !ctgp.Status.FreshAt(DateTimeOffset.UtcNow) || clock.Elapsed - lastCtgpConfirmation >= CtgpStatus.ConfirmationLifetime)
+                        {
+                            var expired = new CtgpObservationUnavailableException(ex);
+                            ctgp.Fail(expired); PublishCtgp();
+                            reason = "CTGP_OBSERVATION_UNAVAILABLE";
+                            throw expired;
+                        }
+                        // Retry only an unsent observation, never a setter or an
+                        // invocation with unknown completion. No freshness renewal.
+                        observationDeferred = true;
                         PublishCtgp();
                     }
                     catch (Exception ex) { ctgp.Fail(ex); PublishCtgp(); throw; }
                     // Slow successful work consumes the interval. Do not append a
                     // second full idle interval to an already old observation.
-                    nextCtgpObservation = observationStarted + TimeSpan.FromSeconds(2);
+                    nextCtgpObservation = observationDeferred ? clock.Elapsed + TimeSpan.FromMilliseconds(250) :
+                        observationStarted + TimeSpan.FromSeconds(2);
                 }
                 // Work may legitimately include mutex admission and a slow,
                 // completed WMI call. It is not the following idle interval.
@@ -190,7 +264,7 @@ internal static class WmiFanGuiGuardianHost
                 await Task.Delay(250).ConfigureAwait(false);
             }
         }
-        catch (Exception ex) { failure = ex.Message; }
+        catch (Exception ex) { supervisionFailure = ex.Message; supervisionCtgp = ctgp.Status; }
         finally
         {
             // Close the parent's whitelist before recovery. The shared named
@@ -201,7 +275,8 @@ internal static class WmiFanGuiGuardianHost
                 try
                 {
                     RequestStop(directory, reason);
-                    using var nativeSlot = WmiFanExperimentBoundary.EnterRecoverySlot(directory, TimeSpan.FromSeconds(10));
+                    using var nativeSlot = WmiFanExperimentBoundary.EnterRecoverySlot(directory, TimeSpan.FromSeconds(10),
+                        mutexName: fixture ? WmiFanExperimentBoundary.FixtureNativeMutexName(directory) : null);
                     Exception? ctgpFailure = null;
                     try { ctgp.Restore(); }
                     catch (Exception ex) { ctgp.Fail(ex); ctgpFailure = ex; }
@@ -210,7 +285,7 @@ internal static class WmiFanGuiGuardianHost
                         var recovery = new WmiFanSession(r =>
                         {
                             int rc;
-                            if (fixture) rc = 0;
+                            if (fixture) {fixtureRequests!.Add(r);rc = 0;}
                             else rc = (transport ??= new HpOmenBiosWmiClient()).Send(r);
                             if (rc == 0 && r.CommandType == 0x2E) releaseAccepted = true;
                             if (rc == 0 && r.CommandType == 0x1A) legacyAccepted = true;
@@ -228,18 +303,22 @@ internal static class WmiFanGuiGuardianHost
                     File.Delete(leasePath);
                     retired = true;
                 }
-                catch (Exception ex) { failure = failure is null ? ex.Message : failure + "; recovery: " + ex.Message; }
+                catch (Exception ex) { failure = ex.Message; }
                 finally { lease?.Dispose(); }
                 PublishCtgp();
             }
+            using var guardian = Process.GetCurrentProcess();
             WmiFanExperiment.WriteJson(Path.Combine(directory, "guardian-report.json"), new
             {
-                SchemaVersion = 1, TargetProfileId = Hp8C40TargetProfile.Instance.Id,
+                SchemaVersion = 2, TargetProfileId = Hp8C40TargetProfile.Instance.Id,
+                GuardianPid = guardian.Id, GuardianStartUtcTicks = guardian.StartTime.ToUniversalTime().Ticks,
+                SessionDirectory = directory, RecoveryCompleted = retired && failure is null && !ctgp.NeedsRestore,
                 OwnerPid = ownerPid, OwnerStartUtcTicks = ownerStart, ExitReason = reason,
                 ReleaseRequestAccepted = releaseAccepted, LegacyDefaultRequestAccepted = legacyAccepted,
                 GuardianLeaseRetired = retired, IndependentFirmwareOwnershipVerified = false,
-                DirectEcProhibited = true, Failure = failure
-                , CtgpRestored = !ctgp.NeedsRestore, Ctgp = ctgp.Status, CtgpStatusPublicationFailure = ctgpStatusPublicationFailure, Timing = timing.Status
+                DirectEcProhibited = true, Failure = failure, SupervisionFailure = supervisionFailure, SupervisionCtgp = supervisionCtgp
+                , CtgpRestored = !ctgp.NeedsRestore, Ctgp = ctgp.Status, CtgpStatusPublicationFailure = ctgpStatusPublicationFailure, Timing = timing.Status,
+                FixtureRequests=fixtureRequests
             });
         }
         return retired && failure is null ? 0 : 1;

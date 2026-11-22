@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Link the actual pure production policy without importing any hardware assembly. -->
+    <Compile Include="../../src/VictusFanControl/Product/ProductFunctionCoordination.cs" Link="ProductFunctionCoordination.cs" />
+  </ItemGroup>
+</Project>

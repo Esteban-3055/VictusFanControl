@@ -40,7 +40,29 @@ internal static class ExternalCoolingSelfTest
         var ram=new WindowsPhysicalMemoryUsage().ReadPercent();
         Require(ram is >=0 and <=100,"GlobalMemoryStatusEx did not return real RAM usage.");
         Console.WriteLine($"PASS export: modes, authority, retention, transition, nulls, age, 54/52; real Windows physical RAM={ram:0.0}%.");
+        TestIndependentExport(now);
         await ExportOverTcpAsync();
+    }
+    private static void TestIndependentExport(DateTimeOffset now)
+    {
+        var state=ProductHomeTelemetrySelfTest.StateAt(now) with{FanMode="Firmware",FanAuthority="Firmware",LifecycleBlocked=true,Runtime="Degraded",
+            FunctionCoordinationExplicit=true,FunctionRequests=new(ExternalCooling:true),FunctionPolicies=new VictusFanControl.Product.ProductFunctionPolicies().Unlinked()};
+        state=state with{Snapshot=state.Snapshot! with{CpuFanRpm=null,GpuFanRpm=null}};
+        var exporter=new TelemetryExportService(()=>state,new Memory(null));
+        var value=exporter.Capture(now);
+        Require(value is{SolicitudValida:false,RequestEvidence:"Unavailable",IndependentExternal.Mode:"Curve"}&&value.IndependentExternal.SampledAtUtc==now,
+            "Independent base curve requires RPM, active Automatic or manufactures internal authority.");
+        var complete=state;
+        foreach(var invalid in new[]{state.Snapshot! with{CpuCoreTemperatures=[]},state.Snapshot! with{CpuCoreTemperatures=[new(0,0,"Performance",double.NaN)]},
+            state.Snapshot! with{CpuTemperatureC=0,CpuCoreTemperatures=[new(0,0,"Performance",0)]},state.Snapshot! with{GpuTemperatureC=0}})
+        {state=complete with{Snapshot=invalid};Require(exporter.Capture(now).IndependentExternal is null,"Incomplete or invalid own temperatures authorized a quiet external curve.");}
+        state=complete;
+        state=state with{Snapshot=state.Snapshot! with{Timestamp=now.AddSeconds(-10)}};
+        Require(exporter.Capture(now).IndependentExternal is null,"Independent base curve renewed stale sensors.");
+        state=state with{Snapshot=null,FunctionPolicies=state.FunctionPolicies with{ExternalOutputMode=VictusFanControl.Product.ProductExternalOutputMode.Fixed,ExternalFixedOutput=0}};
+        Require(exporter.Capture(now).IndependentExternal is{Mode:"Fixed",Duty:0},"Fixed base zero required unrelated telemetry or became local withdrawal.");
+        state=state with{PerformanceLifecycleBlocked=true};Require(exporter.Capture(now).IndependentExternal is null,"Suspension did not withdraw the independent base.");
+        state=state with{PerformanceLifecycleBlocked=false,FunctionRequests=new()};Require(exporter.Capture(now).IndependentExternal is null,"Off base request retained remote authority.");
     }
     private static async Task ExportOverTcpAsync()
     {

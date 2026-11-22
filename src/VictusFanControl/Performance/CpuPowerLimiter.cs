@@ -83,6 +83,7 @@ internal sealed class CpuPowerLimiter : IDisposable
     private ulong? _appliedRaw;
 
     private Guid _sessionId;
+    internal Guid? CurrentSessionId => _sessionId==Guid.Empty?null:_sessionId;
     private long _journalGeneration;
     private DateTimeOffset _sessionCreatedAtUtc;
     private bool _disposed;

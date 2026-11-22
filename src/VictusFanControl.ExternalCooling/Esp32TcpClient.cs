@@ -124,6 +124,9 @@ public sealed class Esp32TcpClient
                 {
                     value=value with{ReplyToDeviceSequence=lastDeviceSequence>0?lastDeviceSequence:null};
                     value=value with{ExternalConfiguration=settings.Curve.CanSendTo(capability)?settings.Curve:null};
+                    if(value.IndependentExternal is not null&&
+                        (capability?.IndependentControlVersion!=1||value.ExternalConfiguration is null))
+                        value=value.WithoutRequest("AwaitingDevice");
                     // Old firmware rejects outputs below 30. Keep monitoring but
                     // withdraw authority rather than using an old saved curve.
                     if(settings.Curve.RequiresFullOutputRange&&!settings.Curve.CanSendTo(capability))

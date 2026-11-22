@@ -221,6 +221,16 @@ internal sealed class GuardianModernStandbyLifecycleRuntime :
         }
     }
 
+    public void ExecuteDomainRelease(Action release,Func<(bool Cpu,bool Gpu)> selection)
+    {
+        ThrowIfDisposed();
+        lock(_sync)
+        {
+            if(_inner is not IGuardianConfigurationRuntime runtime)throw new InvalidOperationException("Independent release is unavailable.");
+            try{runtime.ExecuteDomainRelease(release,selection);}
+            finally{var actual=selection();_cpuEnabled=actual.Cpu;_gpuEnabled=actual.Gpu;}
+        }
+    }
     public void ActivateListener()
     {
         ThrowIfDisposed();

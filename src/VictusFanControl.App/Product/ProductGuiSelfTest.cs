@@ -41,7 +41,9 @@ internal static partial class ProductGuiSelfTest
             TestProductIcons(Require);
             TestUpdateHandoff(Require);
             TestManualAutomaticRetry(Require);
+            TestScopedFanRetry(Require);
             TestProtections(Require);
+            TestFunctions(Require);
             TestUnattendedAutomaticRetry(Require);
             TestAutomaticReview(Require);
             TestLiveCurveApply(Require);
@@ -74,6 +76,8 @@ internal static partial class ProductGuiSelfTest
             var runtime=new RecordingRuntime();using var form=new ProductForm("fixture://modules",fixture:runtime,fixtureProfiles:new ProductProfiles());
             form.ClientSize=new(1672,941);form.Show();Application.DoEvents();var canvas=form.Canvas;canvas.Dock=DockStyle.None;canvas.Size=new(1672,941);
             Require(runtime.Commands==0,"Startup acquired authority.");
+            form.HandleCommand("profile-card-battery");Require(canvas.Editing==ProductPowerProfile.Battery,"Battery profile card did not select its draft.");
+            form.HandleCommand("profile-card-ac");Require(canvas.Editing==ProductPowerProfile.Ac&&runtime.Commands==0,"AC profile card acquired hardware or selected the wrong draft.");
             form.HandleCommand("profile-battery");form.EditValue("pl1",30);form.EditValue("pl2",15);
             Require(form.Draft.Battery.CpuPl1Watts==15&&form.Draft.Battery.CpuPl2Watts==15&&form.Draft.Ac.CpuPl1Watts==35,"PL1 exceeded PL2, changed PL2 or leaked into AC.");
             form.HandleCommand("profile-ac");canvas.ShowCurvePoints=true;form.EditNode(3,70,31);
@@ -255,7 +259,8 @@ internal static partial class ProductGuiSelfTest
                 ProductCanvas.DrawDemandMarker(graphics,new(32,32),false);
                 ProductCanvas.DrawDemandMarker(graphics,new(32,32),true);
                 var outer=markerImage.GetPixel(32,20);var center=markerImage.GetPixel(32,32);
-                Require(outer.R>200&&outer.G>150&&outer.B<100&&center.R<50&&center.G>180,
+                var gap=markerImage.GetPixel(32,22);
+                Require(outer.R>200&&outer.G>200&&outer.B>200&&center.R>200&&center.G>200&&center.B>200&&gap.R<70,
                     "Coincident target/applied markers hid one another");
             }
             canvas.Page=ProductPage.Fans;canvas.FanTab=0;Render("fans-live-demand-marker");
@@ -336,7 +341,10 @@ internal static partial class ProductGuiSelfTest
     private static void TestAutomaticReview(Action<bool,string> require)
     {
         require(ProductRuntime.PerformanceAdmissionPermitted(false,false,false,SystemState.Healthy,FanAuthority.Custom)&&ProductRuntime.PerformanceAdmissionPermitted(false,false,false,SystemState.Healthy,FanAuthority.Firmware),"Independent CPU/GPU session requires an unrelated fan mode.");
-        require(!ProductRuntime.PerformanceAdmissionPermitted(false,false,false,SystemState.Healthy,FanAuthority.Restoring)&&!ProductRuntime.PerformanceAdmissionPermitted(false,false,false,SystemState.Healthy,FanAuthority.Faulted)&&!ProductRuntime.PerformanceAdmissionPermitted(false,true,false,SystemState.Healthy,FanAuthority.Custom)&&!ProductRuntime.PerformanceAdmissionPermitted(false,false,true,SystemState.Healthy,FanAuthority.Custom)&&!ProductRuntime.PerformanceAdmissionPermitted(false,false,false,SystemState.Degraded,FanAuthority.Custom),"CPU/GPU session escaped a failure/lifecycle/existing-owner fence.");
+        require(ProductRuntime.PerformanceAdmissionPermitted(false,false,false,SystemState.Degraded,FanAuthority.Faulted)&&
+            !ProductRuntime.PerformanceAdmissionPermitted(false,true,false,SystemState.Healthy,FanAuthority.Custom)&&
+            !ProductRuntime.PerformanceAdmissionPermitted(false,false,true,SystemState.Healthy,FanAuthority.Custom)&&
+            !ProductRuntime.PerformanceAdmissionPermitted(false,false,false,SystemState.Suspended,FanAuthority.Firmware),"CPU/GPU admission coupled fan health or escaped suspension/existing-owner fences.");
         require(TelemetryWorker.IsPlannedFanReleaseRead(new WmiFanReadAdmissionPausedException(true)),"Planned native read denial was treated as sensor failure.");
         require(!TelemetryWorker.IsPlannedFanReleaseRead(new WmiFanReadAdmissionPausedException(false))&&!TelemetryWorker.IsPlannedFanReleaseRead(new IOException("native failed")),"Unexpected native fault was hidden by planned release handling.");
         var target=Hp8C40TargetProfile.Instance.Id;
@@ -436,7 +444,7 @@ internal static partial class ProductGuiSelfTest
         var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Review fixture shutdown failed.");exit.GetAwaiter().GetResult();
         var pendingPerformance=new RecordingRuntime { PerformanceGate=new(TaskCreationOptions.RunContinuationsAsynchronously) };
         using var coexist=new ProductForm("fixture://coexist",fixture:pendingPerformance,fixtureProfiles:new ProductProfiles());
-        coexist.Show();Application.DoEvents();pendingPerformance.Publish(pendingPerformance.State with{Runtime="Healthy",FanMode="Automatic",FanAuthority="Custom",PerformanceSupported=true,CanApplyPerformance=true});
+        coexist.Show();Application.DoEvents();pendingPerformance.Publish(pendingPerformance.State with{Runtime="Healthy",Source="Ac",FanMode="Automatic",FanAuthority="Custom",PerformanceSupported=true,CanApplyPerformance=true,Snapshot=Snapshot(DateTimeOffset.UtcNow,45,40,10,5)});
         coexist.HandleCommand("performance-apply");require(coexist.Canvas.Busy&&pendingPerformance.Commands==1,"Slow Performance Apply fixture did not start.");
         coexist.HandleCommand("firmware");require(pendingPerformance.Commands==2&&coexist.Canvas.Busy,"Pending Performance Apply blocked the Firmware escape.");
         pendingPerformance.PerformanceGate.SetResult();PumpUntil(()=>!coexist.Canvas.Busy,"Independent operation did not drain.");
@@ -605,16 +613,21 @@ internal static partial class ProductGuiSelfTest
                 require(previous==ProductProfilesStore.Serialize(form.Draft)&&!string.IsNullOrWhiteSpace(canvas.Notice),"Invalid import replaced the draft.");
                 var log=Path.Combine(dir,"fixture-events.log");File.WriteAllText(log,new string('x',2*1024*1024+100)+"\n");var diagnostic=Path.Combine(dir,"diagnostic.zip");
                 var interrupted=Snapshot(DateTimeOffset.UtcNow.AddSeconds(-5),40,35,5,5) with{CpuPackagePowerW=61};
-                canvas.State=canvas.State with{AutomaticInterruptionSnapshot=interrupted,Snapshot=interrupted with{CpuPackagePowerW=10},AppliedPerformance=new ProductProfiles().PerformanceConfiguration()};
+                canvas.State=canvas.State with{AutomaticInterruptionSnapshot=interrupted,Snapshot=interrupted with{CpuPackagePowerW=10},AppliedPerformance=new ProductProfiles().PerformanceConfiguration(),
+                    AppliedProtections=new(){CpuThermalHandoff=false,GpuThermalHandoff=true}};
                 var bundle=form.ExportDiagnosticsAsync(diagnostic,log);PumpUntil(()=>bundle.IsCompleted,"Diagnostic export blocked.");bundle.GetAwaiter().GetResult();
                 using(var zip=System.IO.Compression.ZipFile.OpenRead(diagnostic))
                 {
-                    require(zip.Entries.Count(e=>!e.FullName.StartsWith("recovery/"))==5+(zip.GetEntry("telemetry-tail.jsonl") is null?0:1)&&zip.Entries.Where(e=>e.FullName.StartsWith("recovery/")).All(e=>e.Length<=1024*1024)&&zip.GetEntry("profiles-draft.json") is not null&&zip.GetEntry("events-tail.log")!.Length<=2*1024*1024,"Diagnostic leaked extra files or exceeded log bounds.");
+                    require(zip.Entries.Count(e=>!e.FullName.StartsWith("recovery/"))==5+(zip.GetEntry("telemetry-tail.jsonl") is null?0:1)&&
+                        zip.Entries.Where(e=>e.FullName.StartsWith("recovery/")).All(e=>e.Length<=(e.FullName.EndsWith("native-dispatch-tail.jsonl",StringComparison.Ordinal)?2:1)*1024*1024)&&
+                        zip.GetEntry("profiles-draft.json") is not null&&zip.GetEntry("events-tail.log")!.Length<=2*1024*1024,"Diagnostic leaked extra files or exceeded log bounds.");
                     using var reader=new StreamReader(zip.GetEntry("gui-state.json")!.Open());using var state=System.Text.Json.JsonDocument.Parse(reader.ReadToEnd());
                     require(state.RootElement.GetProperty("sessionId").GetString()==AppLog.SessionId&&state.RootElement.GetProperty("sessionStartedUtc").GetDateTimeOffset()==AppLog.SessionStartedUtc,"Diagnostic session identity mismatch.");
                     require(state.RootElement.GetProperty("physicalQualification").GetString()=="not-established-by-this-export","Diagnostic fabricated physical qualification.");
-                    require(state.RootElement.GetProperty("automaticThermalContract").GetString()=="cpu-start90-active95-confirm2000ms-cpu99-immediate-gpu-strictly-over95",
-                        "Diagnostic did not identify the thermal contract used by this build.");
+                    require(state.RootElement.GetProperty("diagnosticSchemaVersion").GetInt32()==2 &&
+                        !state.RootElement.GetProperty("appliedProtections").GetProperty("CpuThermalHandoff").GetBoolean() &&
+                        state.RootElement.GetProperty("appliedProtections").GetProperty("GpuThermalHandoff").GetBoolean(),
+                        "Diagnostic replaced the applied CPU-off/GPU-on policy with unconditional thermal handoff claims.");
                     require(state.RootElement.GetProperty("AutomaticInterruptionSnapshot").GetProperty("CpuPackagePowerW").GetDouble()==61 &&
                         state.RootElement.GetProperty("snapshot").GetProperty("CpuPackagePowerW").GetDouble()==10 &&
                         state.RootElement.GetProperty("AppliedPerformance").GetProperty("CpuEnabled").GetBoolean(),"Later healthy telemetry erased the triggering sample or applied limits from diagnostics.");
@@ -640,7 +653,7 @@ internal static partial class ProductGuiSelfTest
                 }
                 require(File.ReadAllText(path)==savedBytes&&runtime.Commands==0,"Diagnostic mutated preferences or dispatched hardware.");
                 form.HandleCommand("discard");
-                canvas.State=runtime.State with{Runtime="Healthy",FanMode="Automatic",FanAuthority="Custom",PerformanceSupported=true,CanApplyPerformance=true};
+                canvas.State=runtime.State with{Runtime="Healthy",Source="Ac",FanMode="Automatic",FanAuthority="Custom",PerformanceSupported=true,CanApplyPerformance=true,Snapshot=Snapshot(DateTimeOffset.UtcNow,45,40,10,5)};
                 form.EditValue("gpu",1800);form.HandleCommand("performance-apply");
                 require(runtime.Commands==1&&!canvas.Busy,"Bounded custom GPU did not dispatch explicit Apply while Automatic was active.");
                 form.EditValue("gpu",1850);runtime.CommandFailure="Simulated Guardian no response";
@@ -722,7 +735,7 @@ internal static partial class ProductGuiSelfTest
         catch(Exception ex){Console.Error.WriteLine(ex);return 1;}
     }
     [System.Runtime.InteropServices.DllImport("user32.dll")]private static extern uint GetGuiResources(IntPtr process,uint flags);
-    private static TelemetrySnapshot Snapshot(DateTimeOffset timestamp,double cpu,double gpu,double cpuLoad,double gpuLoad)=>new(timestamp,"Intel i7-13700H",cpu,18,cpuLoad,"RTX 4060 Laptop",gpu,42,gpuLoad,3020,2980)
+    private static TelemetrySnapshot Snapshot(DateTimeOffset timestamp,double cpu,double gpu,double cpuLoad,double gpuLoad)=>new(timestamp,"Intel i7-13700H",cpu,18,cpuLoad,Hp8C40TargetProfile.ExpectedGpuName,gpu,42,gpuLoad,3020,2980)
     {CpuExpectedPhysicalCoreCount=1,CpuCoreTemperatures=[new(0,0,"Performance",cpu+3)]};
     private static void TestLiveCurveApply(Action<bool,string> require)
     {
@@ -775,11 +788,14 @@ internal static partial class ProductGuiSelfTest
         form.HandleCommand("cpu-toggle");require(!form.Draft.CpuEnabled&&runtime.Commands==1&&canvas.State.FanMode=="Automatic","Active CPU selection was blocked or changed ownership before Apply.");
         form.HandleCommand("cpu-toggle");
         form.EditValue("gpu",1801);require(canvas.CanApplyPerformance,"Exact GPU edit did not enable Apply.");
-        foreach(var blocked in new[]{active with{AppliedPerformance=expected,PerformanceUpdating=true},active with{AppliedPerformance=expected,LifecycleBlocked=true},
+        foreach(var independent in new[]{active with{AppliedPerformance=expected,LifecycleBlocked=true},
+            active with{AppliedPerformance=expected,Runtime="Degraded",Snapshot=active.Snapshot! with{CpuExpectedPhysicalCoreCount=null,CpuFanRpm=null,GpuFanRpm=null}},
+            active with{AppliedPerformance=expected,Snapshot=active.Snapshot! with{ProductTelemetryTolerance=true,RetainedTelemetry="temperatura CPU",CpuThermalSampledAtUtc=DateTimeOffset.UtcNow.AddSeconds(-4)}}})
+        {runtime.Publish(independent);require(canvas.CanApplyPerformance,"An unrelated CPU/fan failure blocked a GPU-only edit.");}
+        foreach(var blocked in new[]{active with{AppliedPerformance=expected,PerformanceUpdating=true},active with{AppliedPerformance=expected,PerformanceLifecycleBlocked=true},
             active with{AppliedPerformance=expected,AutomaticSourceTransition="Battery"},active with{AppliedPerformance=expected,AutomaticPreparing=true},
-            active with{AppliedPerformance=expected,Snapshot=active.Snapshot! with{CpuExpectedPhysicalCoreCount=null}},
             active with{AppliedPerformance=expected,Snapshot=active.Snapshot! with{Timestamp=DateTimeOffset.UtcNow.AddSeconds(-10)}},
-            active with{AppliedPerformance=expected,Snapshot=active.Snapshot! with{ProductTelemetryTolerance=true,RetainedTelemetry="temperatura CPU",CpuThermalSampledAtUtc=DateTimeOffset.UtcNow.AddSeconds(-4)}},
+            active with{AppliedPerformance=expected,Snapshot=active.Snapshot! with{GpuName="wrong GPU"}},
             active with{AppliedPerformance=expected,Snapshot=active.Snapshot! with{GpuPowerSampledAtUtc=DateTimeOffset.UtcNow.AddSeconds(-5)}}})
         {runtime.Publish(blocked);form.HandleCommand("performance-apply");require(!canvas.CanApplyPerformance&&runtime.Commands==1,"Unsafe/pending performance edit dispatched.");}
         var frozen=ProductPerformanceUpdate.WithPerformance(profiles,expected);
@@ -796,6 +812,36 @@ internal static partial class ProductGuiSelfTest
         foreach(var invalid in new[]{"NaN","Infinity","1e3","1.000.0","0.1","61"})
             require(!form.TryEditTuningValue("rise",invalid,out _),"Invalid tuning numeric value accepted: "+invalid);
         require(!form.TryEditTuningValue("cores","2.5",out _)&&ProductProfilesStore.Serialize(form.Draft)==original,"Rejected edits changed tuning.");
+        require(!form.TryEditTuningValue("cores","2",out _)&&canvas.EditableTuningField("cores") is null,
+            "N was editable without a current physical core topology.");
+        var topology=Snapshot(DateTimeOffset.UtcNow,50,40,10,5) with {CpuExpectedPhysicalCoreCount=8,
+            CpuCoreTemperatures=Enumerable.Range(0,8).Select(i=>new CpuCoreTemperatureSample(i,i,i<6?"Performance":"Efficiency",50)).ToArray()};
+        var topologyState=new ProductRuntimeState{Runtime="Healthy",Snapshot=topology};
+        runtime.Publish(topologyState);
+        require(canvas.EditableTuningField("cores")?.Max==6&&form.TryEditTuningValue("cores","6",out _)&&
+            !form.TryEditTuningValue("cores","7",out _)&&runtime.Commands==0,"N did not match the observed physical P-Core count or wrote hardware.");
+        foreach(var invalidTopology in new[]{topology with{Timestamp=DateTimeOffset.UtcNow.AddSeconds(-20)},
+            topology with{CpuExpectedPhysicalCoreCount=9},topology with{CpuCoreTemperatures=topology.CpuCoreTemperatures.Select(c=>c with{CoreIndex=0}).ToArray()}})
+        {
+            runtime.Publish(topologyState with{Snapshot=invalidTopology});
+            var saved=ProductProfilesStore.Serialize(form.Draft);
+            require(!form.TryEditTuningValue("cores","2",out _)&&canvas.EditableTuningField("cores") is null&&ProductProfilesStore.Serialize(form.Draft)==saved,
+                "Invalid or stale topology edited N or silently changed saved preferences.");
+        }
+        runtime.Publish(topologyState);
+        require(form.TryEditTuningValue("cores","3",out _),"N could not be edited after topology recovery.");
+        form.HandleCommand("tuning-source-3");
+        runtime.Publish(topologyState with{Target="HP-8C40-9D0R1LA-F18",FanMode="Firmware",FanAuthority="Firmware",Snapshot=topology with
+            {CpuExpectedPhysicalCoreCount=1,CpuCoreTemperatures=[new(0,0,"Performance",50)]}});
+        require(!canvas.CanApplyTuning&&form.Draft.Ac.Fan.Tuning.HottestPerformanceCoreCount==3,
+            "A stored N above the observed topology enabled Apply or was silently clipped.");
+        form.HandleCommand("tuning-source-0");
+        var appliedThermal=new ProductProtectionSettings{CpuThermalHandoff=false,GpuThermalHandoff=true};
+        runtime.Publish(topologyState with{AppliedProtections=appliedThermal,FanMode="Automatic",FanAuthority="Custom"});
+        require(canvas.AutomaticThermalPolicySummary.StartsWith("En uso:",StringComparison.Ordinal)&&
+            canvas.AutomaticThermalPolicySummary.Contains("CPU desactivada",StringComparison.Ordinal)&&
+            canvas.AutomaticThermalPolicySummary.Contains("GPU >95",StringComparison.Ordinal)&&
+            !canvas.AutomaticThermalPolicySummary.Contains("82",StringComparison.Ordinal),"Advanced page showed a historical or draft thermal policy in a live session.");
         require(form.TryEditTuningValue("rise","7,5",out _),"Decimal comma rejected.");
         require(form.Draft.Ac.Fan.Tuning.RiseTimeConstantSeconds==7.5&&form.Draft.Battery.Fan.Tuning==form.Draft.Ac.Fan.Tuning&&runtime.Commands==0,"Tuning edit wrote hardware or changed only one source.");
         require(!form.TryEditTuningValue("short-fall","50",out _),"Brief descent slower than prolonged descent accepted.");
@@ -814,13 +860,23 @@ internal static partial class ProductGuiSelfTest
             "Preparing stable presets changed caps, wrote hardware or lost common tuning.");
         require(form.TryEditTuningValue("rise","7.5",out _),"Live edit after preset preparation failed.");
         var active=canvas.State with{Target="HP-8C40-9D0R1LA-F18",Runtime="Healthy",Source="Ac",AutomaticAuthorized=true,
-            FanMode="Automatic",FanAuthority="Custom",Snapshot=Snapshot(DateTimeOffset.UtcNow,40,35,10,5),AppliedAutomaticConfiguration=new ProductProfiles().Ac.Fan};
+            FanMode="Automatic",FanAuthority="Custom",Snapshot=topology with{Timestamp=DateTimeOffset.UtcNow},AppliedAutomaticConfiguration=new ProductProfiles().Ac.Fan};
         runtime.Publish(active);form.HandleCommand("profile-battery");form.HandleCommand("tuning-apply");PumpUntil(()=>!canvas.Busy,"Tuning apply did not drain.");
         require(runtime.Commands==1&&runtime.LastTuning==form.Draft.Ac.Fan.Tuning&&form.Dirty,"Common tuning apply depended on editing source or saved implicitly.");
         foreach(var blocked in new[]{active with{LifecycleBlocked=true},active with{AutomaticPreparing=true},active with{AutomaticSourceTransition="Battery"},
             active with{FanMode="Manual"},active with{Snapshot=active.Snapshot! with{Timestamp=DateTimeOffset.UtcNow.AddSeconds(-10)}}})
         {runtime.Publish(blocked);form.HandleCommand("tuning-apply");require(runtime.Commands==1,"Blocked tuning apply dispatched.");}
         var exit=form.RequestExitAsync();PumpUntil(()=>exit.IsCompleted,"Advanced fixture exit did not drain.");exit.GetAwaiter().GetResult();
+    }
+    internal static int RunAdvancedChecks()
+    {
+        try
+        {
+            TestAdvancedSettings((ok,message)=>{if(!ok)throw new InvalidOperationException(message);});
+            Console.WriteLine("PASS: Advanced N follows complete, fresh physical P-Core topology; stale/duplicate/incomplete reads preserve preferences; thermal text follows applied policy. Zero hardware IO.");
+            return 0;
+        }
+        catch(Exception error){Console.Error.WriteLine(error);return 1;}
     }
     internal sealed class RecordingRuntime:IProductRuntime,IProductRecoveryHandoff,IProductLateReadDrain
     {
@@ -845,6 +901,11 @@ internal static partial class ProductGuiSelfTest
             ConfirmReadDrainFixture = null;
         }
         internal PerformanceGuiSessionConfiguration? LastPerformance;
+        internal ProductFunctionPolicies? LastFunctions;
+        internal ProductFunction? LastFunction;
+        public Task ConfigureFunctionsAsync(ProductFunctionPolicies policies){Commands++;LastFunctions=policies;return Task.CompletedTask;}
+        public Task SetCtgpAsync(bool enabled){Commands++;LastFunction=ProductFunction.Ctgp;return Task.CompletedTask;}
+        public Task SetExternalCoolingRequestedAsync(bool enabled){Commands++;LastFunction=ProductFunction.ExternalCooling;return Task.CompletedTask;}
         internal TaskCompletionSource? ReleaseGate,ManualGate,PerformanceGate,DisposeGate;
         internal string? CommandFailure,StartFailure,DisposeFailure,FenceFailure,ReleaseFailure,AutomaticModeFailure;
         public Guid? DrainedGpuSession { get; set; }

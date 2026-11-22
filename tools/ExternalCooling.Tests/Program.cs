@@ -11,11 +11,13 @@ internal static partial class Program
     {
         ProtocolTests();
         CurveTests();
+        IndependentTests();
         HardeningProtocolTests();
         SimulatorInputTests();
         GoldenVectors();
         await HardeningTransportTests();
         await TransportTests();
+        await IndependentTransportTests();
         Console.WriteLine("PASS ExternalCooling tests (protocol and real loopback TCP).");
     }
     private static void ProtocolTests()

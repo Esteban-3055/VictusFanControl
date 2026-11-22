@@ -16,14 +16,25 @@ internal sealed class WmiFanReadAdmissionPausedException : InvalidOperationExcep
 internal sealed class WmiNativeTrackingCleanupPendingException(string outcome, Exception inner)
     : IOException($"Native operation {outcome}; marker cleanup pending. No further WMI call admitted until cleanup succeeds.", inner) { }
 
+/// <summary>The serialization slot was unavailable; this caller dispatched no native operation.</summary>
+internal sealed class WmiNativeSlotBusyException()
+    : TimeoutException("WMI experiment native slot is still occupied; no overlapping call sent.");
+
 /// <summary>Process-local whitelist plus cross-process serialization for the WMI experiment and GUI.</summary>
 internal static class WmiFanExperimentBoundary
 {
+    internal const string ProductionNativeMutexName = @"Global\VictusFanControl.WmiFanExperiment.Native";
+    internal const int NativeDispatchMaximumSegmentBytes = 5 * 1024 * 1024;
+    internal static string NativeMutexName { get; private set; } = ProductionNativeMutexName;
+    internal static string FixtureNativeMutexName(string directory) => @"Local\VictusFanControl.Test.Native." +
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(Path.GetFullPath(directory).ToUpperInvariant())));
     internal static string? SessionDirectory { get; private set; }
     internal static bool Control { get; private set; }
     private static int _recovering;
     private static bool _gui;
     private static bool _productUpperRange;
+    private static int _fanWritesClosed,_fanReadsPaused;
     private static readonly object SessionGate = new();
     internal static Func<bool>? PlannedGuiRelease { get; set; }
     internal static Action? EnsureGuiGuardianAlive { get; set; }
@@ -39,9 +50,12 @@ internal static class WmiFanExperimentBoundary
     private static string InFlightPath => Path.Combine(SessionDirectory!, "native-inflight.json");
     private static string UncertainPath => Path.Combine(SessionDirectory!, "native-uncertain.signal");
 
-    internal static void Enable(string directory, bool control, bool gui = false, bool productUpperRange = false)
+    internal static void Enable(string directory, bool control, bool gui = false, bool productUpperRange = false,
+        string? fixtureNativeMutexName = null)
     {
         if(productUpperRange && !gui) throw new ArgumentException("Upper range is a GUI trial only.");
+        if (fixtureNativeMutexName is not null && !fixtureNativeMutexName.StartsWith(@"Local\VictusFanControl.Test.Native.", StringComparison.Ordinal))
+            throw new ArgumentException("Fixture mutex must use the isolated test namespace.");
         lock (SessionGate)
         {
             if (Enabled) throw new InvalidOperationException("Experiment boundary is already installed.");
@@ -50,14 +64,24 @@ internal static class WmiFanExperimentBoundary
             Control = control;
             _gui = gui;
             _productUpperRange = productUpperRange;
+            NativeMutexName = fixtureNativeMutexName ?? ProductionNativeMutexName;
             Volatile.Write(ref _admission, null);
             Interlocked.Exchange(ref _recovering, 0);
+            Interlocked.Exchange(ref _fanWritesClosed,0);Interlocked.Exchange(ref _fanReadsPaused,0);
             // Reuse the existing hard prohibition before EC module loading / I/O.
             WmiOnlyInvestigationPolicy.Enable();
         }
     }
 
     internal static void BeginRecovery() => Interlocked.Exchange(ref _recovering, 1);
+    internal static void BeginFanRelease()
+    {Interlocked.Exchange(ref _fanWritesClosed,1);Interlocked.Exchange(ref _fanReadsPaused,1);}
+    internal static void CompleteFanRelease()=>Interlocked.Exchange(ref _fanReadsPaused,0);
+    internal static void BeginFanSession()
+    {
+        if(Recovering||File.Exists(StopPath))throw new IOException("La sesión WMI compartida está cerrada.");
+        Interlocked.Exchange(ref _fanWritesClosed,0);
+    }
 
     internal static void RearmGuiAfterSuccessfulRelease(
         string releasedDirectory,
@@ -84,6 +108,7 @@ internal static class WmiFanExperimentBoundary
             Control = true;
             _gui = true;
             Interlocked.Exchange(ref _recovering, 0);
+            Interlocked.Exchange(ref _fanWritesClosed,0);Interlocked.Exchange(ref _fanReadsPaused,0);
         }
     }
 
@@ -109,14 +134,15 @@ internal static class WmiFanExperimentBoundary
         // Qualified GPU-policy commands are owned by the detached guardian,
         // never admitted by the GUI's fan or investigation whitelist.
         if (!_gui && Control && Recovering && Hp8C40CtgpRequestScope.Admit(request)) return;
-        if (_gui && (Recovering || File.Exists(StopPath)) && request.CommandType == Hp8C40BiosFanControl.GetFanLevelCommandType)
-            throw new WmiFanReadAdmissionPausedException(PlannedGuiRelease?.Invoke()==true);
+        if (_gui && (Recovering || File.Exists(StopPath)||Volatile.Read(ref _fanReadsPaused)!=0) && request.CommandType == Hp8C40BiosFanControl.GetFanLevelCommandType)
+            throw new WmiFanReadAdmissionPausedException(Volatile.Read(ref _fanReadsPaused)!=0||PlannedGuiRelease?.Invoke()==true);
         if (!IsAllowed(request, Control, Recovering, File.Exists(StopPath), gui: _gui, productUpperRange: _productUpperRange))
             throw new InvalidOperationException("Request is outside the WMI fan experiment lifecycle/whitelist.");
         if (request.CommandType == 0x2E && request.Payload[0] != 255)
         {
             if (_gui)
             {
+                if(Volatile.Read(ref _fanWritesClosed)!=0)throw new InvalidOperationException("La autoridad de ventiladores está retirada; cTGP conserva su supervisión.");
                 EnsureGuiGuardianAlive?.Invoke();
                 VictusFanControl.Control.FanDispatchAdmissionScope.EnsureAllowed();
                 return;
@@ -137,7 +163,7 @@ internal static class WmiFanExperimentBoundary
     {
         // Held on the same synchronous thread until the native call returns.
         // The timeout on WaitOne is admission timeout, not firmware cancellation.
-        using var mutex = new Mutex(false, @"Global\VictusFanControl.WmiFanExperiment.Native");
+        using var mutex = new Mutex(false, NativeMutexName);
         var owned = false;
         try
         {
@@ -150,7 +176,7 @@ internal static class WmiFanExperimentBoundary
                 File.WriteAllText(UncertainPath, "Abandoned WMI mutex");
                 throw new InvalidOperationException("Abandoned WMI mutex; native completion is unknown. Preserve the lease.");
             }
-            if (!owned) throw new TimeoutException("WMI experiment native slot is still occupied; no overlapping call sent.");
+            if (!owned) throw new WmiNativeSlotBusyException();
             RetireConfirmedCompletion(SessionDirectory!);
             if (File.Exists(InFlightPath) || File.Exists(UncertainPath))
                 throw new InvalidOperationException("Previous native completion is unknown; no further WMI call admitted.");
@@ -176,7 +202,12 @@ internal static class WmiFanExperimentBoundary
         WmiFanExperiment.WriteJson(InFlightPath, marker);
         try
         {
-            File.AppendAllText(Path.Combine(SessionDirectory!, "native-dispatch.jsonl"),
+            var dispatchPath = Path.Combine(SessionDirectory!, "native-dispatch.jsonl");
+            // The same native mutex serializes both processes. Diagnostic
+            // history is bounded independently of durable ownership markers.
+            if (File.Exists(dispatchPath) && new FileInfo(dispatchPath).Length >= NativeDispatchMaximumSegmentBytes)
+                File.Move(dispatchPath, dispatchPath + ".1", overwrite: true);
+            File.AppendAllText(dispatchPath,
             JsonSerializer.Serialize(new { pid = Environment.ProcessId, invocationId,
                 timestampUtc = DateTimeOffset.UtcNow, commandType = request.CommandType,
                 payload = request.Payload.Select(b => (int)b).ToArray(), recovering = Recovering }) + Environment.NewLine);
@@ -283,7 +314,7 @@ internal static class WmiFanExperimentBoundary
     internal static IDisposable EnterRecoverySlot(string directory, TimeSpan timeout, string? mutexName = null, bool waitForConfirmedCleanup = false)
     {
         var clock = System.Diagnostics.Stopwatch.StartNew();
-        var mutex = new Mutex(false, mutexName ?? @"Global\VictusFanControl.WmiFanExperiment.Native");
+        var mutex = new Mutex(false, mutexName ?? NativeMutexName);
         var owned = false;
         try
         {

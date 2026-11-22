@@ -29,7 +29,9 @@ internal readonly record struct GuardianDomainLifecycleSnapshot(
     string? GpuState,
     string? CpuStatus,
     string? GpuStatus,
-    Guid? RecoveryGpuSession = null);
+    Guid? RecoveryGpuSession = null,
+    Guid? CpuSession = null,
+    Guid? GpuSession = null);
 
 internal interface IGuardianDomainLifecycle
 {
@@ -129,6 +131,7 @@ internal sealed class PerformanceGuardianHost
     private bool _parentLost;
     private Exception? _recoveryDrainFailure;
     internal bool DropRecoveryReplyInFixture { get; init; }
+    internal bool DropUpdateReplyInFixture { get; init; }
     private string _exitReason =
         "NOT_STARTED";
 
@@ -660,6 +663,27 @@ internal sealed class PerformanceGuardianHost
                     true;
             }
 
+            if(request.Type==PerformanceGuardianProtocol.ReleaseDomains && result.Accepted)
+            {
+                try
+                {
+                    if(_domains is not IGuardianSelectableDomains selected||_sourceRuntime is not IGuardianConfigurationRuntime runtime)
+                        throw new InvalidOperationException("This owner cannot release independent domains.");
+                    try{runtime.ExecuteDomainRelease(()=>selected.ReleaseDomains(request.CpuEnabled==true,request.GpuEnabled==true),
+                        ()=> (selected.Configuration.CpuEnabled,selected.Configuration.GpuEnabled));}
+                    finally
+                    {
+                        authority.CommitDomainSelection(selected.Configuration.CpuEnabled,selected.Configuration.GpuEnabled);
+                        result=result with{CpuEnabled=authority.CpuEnabled,GpuEnabled=authority.GpuEnabled};
+                    }
+                    result=result with{Code="DOMAINS_RELEASED",Message="Requested domains released; unrelated owners retained."};
+                }
+                catch(Exception error)
+                {
+                    _acceptedRequests--;_rejectedRequests++;
+                    result=result with{Accepted=false,Code="DOMAIN_RELEASE_FAILED",Message=error.Message};
+                }
+            }
             if (request.Type == PerformanceGuardianProtocol.UpdateConfiguration && result.Accepted)
             {
                 try
@@ -926,11 +950,13 @@ internal sealed class PerformanceGuardianHost
                 source.LastSource.ToString(),
                 source.Failure,
                 (_domains as IGuardianConfigurableDomains)?.Configuration,
-                result.Code == PerformanceGuardianProtocol.ReleaseFailedDraining ? domains.RecoveryGpuSession : null);
+                result.Code == PerformanceGuardianProtocol.ReleaseFailedDraining ? domains.RecoveryGpuSession : null,
+                domains.CpuSession,domains.GpuSession);
         },reconcile: request.Type==PerformanceGuardianProtocol.Status && result.Accepted && result.SessionEnabled &&
             _domains is IGuardianConfigurableDomains);
 
         if(DropRecoveryReplyInFixture && result.Code==PerformanceGuardianProtocol.ReleaseFailedDraining)return;
+        if(DropUpdateReplyInFixture && request.Type==PerformanceGuardianProtocol.UpdateConfiguration)return;
         try
         {
             await PerformanceGuardianCodec.WriteResponseAsync(

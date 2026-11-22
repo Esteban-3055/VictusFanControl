@@ -15,6 +15,9 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
     private readonly int _ownerPid = Environment.ProcessId;
     private readonly long _ownerStart;
     private bool _released;
+    private Guid _fanSession=Guid.NewGuid();
+    internal bool HasChild=>_child is not null;
+    internal bool Fixture=>_fixture;
     private readonly SemaphoreSlim _ctgpCommands = new(1, 1);
     private readonly object _heartbeatPublication = new();
     private readonly object _ctgpPublication = new();
@@ -27,12 +30,15 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
             lock (_ctgpPublication)
             {
                 CtgpStatus? status = null;
+                var finalFailure = false;
                 try
                 {
-                    status = CtgpPublication.TryRead<CtgpStatus>(Path.Combine(SessionDirectory, "ctgp-status.json"));
+                    status = ReadExitedCtgpFailure();
+                    finalFailure = status is not null;
+                    status ??= CtgpPublication.TryRead<CtgpStatus>(Path.Combine(SessionDirectory, "ctgp-status.json"));
                     _ctgpReadFailure = null;
                 }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException or KeyNotFoundException)
                 { _ctgpReadFailure = ex.GetType().Name + ": " + ex.Message; }
                 var now = DateTimeOffset.UtcNow;
                 if (status?.Utc > now)
@@ -40,13 +46,34 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
                     _ctgpReadFailure = "La observación cTGP tiene una fecha futura.";
                     return null;
                 }
-                if (status is not null && (_lastCtgpStatus is null || status.Utc >= _lastCtgpStatus.Utc))
+                if (status is not null && (finalFailure || _lastCtgpStatus is null || status.Utc >= _lastCtgpStatus.Utc))
                     _lastCtgpStatus = status;
                 // A retry, an older file or a failed read never renews the acquisition.
                 var observed = _lastCtgpStatus;
                 return observed is not null && (observed.Failure is not null || observed.FreshAt(now)) ? observed : null;
             }
         }
+    }
+    private CtgpStatus? ReadExitedCtgpFailure()
+    {
+        var child = _child;
+        if (child is null || !child.HasExited) return null;
+        using var report = CtgpPublication.TryRead<JsonDocument>(ReportPath);
+        if (report is null) return null;
+        var r = report.RootElement;
+        if (r.GetProperty("SchemaVersion").GetInt32() != 2 ||
+            r.GetProperty("OwnerPid").GetInt32() != _ownerPid ||
+            r.GetProperty("OwnerStartUtcTicks").GetInt64() != _ownerStart ||
+            r.GetProperty("TargetProfileId").GetString() != Hp8C40TargetProfile.Instance.Id ||
+            r.GetProperty("GuardianPid").GetInt32() != child.Id ||
+            r.GetProperty("GuardianStartUtcTicks").GetInt64() != child.StartTime.ToUniversalTime().Ticks ||
+            !string.Equals(r.GetProperty("SessionDirectory").GetString(), Path.GetFullPath(SessionDirectory), StringComparison.OrdinalIgnoreCase))
+            throw new IOException("El informe cTGP final no corresponde al guardián y sesión observados.");
+        if (!r.TryGetProperty("SupervisionCtgp", out var atFailure) || atFailure.ValueKind == JsonValueKind.Null) return null;
+        var status = atFailure.Deserialize<CtgpStatus>();
+        // Restoration must not hide a policy fault that happened between two
+        // GUI polls. This is diagnostic evidence, never proof of current activity.
+        return status?.Failure is not null ? status : null;
     }
     internal object CtgpDiagnostic()
     {
@@ -75,6 +102,8 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
                     if (reply?.Id == command.Id)
                     {
                         var status = reply.Status;
+                        if(enabled&&status is{State:"Waiting",Managed:false,Active:false,Failure:null}&&status.FreshAt(DateTimeOffset.UtcNow))
+                            throw new CtgpActivationDeferredException(status.WaitingReason??"cTGP espera acceso WMI.");
                         if (status is null || !status.ConfirmsSelection(enabled, DateTimeOffset.UtcNow))
                             throw new IOException(status?.Failure ?? "cTGP no confirmó la selección.");
                         lock (_ctgpPublication)
@@ -92,6 +121,7 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
     private string LeasePath => _fixture ? Path.Combine(SessionDirectory, "fixture-lease.json") : WmiFanGuiGuardianHost.LeasePath;
     public string SessionDirectory { get; private set; }
     public string ReportPath => Path.Combine(SessionDirectory, "guardian-report.json");
+    internal string? LastReleasedReportPath { get; private set; }
 
     internal WmiFanGuiGuardianClient(bool fixture = false, string? fixtureDirectory = null, string? releasedBoundaryDirectory = null, bool productUpperRange = false, bool deferBoundary = false)
     {
@@ -181,8 +211,59 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
         EnsureAlive();
         var target = _productUpperRange ? Hp8C40ProductFanTargets.FromLogical(level) : (Cpu:level,Gpu:level);
         WmiFanExperiment.WriteJson(Path.Combine(SessionDirectory, "write-intent.json"), new
-        { OwnerPid = _ownerPid, OwnerStartUtcTicks = _ownerStart, Level = level, CpuLevel = target.Cpu, GpuLevel = target.Gpu, UpperRangePreview = _productUpperRange, Utc = DateTimeOffset.UtcNow });
+        { OwnerPid = _ownerPid, OwnerStartUtcTicks = _ownerStart,FanSession=_fanSession, Level = level, CpuLevel = target.Cpu, GpuLevel = target.Gpu, UpperRangePreview = _productUpperRange, Utc = DateTimeOffset.UtcNow });
         EnsureAlive();
+    }
+    public void BeginFanSession()
+    {
+        EnsureAlive();_fanSession=Guid.NewGuid();
+        if(!_fixture)WmiFanExperimentBoundary.BeginFanSession();
+    }
+    internal async Task<FanWmiReleaseEvidence> ReleaseFanDomainAsync(CancellationToken token)
+    {
+        await _ctgpCommands.WaitAsync(token).ConfigureAwait(false);
+        try
+        {
+            EnsureAlive();
+            var directory=SessionDirectory;var hadIntent=File.Exists(Path.Combine(directory,"write-intent.json"));
+            if(!_fixture)
+            {
+                WmiFanExperimentBoundary.BeginFanRelease();
+                using var quiescence=CancellationTokenSource.CreateLinkedTokenSource(token);quiescence.CancelAfter(TimeSpan.FromSeconds(10));
+                await HpWmiFanTelemetryReader.WaitForProductionQuiescenceAsync(quiescence.Token).ConfigureAwait(false);
+                await Task.Run(()=>{using var slot=WmiFanExperimentBoundary.EnterRecoverySlot(directory,TimeSpan.FromSeconds(10),waitForConfirmedCleanup:true);}).ConfigureAwait(false);
+            }
+            var command=new WmiFanDomainCommand(Guid.NewGuid(),_fanSession,_ownerPid,_ownerStart);
+            WmiFanExperiment.WriteJson(Path.Combine(directory,"fan-domain-command.json"),command);
+            using var deadline=CancellationTokenSource.CreateLinkedTokenSource(token);deadline.CancelAfter(TimeSpan.FromSeconds(20));
+            while(true)
+            {
+                EnsureAlive();Heartbeat();
+                var reply=CtgpPublication.TryRead<WmiFanDomainReply>(Path.Combine(directory,"fan-domain-reply.json"));
+                if(reply?.Id==command.Id)
+                {
+                    var child=_child!;var now=DateTimeOffset.UtcNow;
+                    if(reply.SchemaVersion!=1||reply.FanSession!=command.FanSession||reply.OwnerPid!=_ownerPid||reply.OwnerStartUtcTicks!=_ownerStart||
+                        reply.GuardianPid!=child.Id||reply.GuardianStartUtcTicks!=child.StartTime.ToUniversalTime().Ticks||reply.TargetProfileId!=Hp8C40TargetProfile.Instance.Id||
+                        !string.Equals(reply.SessionDirectory,directory,StringComparison.OrdinalIgnoreCase)||!reply.FanReleased||!reply.NativeComplete||
+                        now<reply.Utc||now-reply.Utc>TimeSpan.FromSeconds(5)||hadIntent&&(!reply.ReleaseRequestAccepted||!reply.LegacyDefaultRequestAccepted)||
+                        File.Exists(Path.Combine(directory,"write-intent.json"))||File.Exists(Path.Combine(directory,"native-uncertain.signal"))||
+                        reply.Ctgp.Failure is not null||!reply.Ctgp.FreshAt(now))
+                        throw new IOException("El recibo de ventiladores no acredita esta sesión compartida.");
+                    if(!_fixture)WmiFanExperimentBoundary.CompleteFanRelease();
+                    return new(reply.ReleaseRequestAccepted,reply.LegacyDefaultRequestAccepted,false,false,
+                        Path.Combine(directory,"fan-domain-reply.json"),"FAN_DOMAIN_RELEASED"){FanDomainReleased=true};
+                }
+                await Task.Delay(50,deadline.Token).ConfigureAwait(false);
+            }
+        }
+        catch
+        {
+            if(!_fixture)WmiFanExperimentBoundary.BeginRecovery();
+            WmiFanGuiGuardianHost.RequestStop(SessionDirectory,"FAN_DOMAIN_RELEASE_UNCONFIRMED");
+            throw;
+        }
+        finally{_ctgpCommands.Release();}
     }
 
     public async Task<FanWmiReleaseEvidence> ReleaseAsync(CancellationToken token)
@@ -224,31 +305,48 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
         if (!File.Exists(releasedReportPath))
             throw new IOException("WMI guardian exited without release report; retain the lease.");
 
-        using var report = JsonDocument.Parse(File.ReadAllText(releasedReportPath));
-        var r = report.RootElement;
-        if (r.GetProperty("SchemaVersion").GetInt32() != 1 ||
-            r.GetProperty("OwnerPid").GetInt32() != _ownerPid ||
-            r.GetProperty("OwnerStartUtcTicks").GetInt64() != _ownerStart ||
-            r.GetProperty("TargetProfileId").GetString() != Hp8C40TargetProfile.Instance.Id ||
-            !r.GetProperty("DirectEcProhibited").GetBoolean() ||
-            r.GetProperty("IndependentFirmwareOwnershipVerified").GetBoolean() ||
-            !r.GetProperty("GuardianLeaseRetired").GetBoolean() ||
-            (File.Exists(Path.Combine(releasedDirectory, "write-intent.json")) &&
-                (!r.GetProperty("ReleaseRequestAccepted").GetBoolean() || !r.GetProperty("LegacyDefaultRequestAccepted").GetBoolean())) ||
-            r.GetProperty("Failure").ValueKind != JsonValueKind.Null ||
-            (File.Exists(Path.Combine(releasedDirectory, "ctgp-intent.json")) &&
-                (!r.TryGetProperty("CtgpRestored", out var ctgpRestored) || !ctgpRestored.GetBoolean())) ||
-            _child.ExitCode != 0 ||
-            File.Exists(releasedLeasePath))
-            throw new IOException("WMI release report failed identity/completion checks; review retained lease.");
+        FanWmiReleaseEvidence ReadReleaseEvidence(Process child)
+        {
+            try
+            {
+                using var report = JsonDocument.Parse(File.ReadAllText(releasedReportPath));
+                var r = report.RootElement;
+                if (r.GetProperty("SchemaVersion").GetInt32() != 2 ||
+                    r.GetProperty("GuardianPid").GetInt32() != child.Id ||
+                    r.GetProperty("GuardianStartUtcTicks").GetInt64() != child.StartTime.ToUniversalTime().Ticks ||
+                    !string.Equals(r.GetProperty("SessionDirectory").GetString(), Path.GetFullPath(releasedDirectory), StringComparison.OrdinalIgnoreCase) ||
+                    !r.GetProperty("RecoveryCompleted").GetBoolean() ||
+                    r.GetProperty("OwnerPid").GetInt32() != _ownerPid ||
+                    r.GetProperty("OwnerStartUtcTicks").GetInt64() != _ownerStart ||
+                    r.GetProperty("TargetProfileId").GetString() != Hp8C40TargetProfile.Instance.Id ||
+                    !r.GetProperty("DirectEcProhibited").GetBoolean() ||
+                    r.GetProperty("IndependentFirmwareOwnershipVerified").GetBoolean() ||
+                    !r.GetProperty("GuardianLeaseRetired").GetBoolean() ||
+                    (File.Exists(Path.Combine(releasedDirectory, "write-intent.json")) &&
+                        (!r.GetProperty("ReleaseRequestAccepted").GetBoolean() || !r.GetProperty("LegacyDefaultRequestAccepted").GetBoolean())) ||
+                    r.GetProperty("Failure").ValueKind != JsonValueKind.Null ||
+                    (File.Exists(Path.Combine(releasedDirectory, "ctgp-intent.json")) &&
+                        (!r.TryGetProperty("CtgpRestored", out var ctgpRestored) || !ctgpRestored.GetBoolean())) ||
+                    child.ExitCode != 0 ||
+                    File.Exists(releasedLeasePath))
+                    throw new IOException("WMI release report failed identity/completion checks; review retained lease.");
 
-        var evidence = new FanWmiReleaseEvidence(
-            r.GetProperty("ReleaseRequestAccepted").GetBoolean(),
-            r.GetProperty("LegacyDefaultRequestAccepted").GetBoolean(),
-            r.GetProperty("GuardianLeaseRetired").GetBoolean(),
-            false,
-            releasedReportPath,
-            r.GetProperty("ExitReason").GetString()!);
+                return new FanWmiReleaseEvidence(
+                    r.GetProperty("ReleaseRequestAccepted").GetBoolean(),
+                    r.GetProperty("LegacyDefaultRequestAccepted").GetBoolean(),
+                    r.GetProperty("GuardianLeaseRetired").GetBoolean(),
+                    false,
+                    releasedReportPath,
+                    r.GetProperty("ExitReason").GetString()!)
+                { SupervisionCtgp = r.GetProperty("SupervisionCtgp").ValueKind == JsonValueKind.Null ? null :
+                    r.GetProperty("SupervisionCtgp").Deserialize<CtgpStatus>() };
+            }
+            catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or FormatException or OverflowException)
+            { throw new IOException("WMI release report is malformed; completion remains unconfirmed.", ex); }
+        }
+
+        var evidence = ReadReleaseEvidence(_child);
+        LastReleasedReportPath = evidence.ReportPath;
 
         if (!_fixture)
         {

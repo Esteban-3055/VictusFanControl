@@ -6,6 +6,15 @@
   "stableReleaseAuthorized": false,
   "previewReleaseAuthorized": true,
   "normalAutomatic": "authorized-exact-target",
+  "independentFunctions": {
+    "schemaVersion": 1,
+    "domains": ["cpu", "gpu", "ctgp", "external"],
+    "legacyCompatible": true,
+    "ownSensorAdmission": true,
+    "sharedWmiUncertaintyFence": true,
+    "externalIndependentControlVersion": 1,
+    "physicalValidation": "pending"
+  },
   "startup": "optional-persistent-wait-three-fresh-observations-bounded-preparation-retry-selected-performance",
   "reentryAfterInterruption": "explicit-clean-release-fresh-runtime-same-gui-three-fresh-observations",
   "sessionRestart": "explicit-drain-release-check-records-new-process-firmware-retain-draft-and-diagnostics",
@@ -37,7 +46,9 @@
     "current-product-pl1-above45-up-to-pl2-thermal-load-and-firmware-enforcement",
     "current-independent-cpu-gpu-toggle-with-retained-automatic-and-standby",
     "integrated-ctgp-ac-battery-lifecycle-and-sustained-load-observation",
-    "new-54-54-fan-response-and-sustained-automatic-load"
+    "new-54-54-fan-response-and-sustained-automatic-load",
+    "independent-domain-lifetimes-own-source-and-fan-failure-on-current-hardware",
+    "independent-external-capability-fixed-and-own-temperature-curve-on-user-board"
   ],
   "evidenceLimits": [
     "Prior thermal observations used the previous GUI 90C confirmation contract.",
@@ -69,7 +80,7 @@
     "normalAutomaticPromoted": false,
     "auxiliaryFault": "not-applicable-no-acquisition"
   },
-  "version": "1.14.1",
+  "version": "1.15.0",
   "physicalPassClaimed": false,
   "manualAutomaticRetryPhysicalValidation": "pending-current-target-observation",
   "automaticProtectionControls": "independent-cpu-temperature-gpu-temperature-handoffs-clean-resume-10-30-60s-three-attempts",
@@ -202,8 +213,8 @@
   },
   "ctgp": {
     "defaultEnabled": false,
-    "activation": "opt-in-with-Automatic-on-AC-only",
-    "owner": "detached-wmi-fan-guardian",
+    "activation": "per-function-opt-in-qualified-AC-only-selectable-Automatic-link",
+    "owner": "application-shared-wmi-guardian-with-scoped-fan-lifetime",
     "target": "8C40-F18-audited-DSDT-RTX4060-8C40103C-VBIOS95.07.2B.00.54-driver621.01-200W",
     "maximumPowerWatts": 75,
     "wattsInput": false,

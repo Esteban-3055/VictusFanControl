@@ -74,7 +74,10 @@ internal static partial class Program
         {
             var client=new Esp32TcpClient();using var cancel=new CancellationTokenSource(TimeSpan.FromSeconds(12));
             var task=client.RunAsync(new(){Mode=ExternalCoolingMode.MonitorAndRequest,UseSimulator=true,Port=server.Port},key.ToArray(),new Source(),cancel.Token);
-            await Until(()=>client.Diagnostics.Connections>=2);cancel.Cancel();await task.WaitAsync(TimeSpan.FromSeconds(2));
+            // Authentication completion precedes the first observed telemetry.
+            // Do not cancel the new session in that interval and then mistake
+            // the missing observation for session-ID reuse.
+            await Until(()=>client.Diagnostics.Connections>=2&&client.Diagnostics.Received>=2);cancel.Cancel();await task.WaitAsync(TimeSpan.FromSeconds(2));
             lock(server.Observations)Require(server.Observations.Select(x=>x.Session).Distinct().Count()>=2,"Reconnect reused session.");
         }
         await using(var server=new Server(key,new()))

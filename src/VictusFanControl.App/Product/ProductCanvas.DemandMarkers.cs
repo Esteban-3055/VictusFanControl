@@ -9,10 +9,10 @@ internal sealed partial class ProductCanvas
         float radius=applied?7:12;
         using var halo=new Pen(Background,6);
         g.DrawEllipse(halo,point.X-radius,point.Y-radius,2*radius,2*radius);
-        using var ring=new Pen(applied?Green:Yellow,3);
+        using var ring=new Pen(Ink,3);
         g.DrawEllipse(ring,point.X-radius,point.Y-radius,2*radius,2*radius);
         if(applied) {
-            using var fill=new SolidBrush(Green);
+            using var fill=new SolidBrush(Ink);
             g.FillEllipse(fill,point.X-4,point.Y-4,8,8);
         }
     }

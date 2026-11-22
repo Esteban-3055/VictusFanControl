@@ -271,7 +271,8 @@ internal sealed partial class ProductForm : Form
                 var owner=_runtime;
                 try
                 {
-                    await owner.SelectFanModeAsync(AdaptiveFanProductionMode.Automatic,profiles);
+                    await owner.SelectFanModeAsync(AdaptiveFanProductionMode.Automatic,profiles,request.Phase=="resumption"?
+                        ProductFunctionEntryReason.AutomaticRecovery:ProductFunctionEntryReason.ApplicationStartup);
                     RememberConfirmedAutomaticActivation(owner,profiles);_recoveryEpisode.Finish();
                     if(request.Phase!="resumption")_recoveryEpisode.CompleteUserActivation();
                 }
@@ -281,8 +282,10 @@ internal sealed partial class ProductForm : Form
                     bool released=false;
                     try
                     {
-                        await owner.ReleasePerformanceAsync();
-                        released=!owner.State.PerformanceProcessPresent&&owner.State.PerformanceRecovery?.Pending!=true;
+                        if(profiles.FunctionPolicies().StopAutomaticOnPerformanceFailure)await owner.ReleasePerformanceAsync();
+                        released=owner.State.PerformanceRecovery?.Pending!=true&&
+                            (!profiles.FunctionPolicies().StopAutomaticOnPerformanceFailure||
+                             owner.State.CpuState=="Disabled"&&owner.State.GpuState=="Disabled");
                     }
                     catch(Exception releaseError)
                     {
@@ -332,8 +335,9 @@ internal sealed partial class ProductForm : Form
         if(id=="session-restart"){_ = RestartSessionAsync();return;}
         if(id=="session-force-recovery"){_ = ForceSessionRecoveryAsync();return;}
         if(id.StartsWith("page-")){_canvas.Page=(ProductPage)int.Parse(id[5..]);_canvas.SelectedNode=-1;_canvas.Invalidate();return;}
-        if(id is "profile-ac" or "profile-battery") {_canvas.Editing=id=="profile-ac"?ProductPowerProfile.Ac:ProductPowerProfile.Battery;_canvas.SelectedNode=-1;ResetSimulation();_canvas.Invalidate();return;}
+        if(id is "profile-ac" or "profile-battery" or "profile-card-ac" or "profile-card-battery") {_canvas.Editing=id is "profile-ac" or "profile-card-ac"?ProductPowerProfile.Ac:ProductPowerProfile.Battery;_canvas.SelectedNode=-1;ResetSimulation();_canvas.Invalidate();return;}
         if(HandleAdvancedCommand(id))return;
+        if(HandleFunctionCommand(id))return;
         if(HandleRetentionCommand(id))return;
         if(id=="recovery-run"){_automaticResumption.Cancel();_ = RecoverPerformanceAsync();return;}
         if(HandleProtectionCommand(id)){_canvas.Invalidate();return;}
@@ -383,6 +387,8 @@ internal sealed partial class ProductForm : Form
         switch(id)
         {
             case "external-cooling":ShowExternalCooling();break;
+            case "external-settings-page":ShowExternalCooling();break;
+            case "external-curve-page":_canvas.Page=ProductPage.ExternalCurve;break;
             case "interruption-details":
                 if(_canvas.State.InterruptionDetails is { } details)
                     MessageBox.Show(this,details,"Sesión interrumpida",MessageBoxButtons.OK,MessageBoxIcon.Information);
@@ -397,6 +403,7 @@ internal sealed partial class ProductForm : Form
             case "sim-run":_canvas.SimulationRunning=!_canvas.SimulationRunning;break;
             case "edit-curve":_canvas.Page=ProductPage.Curves;break;
             case "edit-performance":_canvas.Page=ProductPage.Performance;break;
+            case "functions-page":_canvas.Page=ProductPage.Functions;break;
             case "cpu-toggle":Change(_draft with{CpuEnabled=!_draft.CpuEnabled});break;
             case "gpu-toggle":Change(_draft with{GpuEnabled=!_draft.GpuEnabled});break;
             case "automatic-start-toggle":Change(_draft with{ActivateAutomaticOnStart=!_draft.ActivateAutomaticOnStart});break;

@@ -122,6 +122,7 @@ bool Session::accept(const std::string& line,uint32_t now,double ambient,int app
     // Sensor availability is expressed by ambientTempC=null, not a TCP fault.
     status["mode"]=remote?"Remote":"Local"; status["communication"]="Ready";
     status["externalCurveVersion"]=1;status["externalMinimumOutput"]=0;
+    status["independentControlVersion"]=1;
     if(appliedConfigRevision.empty()) status["appliedConfigRevision"]=nullptr; else status["appliedConfigRevision"]=appliedConfigRevision;
     if(appliedDuty>=0&&appliedDuty<=255) status["appliedDuty"]=appliedDuty; else status["appliedDuty"]=nullptr;
     if(externalRequest>=0&&externalRequest<=255) status["externalRequest"]=externalRequest; else status["externalRequest"]=nullptr;
@@ -170,6 +171,23 @@ bool Session::telemetry(JsonObjectConst p,uint32_t now) {
         for (auto k : {"sampledAtUtc","cpuTempSampledAtUtc","gpuTempSampledAtUtc"}) { int64_t at; if (!timestamp(p[k],at) || captured-at>=5000) return false; }
         if (mode=="Automatic") { int64_t at; if (p["demandaPct"].isNull() || !timestamp(p["decisionAtUtc"],at) || captured-at>=5000) return false; }
     }
+    int independentMode=0;double independentValue=-1;
+    if(!p["independentExternal"].isNull()) {
+        auto independent=p["independentExternal"].as<JsonObjectConst>();
+        if(independent.isNull()||valid||p["requestEvidence"].as<std::string>()!="Unavailable"||
+            p["replyToDeviceSequence"].isNull()||!independent.containsKey("duty")||
+            !independent.containsKey("demandPercent")||!independent.containsKey("sampledAtUtc"))return false;
+        auto kind=independent["mode"].as<std::string>();
+        if(kind=="Fixed") {
+            if(!integer(independent["duty"],0,255)||!independent["demandPercent"].isNull()||!independent["sampledAtUtc"].isNull())return false;
+            independentMode=1;independentValue=independent["duty"].as<int>();
+        } else if(kind=="Curve") {
+            int64_t at;
+            if(!independent["duty"].isNull()||independent["demandPercent"].isNull()||!number(independent["demandPercent"],0,100)||
+                !timestamp(independent["sampledAtUtc"],at)||at>captured||captured-at>=5000)return false;
+            independentMode=2;independentValue=independent["demandPercent"].as<double>();
+        } else return false;
+    }
     ExternalConfig candidate;
     bool configPresent=!p["externalConfiguration"].isNull();
     if(configPresent) {
@@ -202,6 +220,7 @@ bool Session::telemetry(JsonObjectConst p,uint32_t now) {
             for(int j=0;j<candidate.count;++j)if(configuration.points[j].input!=candidate.points[j].input||configuration.points[j].output!=candidate.points[j].output)return false;
         }
     }
+    if(independentMode!=0&&!configPresent&&!hasConfiguration)return false;
     if(configPresent) {configuration=candidate;hasConfiguration=true;}
     auto age=[&](const char* field)->uint32_t {
         int64_t at;
@@ -216,12 +235,13 @@ bool Session::telemetry(JsonObjectConst p,uint32_t now) {
     latest.demandAge=age("decisionAtUtc");
     latest.cpuTempAge=age("cpuTempSampledAtUtc");latest.gpuTempAge=age("gpuTempSampledAtUtc");
     latest.manual=mode=="Manual";
+    latest.independentMode=independentMode;latest.independentValue=independentValue;
     latest.cpu=p["cpuUsagePct"].isNull()?-1:p["cpuUsagePct"].as<double>(); latest.gpu=p["gpuUsagePct"].isNull()?-1:p["gpuUsagePct"].as<double>();
     latest.ram=p["ramUsagePct"].isNull()?-1:p["ramUsagePct"].as<double>(); latest.demand=p["demandaPct"].isNull()?-1:p["demandaPct"].as<double>();
     latest.cpuTempC=p["cpuTempC"].isNull()?NAN:p["cpuTempC"].as<double>();
     latest.gpuTempC=p["gpuTempC"].isNull()?NAN:p["gpuTempC"].as<double>();
     latest.request=valid?p["solicitud"].as<int>():-1; latest.valid=valid; latest.source=p["powerSource"].as<std::string>();
-    if (valid) for (auto stamp:replies) if (stamp.sequence==p["replyToDeviceSequence"].as<int64_t>() && static_cast<uint32_t>(now-stamp.at)<2000) remoteRequest=true;
+    if (valid||independentMode!=0) for (auto stamp:replies) if (stamp.sequence==p["replyToDeviceSequence"].as<int64_t>() && static_cast<uint32_t>(now-stamp.at)<2000) remoteRequest=true;
     return true;
 }
 }

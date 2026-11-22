@@ -6,6 +6,41 @@ its compilation and host tests do not constitute physical qualification.
 TCP port 8765 by default; hostname `victus-base.local`, manual IPv4/IPv6 or DNS hostname.
 Local LAN only; no discovery broadcast, cloud, HTTP API, port forwarding or server dependency.
 
+## Independent actuator extension (development)
+
+The independent-functions branch adds optional `independentExternal` to the existing
+authenticated `telemetry` payload. The device advertises `independentControlVersion: 1`
+in `deviceStatus`. Windows sends this extension only after receiving that capability,
+a compatible external configuration and a device reply less than 2000 ms old. An older
+peer keeps monitoring/legacy following; Windows withdraws incompatible authority.
+This addition does not change protocolVersion, framing, directional MACs or handshake.
+
+The object has four required fields, including explicit nulls:
+
+```json
+{"mode":"Fixed","duty":130,"demandPercent":null,"sampledAtUtc":null}
+```
+
+`Fixed` accepts integer duty 0–255 and requires the other two fields to be null.
+`Curve` requires duty null, finite demandPercent 0–100 and a nondefault sampledAtUtc
+not later than capturedAtUtc and strictly less than 5000 ms old. These fields do not
+claim an internal WMI command: solicitud is null, solicitudValida is false and
+requestEvidence is `Unavailable`. replyToDeviceSequence must acknowledge a fresh
+authenticated device reply. MonitorOnly, suspension and withdrawal clear the object.
+
+The controller uses the fixed value directly or evaluates the configured points with
+the independent demand percentage. For that independent curve, the legacy config input,
+requestMinimum/requestMaximum and manualOutput do not select or normalize its source.
+The existing filter, hysteresis, descent confirmation, ramps and optional startup pulse
+still apply. The PC currently derives that percentage from its own CPU/GPU temperatures;
+their original acquisition dates remain separate from transmission time.
+
+An explicit fixed zero requests a stopped output. A null/absent object with no valid
+legacy request withdraws authority: Local ramps towards 130/255. The remote lease still
+expires after 2000 ms; reconnecting never reuses a session or grants authority by itself.
+Windows and production C++ host tests cover this extension. No physical qualification or
+user-board flash is implied by those tests. See [the user guide](INDEPENDENT-FUNCTIONS-USER-GUIDE.md).
+
 ## Framing and limits
 
 UTF-8 JSON object followed by **LF**, at most 4096 bytes excluding LF; JSON depth <=8.

@@ -241,6 +241,16 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
         }
     }
 
+    public void ExecuteDomainRelease(Action release,Func<(bool Cpu,bool Gpu)> selection)
+    {
+        ThrowIfDisposed();
+        lock(_sync)
+        {
+            // Restoration is serialized with source callbacks, but never
+            // requires a new temperature or a known source to withdraw control.
+            try{release();}finally{var actual=selection();_cpuEnabled=actual.Cpu;_gpuEnabled=actual.Gpu;}
+        }
+    }
     public void ActivateListener()
     {
         ThrowIfDisposed();

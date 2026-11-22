@@ -6,7 +6,11 @@ namespace VictusFanControl.Hardware.Hp;
 
 public sealed record FanWmiReleaseEvidence(bool ReleaseRequestAccepted,
     bool LegacyDefaultRequestAccepted, bool GuardianLeaseRetired,
-    bool IndependentFirmwareOwnershipVerified, string ReportPath, string Reason);
+    bool IndependentFirmwareOwnershipVerified, string ReportPath, string Reason)
+{
+    internal CtgpStatus? SupervisionCtgp { get; init; }
+    internal bool FanDomainReleased {get;init;}
+}
 
 internal interface IWmiFanGuiGuardian : IAsyncDisposable
 {
@@ -15,6 +19,7 @@ internal interface IWmiFanGuiGuardian : IAsyncDisposable
     Task StartAsync(CancellationToken token);
     void EnsureAlive();
     void PersistIntent(int level);
+    void BeginFanSession(){}
     void Heartbeat();
     Task<FanWmiReleaseEvidence> ReleaseAsync(CancellationToken token);
     Task<FanWmiReleaseEvidence> ConfirmCompletedReleaseAsync(CancellationToken token);
@@ -34,6 +39,7 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
     private readonly Func<HpBiosRequest, int> _send;
     private WmiFanSession _session;
     private readonly bool _productUpperRange;
+    private readonly bool _sharedGuardian;
     private bool _active;
     private bool _releaseInProgress;
     private bool _reentryBlocked;
@@ -57,10 +63,11 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
 
     internal Hp8C40WmiFanControlBackend(IWmiFanGuiGuardian guardian,
         Func<HpBiosRequest, int>? send = null,
-        Func<CancellationToken, ValueTask<HpWmiFanProofSample>>? read = null, bool productUpperRange = false)
+        Func<CancellationToken, ValueTask<HpWmiFanProofSample>>? read = null, bool productUpperRange = false,bool sharedGuardian=false)
     {
         _guardian = guardian;
         _productUpperRange = productUpperRange;
+        _sharedGuardian=sharedGuardian;
         HpOmenBiosWmiClient? client = null;
         _send = send ?? (r => (client ??= new HpOmenBiosWmiClient()).Send(r));
         _session = new WmiFanSession(_send, guardian.PersistIntent, Capabilities.MinimumLevel, _productUpperRange);
@@ -105,6 +112,7 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
             throw new FanControlAdmissionException("WMI session release is still in progress.");
         if (_active) return;
         await _guardian.StartAsync(token).ConfigureAwait(false);
+        _guardian.BeginFanSession();
         _guardian.EnsureAlive();
         _guardian.Heartbeat();
         ReleaseEvidence = null;
@@ -140,6 +148,14 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
     {
         if (!_active)
             return;
+        if(_sharedGuardian)
+        {
+            if(_reentryBlocked)throw new IOException("La liberación WMI compartida requiere recuperación antes de reintentar.");
+            _releaseInProgress=true;
+            try{ReleaseEvidence=await _guardian.ReleaseAsync(token).ConfigureAwait(false);CompleteRelease();}
+            catch{_releaseInProgress=false;_reentryBlocked=true;throw;}
+            return;
+        }
         if (_reentryBlocked)
         {
             // A detached guardian may finish after the original wait failed.
@@ -190,7 +206,7 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
 
     private void CompleteRelease()
     {
-        if (ReleaseEvidence is null || !ReleaseEvidence.GuardianLeaseRetired ||
+        if (ReleaseEvidence is null || !ReleaseEvidence.GuardianLeaseRetired&&!ReleaseEvidence.FanDomainReleased ||
             (_session.MayHaveWritten && (!ReleaseEvidence.ReleaseRequestAccepted || !ReleaseEvidence.LegacyDefaultRequestAccepted)))
         {
             _releaseInProgress = false;

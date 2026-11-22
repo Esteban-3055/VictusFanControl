@@ -13,6 +13,20 @@ desde NVS: reutilizar una revisión con contenido diferente se rechaza. Una cone
 nueva exige autenticación y solicitud nuevas; conservar la curva no concede Remote.
 Véase la [revisión de coordinación](../../docs/AUTOMATIC-COORDINATION-REVIEW.md).
 
+## Control independiente en la rama de desarrollo
+
+La separación de funciones añade la capacidad `independentControlVersion=1` y el
+mensaje autenticado `independentExternal`: salida fija 0–255 o evaluación de la curva
+con una demanda térmica propia 0–100 %. No exige fingir una orden interna aceptada.
+Se mantienen el permiso remoto de 2 s, HMAC, fechas de adquisición, configuración,
+rampas y retorno local a 130/255. Fija 0 solicita parada; retirar la orden vuelve a Local.
+
+El PC detecta la capacidad antes de usarla. Con un binario antiguo siguen disponibles
+monitorización y seguimiento compatible. Los tests nativos y TCP Windows/C++ y las
+compilaciones de ambos entornos verifican software; esta rama no se ha grabado en la
+placa del usuario. El contrato está en [el protocolo](../../docs/EXTERNAL-COOLING-PROTOCOL.md)
+y el uso en [la guía de funciones](../../docs/INDEPENDENT-FUNCTIONS-USER-GUIDE.md).
+
 ## Conexiones que se conservan
 
 | Función | GPIO | Configuración |

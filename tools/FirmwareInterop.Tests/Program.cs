@@ -98,6 +98,21 @@ try
         if(client.Diagnostics.Failures!=0 || client.Diagnostics.Device is not {Mode:"Local"} || client.Diagnostics.LastSent?.Contains("\"solicitud\":null")!=true)
             throw new InvalidOperationException("Firmware/null request did not restore Local in the C++ device engine.");
         Console.WriteLine("PASS actual Windows Firmware transition invalidates Solicitud and restores device Local.");
+        if(curve==defaults)
+        {
+            foreach(var mode in new[]{1,2,3})
+            {
+                before=client.Diagnostics.Received;source.IndependentMode=mode;
+                while(client.Diagnostics.Received<before+2&&!connection.IsCompleted)await Task.Delay(50,cancellation.Token);
+                if(client.Diagnostics.Failures!=0||client.Diagnostics.Device is not{Mode:"Remote",IndependentControlVersion:1}||
+                    !client.Diagnostics.LastSent!.Contains("\"solicitud\":null",StringComparison.Ordinal))
+                    throw new InvalidOperationException("Independent external control failed against the actual C++ parser/controller.");
+            }
+            source.IndependentMode=0;before=client.Diagnostics.Received;
+            while(client.Diagnostics.Received<before+2&&!connection.IsCompleted)await Task.Delay(50,cancellation.Token);
+            if(client.Diagnostics.Device is not{Mode:"Local"})throw new InvalidOperationException("Independent withdrawal did not restore Local.");
+            Console.WriteLine("PASS actual Windows/C++ independent Fixed 0, Fixed 255 and temperature-curve requests in Firmware mode; no fabricated fan request; withdrawal restores Local.");
+        }
     }
     finally {cancellation.Cancel();await connection;}
 }
@@ -113,12 +128,14 @@ sealed class Source(HyperxDisplayConfiguration display) : ITelemetryExportSource
     internal static HyperxDisplayConfiguration DefaultDisplay {get;}=new(){LowPercent=25,CriticalPercent=15,LowDurationMs=7000,LowBlinkCycles=7,CriticalDurationMs=14000,CriticalBlinkCycles=7};
     public volatile bool Firmware;
     public volatile bool Retained;
+    public volatile int IndependentMode;
     public readonly DateTimeOffset OriginalSampledAt=DateTimeOffset.UtcNow.AddDays(-1);
     public ExportTelemetry Capture(DateTimeOffset now)
     {
         var firmware=Firmware;var retained=Retained;
         return new()
         {
+        IndependentExternal=IndependentMode switch{1=>new("Fixed",0,null,null),2=>new("Fixed",255,null,null),3=>new("Curve",null,50,now),_=>null},
         HyperxBatteryPct=retained?2:55,HyperxSampledAtUtc=retained?now:now.AddSeconds(-60),HyperxDisplay=display,
         HyperxDisplayRetained=retained,HyperxOriginalSampledAtUtc=retained?OriginalSampledAt:null,
         CapturedAtUtc=now,SampledAtUtc=now,DecisionAtUtc=now,CpuTempSampledAtUtc=now,GpuTempSampledAtUtc=now,RamSampledAtUtc=now,

@@ -11,7 +11,7 @@ import shutil
 import zipfile
 
 
-VERSION = "1.14.1"
+VERSION = "1.15.0"
 TARGET = "HP-8C40-9D0R1LA-F18"
 MANIFEST = "PRODUCT-GUI-MANIFEST.json"
 
@@ -51,6 +51,11 @@ def main():
             and contract["previewReleaseAuthorized"] is True,
             "Wrong target or missing preview authorization")
     require(contract["physicalPassClaimed"] is False, "Must retain physical evidence limits")
+    require(manifest.get("independentFunctions") == contract.get("independentFunctions") == {
+        "schemaVersion": 1, "domains": ["cpu", "gpu", "ctgp", "external"],
+        "legacyCompatible": True, "ownSensorAdmission": True, "sharedWmiUncertaintyFence": True,
+        "externalIndependentControlVersion": 1, "physicalValidation": "pending",
+    }, "Missing independent functions contract or physical evidence limit")
     require(manifest["releaseChannel"] == contract["channel"] == "preview", "Wrong release channel")
     require(manifest["fanCommandLimits"] == contract["fanCommandLimits"] and
             contract["fanCommandLimits"]["minimumLogicalLevel"] == 10 and
@@ -154,7 +159,7 @@ def main():
     if args.checks_json:
         checks = json.loads(args.checks_json.read_text(encoding="utf-8"))["workflow_runs"]
         evidence = []
-        for name in ("oem-shadow", "wmi-fan-experiment", "cpu-rapl"):
+        for name in ("oem-shadow", "wmi-fan-experiment", "cpu-rapl", "esp32-firmware"):
             matches = [r for r in checks if r["name"] == name and r["head_sha"] == args.source_head
                        and r["event"] == "push" and r["head_branch"] == args.checks_branch]
             require(matches, f"Missing same-commit check: {name}")

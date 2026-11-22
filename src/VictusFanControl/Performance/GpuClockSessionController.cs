@@ -32,6 +32,7 @@ internal sealed class GpuClockSessionController :
     private readonly IGpuClockSessionJournal _journal;
 
     private Guid _sessionId;
+    internal Guid? CurrentSessionId => _sessionId==Guid.Empty?null:_sessionId;
     private long _generation;
     private DateTimeOffset _createdAtUtc;
     private GpuClockLimitRequest? _committedRequest;

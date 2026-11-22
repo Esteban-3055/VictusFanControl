@@ -65,6 +65,24 @@ internal static class Program
             catch(Exception ex) { Console.Error.WriteLine(ex); Environment.ExitCode=1; }
             return;
         }
+        if(args.SequenceEqual(new[]{"--automatic-intent-self-test"}))
+        {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunAutomaticIntentChecks();return;}
+        if(args.SequenceEqual(new[]{"--protections-ui-self-test"}))
+        {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunProtectionChecks();return;}
+        if(args.SequenceEqual(new[]{"--advanced-ui-self-test"}))
+        {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunAdvancedChecks();return;}
+        if(args.SequenceEqual(new[]{"--runtime-performance-self-test"}))
+        {Environment.ExitCode=ProductRuntimePerformanceSelfTest.RunAsync().GetAwaiter().GetResult();return;}
+        if(args.SequenceEqual(new[]{"--runtime-lifetime-self-test"}))
+        {Environment.ExitCode=ProductRuntimePerformanceSelfTest.RunLifetimeChecksAsync().GetAwaiter().GetResult();return;}
+        if(args.SequenceEqual(new[]{"--independent-runtime-self-test"}))
+        {Environment.ExitCode=ProductRuntimePerformanceSelfTest.RunIndependentChecksAsync().GetAwaiter().GetResult();return;}
+        if(args.SequenceEqual(new[]{"--shared-wmi-self-test"}))
+        {Environment.ExitCode=WmiSharedGuardianSelfTest.RunAsync().GetAwaiter().GetResult();return;}
+        if(args.SequenceEqual(new[]{"--reference-interface-self-test"}))
+        {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunReferenceInterfaceChecks();return;}
+        if(args.SequenceEqual(new[]{"--fan-retry-lifetime-ui-self-test"}))
+        {ApplicationConfiguration.Initialize();Environment.ExitCode=ProductGuiSelfTest.RunScopedRetryChecks();return;}
         // Dispatch before GUI/log/runtime startup. This child can only acquire NVIDIA telemetry.
         if (args.Length > 0 && args[0] is "--nvml-telemetry-worker" or "--nvml-telemetry-fixture")
         { Environment.ExitCode = NvmlTelemetryWorkerHost.Run(args); return; }

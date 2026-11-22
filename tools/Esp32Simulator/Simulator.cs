@@ -48,14 +48,14 @@ public static class Simulator
                         case SimulatorFault.Silence:continue;
                     }
                 }
-                var remote=telemetry.SolicitudValida&&telemetry.ReplyToDeviceSequence is{} referencedReply&&replyTimes.TryGetValue(referencedReply,out var replyAt)&&
+                var remote=(telemetry.SolicitudValida||telemetry.IndependentExternal is not null)&&telemetry.ReplyToDeviceSequence is{} referencedReply&&replyTimes.TryGetValue(referencedReply,out var replyAt)&&
                     System.Diagnostics.Stopwatch.GetElapsedTime(replyAt).TotalMilliseconds<telemetry.ValidForMs;
-                device.Apply(remote,telemetry.Solicitud,curve,telemetry.DemandaPct,telemetry.ModoSolicitado=="Manual");
+                device.Apply(remote,telemetry.Solicitud,curve,telemetry.DemandaPct,telemetry.ModoSolicitado=="Manual",telemetry.IndependentExternal);
                 var operating=device.Snapshot;
                 var status=new DeviceStatus
                 {
                     AckSequence=previous,AmbientTempC=23.0+Math.Sin(previous/30.0),
-                    ExternalCurveVersion=1,ExternalMinimumOutput=0,AppliedConfigRevision=operating.Revision,AppliedDuty=operating.Duty,ExternalRequest=operating.Request,
+                    ExternalCurveVersion=1,IndependentControlVersion=1,ExternalMinimumOutput=0,AppliedConfigRevision=operating.Revision,AppliedDuty=operating.Duty,ExternalRequest=operating.Request,
                     // An illustrative simulator policy, not a firmware requirement or Windows mapping.
                     AppliedPwmPct=operating.PwmPct,
                     Mode=operating.Mode,Communication=operating.Communication,Extensions=new(){Slot1=null,Slot2=null}

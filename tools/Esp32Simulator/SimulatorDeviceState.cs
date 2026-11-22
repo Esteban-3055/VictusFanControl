@@ -12,7 +12,7 @@ public sealed class SimulatorDeviceState
     private SimulatorOperatingState _state=new("Local","Ready",25);
     private long _lastRequest;
     public SimulatorOperatingState Snapshot{get{lock(_sync)return _state;}}
-    public void Apply(bool remote,int? level,ExternalCurveConfiguration? config=null,double? demand=null,bool manual=false)
+    public void Apply(bool remote,int? level,ExternalCurveConfiguration? config=null,double? demand=null,bool manual=false,IndependentExternalRequest? independent=null)
     {
         lock(_sync)
         {
@@ -22,12 +22,13 @@ public sealed class SimulatorDeviceState
                 config.Validate();
                 if(remote)
                 {
-                    var x=config.Input==1?100.0*(level!.Value-config.RequestMinimum)/(config.RequestMaximum-config.RequestMinimum):demand;
-                    if(config.Input==1&&(level<config.RequestMinimum||level>config.RequestMaximum)||config.Input==0&&!manual&&x is null)remote=false;
+                    var x=independent?.Mode=="Curve"?independent.DemandPercent:independent is not null?0:
+                        config.Input==1?100.0*(level!.Value-config.RequestMinimum)/(config.RequestMaximum-config.RequestMinimum):demand;
+                    if(independent is null&&(config.Input==1&&(level<config.RequestMinimum||level>config.RequestMaximum)||config.Input==0&&!manual&&x is null))remote=false;
                     if(remote)
                     {
-                        output=config.ManualOutput;
-                        if(config.Input==1||!manual)
+                        output=independent?.Mode=="Fixed"?independent.Duty:config.ManualOutput;
+                        if(independent?.Mode=="Curve"||independent is null&&(config.Input==1||!manual))
                         {
                             for(var i=1;i<config.Points.Length;i++)if(x<=config.Points[i].Input)
                             {

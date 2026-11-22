@@ -575,7 +575,7 @@ public sealed class AdaptiveFanProductionController
         try
         {
             if (!_automaticExecutionAuthorized || _automaticHardware is null || _automaticAdmission is null || _automaticAdmission.IsClosed ||
-                _mode != AdaptiveFanProductionMode.Automatic || _coordinator.Authority != FanAuthority.Custom ||
+                _mode != AdaptiveFanProductionMode.Automatic || !AutomaticAuthorityOrUnwrittenPreparation ||
                 _preparedEngine is null || _automaticConfiguration?.UnifiedDemand is null)
                 throw new InvalidOperationException("Aplicar requiere Automatic activo y una sesión vigente con curva única.");
             verifyAdmission();
@@ -612,20 +612,22 @@ public sealed class AdaptiveFanProductionController
     }
 
     /// <summary>Keep acquisition/filter continuity while source limits reconcile; never dispatch a fan write.</summary>
+    private bool AutomaticAuthorityOrUnwrittenPreparation=>_coordinator.Authority==FanAuthority.Custom||
+        _coordinator.Authority==FanAuthority.Firmware&&_planner.LastAppliedLevel is null;
     public async ValueTask ObserveAutomaticSourceWaitAsync(TelemetrySnapshot snapshot, Action verifyAdmission, CancellationToken token)
     {
         await _operationGate.WaitAsync(token).ConfigureAwait(false);
         try
         {
-            if (_mode != AdaptiveFanProductionMode.Automatic || _coordinator.Authority != FanAuthority.Custom ||
+            if (_mode != AdaptiveFanProductionMode.Automatic || !AutomaticAuthorityOrUnwrittenPreparation ||
                 _preparedEngine is null || _automaticAdmission is null || _automaticAdmission.IsClosed ||
                 !ReferenceEquals(snapshot, _automaticAdmission.LastObservedSnapshot))
                 throw new InvalidOperationException("Transición requiere una sesión Automatic activa y una adquisición vigente.");
             verifyAdmission();
             if (!TryBuildPolicyInput(snapshot, out var input, out var failure) ||
-                !_preparedEngine.ObserveDuringActuation(input, out failure))
+                _coordinator.Authority==FanAuthority.Custom&&!_preparedEngine.ObserveDuringActuation(input, out failure))
                 throw new InvalidOperationException("Adquisición durante transición rechazada: " + failure);
-            _experimentalPolicy?.ObserveDuringActuation(input);
+            if(_coordinator.Authority==FanAuthority.Custom)_experimentalPolicy?.ObserveDuringActuation(input);
             Volatile.Write(ref _lastAutomaticResult, null);
         }
         finally { _operationGate.Release(); }

@@ -2,10 +2,13 @@ namespace VictusFanControl.ExternalCooling;
 
 public enum ExternalCoolingMode { Disabled, MonitorOnly, MonitorAndRequest }
 public enum ExternalCoolingConnectionState { Disabled, Disconnected, Connecting, Authenticating, Connected, Reconnecting, Error }
+public sealed record IndependentExternalRequest(string Mode,int? Duty,double? DemandPercent,DateTimeOffset? SampledAtUtc);
 
 /// <summary>Nullable measurements are unavailable, invalid or expired, never fabricated zeroes.</summary>
 public sealed record ExportTelemetry
 {
+    [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public IndependentExternalRequest? IndependentExternal {get;init;}
     public int ValidForMs { get; init; } = ExternalCoolingProtocol.RequestValidForMilliseconds;
     public long? ReplyToDeviceSequence { get; init; }
     public required DateTimeOffset CapturedAtUtc { get; init; }
@@ -42,7 +45,7 @@ public sealed record ExportTelemetry
     public ExternalCurveConfiguration? ExternalConfiguration {get;init;}
 
     public ExportTelemetry WithoutRequest(string reason="MonitorOnly") => this with
-    { Solicitud=null, SolicitudValida=false, CpuTargetLevel=null, GpuTargetLevel=null, RequestEvidence=reason };
+    { Solicitud=null, SolicitudValida=false, CpuTargetLevel=null, GpuTargetLevel=null, RequestEvidence=reason,IndependentExternal=null };
 
     public static double? Range(double? value, double min, double max) =>
         value is {} v && double.IsFinite(v) && v >= min && v <= max ? v : null;

@@ -88,7 +88,8 @@ internal sealed class QualifiedCpuGuardianDomainLifecycle :
                 _lastStatus ??
                 _limiter.LastError,
             GpuStatus:
-                null);
+                null,
+            CpuSession: _limiter.CurrentSessionId);
 
     public ValueTask EnableAsync(
         bool cpuEnabled,
@@ -441,14 +442,16 @@ internal static class QualifiedCpuGuardianDomainLifecycleSelfTest
         using var lifecycle=new QualifiedCpuGuardianDomainLifecycle(backend,journal,CpuPowerProductDefaults.CreateDefaultPresetSet());
         lifecycle.EnableAsync(true,false,PerformancePowerSourceKind.Ac,CancellationToken.None).GetAwaiter().GetResult();
         var before=journal.Load()!;
+        Require(lifecycle.Snapshot.CpuSession==before.SessionId&&lifecycle.Snapshot.GpuSession is null,
+            "CPU status did not expose its exact durable session identity");
         lifecycle.UpdatePresets(CpuPowerProductDefaults.CreatePresetSet(8,15,35,60),PerformancePowerSourceKind.Ac);
         var after=journal.Load()!;
         Require(before.SessionId==after.SessionId&&before.OriginalBaseline==after.OriginalBaseline&&backend.Raw==FakeCpuBackend.BatteryRaw,
             "live CPU update replaced the session/baseline or omitted the current preset");
-        Require(lifecycle.HandleConfirmedSourceChange(PerformancePowerSourceKind.Battery).Succeeded&&backend.Raw==FakeCpuBackend.AcRaw,
+        Require(lifecycle.HandleConfirmedSourceChange(PerformancePowerSourceKind.Battery).Succeeded&&backend.Raw==FakeCpuBackend.AcRaw&&lifecycle.Snapshot.CpuSession==before.SessionId,
             "source transition lost live CPU presets");
         lifecycle.ReleaseAsync(true,false,"LIVE_UPDATE_TEST",CancellationToken.None).GetAwaiter().GetResult();
-        Require(backend.Raw==FakeCpuBackend.BaselineRaw&&journal.Load() is null,"live CPU update broke baseline release");
+        Require(backend.Raw==FakeCpuBackend.BaselineRaw&&journal.Load() is null&&lifecycle.Snapshot.CpuSession is null,"live CPU update broke baseline release or retained a retired identity");
         output.WriteLine("PASS live CPU presets retain original journal/baseline, route next source and restore normally");
     }
 

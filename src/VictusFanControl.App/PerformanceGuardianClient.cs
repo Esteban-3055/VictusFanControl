@@ -42,13 +42,15 @@ internal sealed class PerformanceGuardianClient
     internal bool LimitsActive => LastStatusFresh && LastStatus is { Ok:true,SessionEnabled:true,RuntimeFailure:null } s &&
         (s.CpuEnabled?s.CpuState=="Active":s.CpuState=="Disabled") &&
         (s.GpuEnabled?s.GpuState=="ActiveUnverified":s.GpuState=="Disabled");
+    internal bool OwnerRunning {get{try{return _process is{HasExited:false};}catch(InvalidOperationException){return false;}}}
+    internal bool SessionAvailable => LastStatusFresh&&LastStatus is{Ok:true,SessionEnabled:true,RuntimeFailure:null,PowerSource:"Ac" or "Battery"}&&AppliedConfiguration is not null;
 
     internal PerformanceGuardianClient(string modulesDirectory, Func<ProcessStartInfo, Process?>? startProcess = null,
         Func<PerformanceRecoveryPreview>? recoveryPreview = null)
     {
         _modulePath = Path.Combine(modulesDirectory, "IntelMSR.bin");
         _startProcess = startProcess ?? Process.Start;
-        _recoveryPreview = recoveryPreview ?? (()=>PerformanceRecoveryPreview.Read());
+        _recoveryPreview = recoveryPreview ?? (()=>PerformanceRecoveryPreview.Read(PerformanceRecoveryPreview.DirectoryPath));
     }
 
     internal async Task<PerformanceGuardianResponse> EnableAsync(PerformanceGuiSessionConfiguration configuration)
@@ -105,7 +107,7 @@ internal sealed class PerformanceGuardianClient
         await _gate.WaitAsync(admission.Token).ConfigureAwait(false);
         try
         {
-            if (_process is null || _process.HasExited || !LimitsActive || AppliedConfiguration is null)
+            if (_process is null || _process.HasExited || !SessionAvailable || AppliedConfiguration is null)
                 throw new InvalidOperationException("Actualizar requiere la misma sesión sana y una selección CPU/GPU confirmada.");
             // A pending STATUS owns the transport only, not a performance update.
             // Pause fan dispatch and start the write deadline once this owner is free.
@@ -114,10 +116,12 @@ internal sealed class PerformanceGuardianClient
             if(AppliedConfiguration==configuration&&LastStatus is {} unchanged)return unchanged;
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(4));
             if (_pipe is null || !_pipe.IsConnected) await ConnectAsync(timeout.Token).ConfigureAwait(false);
+            var previous=AppliedConfiguration;
             LastStatus = null;
             LastStatus = await SendAsync(PerformanceGuardianProtocol.UpdateConfiguration, configuration, timeout.Token).ConfigureAwait(false);
             CaptureConfiguration(LastStatus);
-            if (!LastStatus.Ok || AppliedConfiguration != configuration || !LimitsActive)
+            if (!LastStatus.Ok || AppliedConfiguration != configuration || !SessionAvailable ||
+                !ProductPerformanceUpdate.RequestedDomainsReady(previous,configuration,LastStatus))
                 throw new InvalidOperationException(LastStatus.Code + ": " + LastStatus.Message);
             return LastStatus;
         }
@@ -143,14 +147,36 @@ internal sealed class PerformanceGuardianClient
         AppliedConfiguration = configuration;
     }
 
-    internal async Task<PerformanceGuardianResponse?> StatusAsync()
+    internal async Task ReleaseDomainsAsync(bool cpu,bool gpu)
     {
-        await _gate.WaitAsync().ConfigureAwait(false);
+        if(!cpu&&!gpu)return;
+        using var deadline=new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await _gate.WaitAsync(deadline.Token).ConfigureAwait(false);
+        try
+        {
+            if(!OwnerRunning||AppliedConfiguration is null)throw new IOException("No hay un propietario CPU/GPU disponible para liberar.");
+            if(_pipe is null||!_pipe.IsConnected)await ConnectAsync(deadline.Token).ConfigureAwait(false);
+            var previous=AppliedConfiguration;
+            LastStatus=null;
+            LastStatus=await SendAsync(PerformanceGuardianProtocol.ReleaseDomains,null,deadline.Token,cpu,gpu).ConfigureAwait(false);
+            CaptureConfiguration(LastStatus);
+            var expected=previous with{CpuEnabled=cpu?false:previous.CpuEnabled,GpuEnabled=gpu?false:previous.GpuEnabled};
+            if(!LastStatus.Ok||AppliedConfiguration!=expected||cpu&&LastStatus.CpuState!="Disabled"||gpu&&LastStatus.GpuState!="Disabled")
+                throw new IOException(LastStatus.Message);
+        }
+        catch{if(LastStatus is null){_pipe?.Dispose();_pipe=null;}throw;}
+        finally{_gate.Release();}
+    }
+
+    internal async Task<PerformanceGuardianResponse?> StatusAsync(CancellationToken cancellationToken=default)
+    {
+        await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             if (_process is null) return null;
             if (_process.HasExited) throw StoppedException();
-            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(5));
             if (_pipe is null || !_pipe.IsConnected) await ConnectAsync(timeout.Token).ConfigureAwait(false);
             LastStatus = await SendAsync(PerformanceGuardianProtocol.Status, null, timeout.Token).ConfigureAwait(false);
             CaptureConfiguration(LastStatus);
@@ -158,6 +184,37 @@ internal sealed class PerformanceGuardianClient
         }
         catch { LastStatus = null; _pipe?.Dispose(); _pipe = null; throw; }
         finally { _gate.Release(); }
+    }
+
+    internal async Task<PerformanceRetainedSession> VerifyRetainedSessionAsync(Func<PerformanceRetainedJournals> readJournals)
+    {
+        // The caller has drained its command queue. The remaining background
+        // STATUS reader cannot change selections or replace this child process.
+        if(!HasProcess)
+        {
+            var absent=readJournals();
+            if(absent.Cpu is not null||absent.Gpu is not null)throw new IOException("Hay registros CPU/GPU sin un propietario activo confirmado.");
+            return new(0,0,0,0,Guid.Empty,null,null,null);
+        }
+        var status=await StatusAsync().ConfigureAwait(false);
+        if(status is null||!LimitsActive||status.PowerSource is not("Ac" or "Battery")||status.Configuration!=AppliedConfiguration||
+            !PerformanceRetainedSession.MatchesJournals(status,readJournals()))
+            throw new IOException("La sesión CPU/GPU no acredita los registros exactos que se intentan conservar.");
+        if(_process is not{HasExited:false} process||process.StartTime.ToUniversalTime().Ticks!=_guardianStart)
+            throw new IOException("El propietario CPU/GPU cambió durante la comprobación.");
+        return new(_ownerPid,_ownerStart,process.Id,_guardianStart,_nonce,AppliedConfiguration,status.CpuSession,status.GpuSession);
+    }
+    internal bool StillOwns(PerformanceRetainedSession receipt)
+    {
+        if(receipt.GuardianPid==0)return !HasProcess&&receipt.Configuration is null;
+        try
+        {
+            return receipt.OwnerPid==_ownerPid&&receipt.OwnerStart==_ownerStart&&receipt.Nonce==_nonce&&
+                _process is{HasExited:false} process&&process.Id==receipt.GuardianPid&&process.StartTime.ToUniversalTime().Ticks==receipt.GuardianStart&&
+                LimitsActive&&LastStatus?.PowerSource is "Ac" or "Battery"&&AppliedConfiguration==receipt.Configuration&&
+                LastStatus?.CpuSession==receipt.Cpu&&LastStatus?.GpuSession==receipt.Gpu;
+        }
+        catch(InvalidOperationException){return false;}
     }
 
     internal async Task CloseAsync()
@@ -274,11 +331,14 @@ internal sealed class PerformanceGuardianClient
             "; conserva los registros pendientes y revisa la recuperación. " + (detail ?? "Revisa el informe de liberación."));
     }
 
-    private async Task<PerformanceGuardianResponse> SendAsync(string type, PerformanceGuiSessionConfiguration? configuration, CancellationToken token)
+    private async Task<PerformanceGuardianResponse> SendAsync(string type, PerformanceGuiSessionConfiguration? configuration, CancellationToken token,
+        bool? releaseCpu=null,bool? releaseGpu=null)
     {
         var request = new PerformanceGuardianRequest(PerformanceGuardianProtocol.Version, Guid.NewGuid(), CpuPowerProductDefaults.TargetProfileId,
             _nonce, type, type == PerformanceGuardianProtocol.Hello ? _ownerPid : null,
-            type == PerformanceGuardianProtocol.Hello ? _ownerStart : null, configuration?.CpuEnabled, configuration?.GpuEnabled,
+            type == PerformanceGuardianProtocol.Hello ? _ownerStart : null,
+            type==PerformanceGuardianProtocol.ReleaseDomains?releaseCpu:configuration?.CpuEnabled,
+            type==PerformanceGuardianProtocol.ReleaseDomains?releaseGpu:configuration?.GpuEnabled,
             type == PerformanceGuardianProtocol.UpdateConfiguration ? configuration : null);
         await PerformanceGuardianCodec.WriteRequestAsync(_pipe!, request, token).ConfigureAwait(false);
         var response = await PerformanceGuardianCodec.ReadResponseAsync(_pipe!, token).ConfigureAwait(false)

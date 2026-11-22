@@ -22,8 +22,17 @@ internal sealed partial class ProductForm
         $"PRODUCT EXTERNAL LINK: state={d.State};failure={d.LastFailureKind};failures={d.Failures};connections={d.Connections};sent={d.Sent};received={d.Received}";
     private void ObserveExternalCoolingDiagnostics()
     {
-        if(_externalCooling is null)return;
+        if(_externalCooling is null){_canvas.ExternalFunctionStatus="Sin conexión";return;}
         var d=_externalCooling.Diagnostics;var identity=(d.State,d.Failures);
+        _canvas.ExternalFunctionStatus=d.State!=ExternalCoolingConnectionState.Connected?d.State switch
+            {ExternalCoolingConnectionState.Disabled=>"Conexión deshabilitada",ExternalCoolingConnectionState.Connecting=>"Conectando",
+             ExternalCoolingConnectionState.Authenticating=>"Verificando conexión",ExternalCoolingConnectionState.Reconnecting=>"Reconectando",
+             ExternalCoolingConnectionState.Error=>"Error de conexión",_=>"Sin conexión"}:
+            _canvas.State.FunctionPolicies.ExternalOutputMode!=VictusFanControl.Product.ProductExternalOutputMode.FollowInternalFans&&
+                d.Device?.IndependentControlVersion!=1?"Requiere firmware compatible":
+                d.Device is{Mode:"Remote"}?"Remoto · "+d.Device.AppliedDuty+" / 255":
+                _canvas.State.FunctionRequests.ExternalCooling&&_canvas.State.FunctionPolicies.ExternalOutputMode==VictusFanControl.Product.ProductExternalOutputMode.TemperatureCurve&&
+                    !TelemetryExportService.IndependentTemperaturesReady(_canvas.State.Snapshot,DateTimeOffset.UtcNow)?"En espera de temperaturas actuales":"Control local";
         if(_externalLogged==identity)return;
         _externalLogged=identity;AppLog.Write(ExternalCoolingLogLine(d));
     }

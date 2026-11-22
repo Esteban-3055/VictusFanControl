@@ -7,14 +7,14 @@ using VictusFanControl.Telemetry;
 
 namespace VictusFanControl.App;
 
-internal enum ProductPage { Home, Fans, Performance, Profiles, Curves, Monitoring, Settings, Advanced, Updates, Protections, ExternalCooling, ExternalCurve, HyperXBattery }
+internal enum ProductPage { Home, Fans, Performance, Profiles, Curves, Monitoring, Settings, Advanced, Updates, Protections, ExternalCooling, ExternalCurve, HyperXBattery, Functions }
 internal sealed record ProductHit(string Id, RectangleF Bounds, string Label, bool Enabled, bool Slider = false, int Min = 0, int Max = 0);
 
 /// <summary>Owner-drawn product surface in reference coordinates. All gestures edit drafts or emit semantic commands.</summary>
 internal sealed partial class ProductCanvas : System.Windows.Forms.Control
 {
-    internal static readonly Color Background = Color.FromArgb(9,19,27), Surface = Color.FromArgb(15,26,35), Border = Color.FromArgb(43,62,77);
-    internal static readonly Color Ink = Color.FromArgb(230,240,255), Muted = Color.FromArgb(167,192,218), Blue = Color.FromArgb(0,157,255), Green = Color.FromArgb(0,237,111), Red = Color.FromArgb(255,63,64), Yellow = Color.FromArgb(246,212,31);
+    internal static readonly Color Background = Color.Black, Surface = Color.FromArgb(10,11,12), Border = Color.FromArgb(65,68,71);
+    internal static readonly Color Ink = Color.FromArgb(245,246,247), Muted = Color.FromArgb(188,191,194), Blue = Color.FromArgb(0,157,255), Green = Color.FromArgb(0,237,111), Red = Color.FromArgb(255,63,64), Yellow = Color.FromArgb(246,212,31);
     internal ProductProfiles Profiles { get; set; } = new();
     private ProductRuntimeState _state = new();
     internal ProductRuntimeState State
@@ -29,7 +29,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
     internal static IReadOnlyList<(ProductPage Page,string Name,string Icon)> Navigation { get; } = Array.AsReadOnly(new[]
     {
         (ProductPage.Home,"Inicio","home"),(ProductPage.Fans,"Ventiladores","fan"),
-        (ProductPage.Performance,"Rendimiento","chart"),(ProductPage.Curves,"Curvas","curve"),
+        (ProductPage.Performance,"Rendimiento","chart"),(ProductPage.Functions,"Funciones","settings"),(ProductPage.Curves,"Curvas","curve"),
         (ProductPage.Profiles,"Perfiles","profiles"),(ProductPage.Monitoring,"Monitorización","pulse"),
         (ProductPage.Protections,"Protecciones","settings"),(ProductPage.Settings,"Configuración","settings"),
         (ProductPage.Advanced,"Avanzado","settings"),(ProductPage.ExternalCooling,"Base externa","cpu"),
@@ -105,23 +105,27 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
     }
     private void Card(Graphics g,RectangleF r,bool selected=false,int radius=16)
     {
-        using var path=Rounded(r,radius); using var fill=new LinearGradientBrush(r,selected?AccentShade(0.25f):Surface,selected?AccentShade(0.14f):Color.FromArgb(10,20,28),40);
-        g.FillPath(fill,path);using var line=new Pen(selected?Accent:Border,selected?3:1.2f);g.DrawPath(line,path);
+        using var path=Beveled(r,Math.Min(radius,r.Height/4));
+        using var fill=new LinearGradientBrush(r,selected?Color.FromArgb(50,52,55):Surface,Color.FromArgb(2,3,4),80);
+        g.FillPath(fill,path);
+        if(selected)foreach(var stroke in new[]{(10f,13),(6f,26),(3f,60)})
+        {using var glow=new Pen(Color.FromArgb(stroke.Item2,Accent),stroke.Item1);g.DrawPath(glow,path);}
+        using(var line=new Pen(selected?Accent:Color.FromArgb(135,139,143),selected?1.8f:1f))g.DrawPath(line,path);
+        if(r.Height>=100&&r.Width>=300)PanelCornerMarks(g,r);
     }
     private void Hit(string id,RectangleF rect,string label,bool enabled=true,bool slider=false,int min=0,int max=0) => _hits.Add(new(id,rect,label,enabled,slider,min,max));
     private void Button(Graphics g,string id,string label,RectangleF r,bool primary=false,bool enabled=true)
     {
         enabled &= !Busy || id is "session-restart" or "firmware" or "window-minimize" or "window-maximize" or "window-close"; Card(g,r,primary && enabled,10);
-        if(primary && enabled){using var b=new SolidBrush(Accent==Yellow?Yellow:Accent==Red?Color.FromArgb(170,32,45):Color.FromArgb(0,98,198));using var p=Rounded(r,10);g.FillPath(b,p);}
         int size=23;while(size>17&&g.MeasureString(label,F(size)).Width>r.Width-24)size--;
-        using(var brush=new SolidBrush(enabled?(primary && Accent==Yellow?Background:Ink):Color.FromArgb(92,115,138)))
+        using(var brush=new SolidBrush(enabled?Ink:Color.FromArgb(100,103,107)))
         using(var format=new StringFormat{Alignment=StringAlignment.Center,LineAlignment=StringAlignment.Center,Trimming=StringTrimming.EllipsisCharacter,FormatFlags=StringFormatFlags.NoWrap})
             g.DrawString(label,F(size),brush,new RectangleF(r.X+10,r.Y,r.Width-20,r.Height),format);
         Hit(id,r,label,enabled);
     }
     private void Bar(Graphics g,RectangleF r,double? value,double max,Color color)
     {
-        using var track=new SolidBrush(Color.FromArgb(31,50,66));using var p=Rounded(r,Math.Min(8,r.Height/2));g.FillPath(track,p);
+        using var track=new SolidBrush(Color.FromArgb(77,80,83));using var p=Rounded(r,Math.Min(8,r.Height/2));g.FillPath(track,p);
         if(value is > 0){var fill=new RectangleF(r.X,r.Y,(float)(r.Width*Math.Clamp(value.Value/max,0,1)),r.Height); if(fill.Width>=r.Height){using var b=new SolidBrush(color);using var q=Rounded(fill,r.Height/2);g.FillPath(b,q);}}
     }
     private void Metric(Graphics g,string name,string value,RectangleF r,Color color,double? number=null,double max=100)
@@ -150,7 +154,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
     private static string Value(double? value,string unit,int decimals=0) => value.HasValue && double.IsFinite(value.Value) ? value.Value.ToString("F"+decimals)+" "+unit : "— "+unit;
     private string ProfileName => Editing == ProductPowerProfile.Ac ? "AC" : "Batería";
     private ProductProfile Profile => Profiles.Get(Editing);
-    internal Color Accent => ProductIcons.Select(State,ProductTrayState.Default)==ProductTrayState.Error || State.FanAuthority=="Faulted" || State.CpuState=="Failed" || State.GpuState=="Failed" ? Red : State.Source=="Battery" ? Yellow : Blue;
+    internal Color Accent => ProductIcons.Select(State,ProductTrayState.Default)==ProductTrayState.Error || State.FanAuthority=="Faulted" || State.CpuState=="Failed" || State.GpuState=="Failed" ? Red : Ink;
     private Color AccentShade(float strength) => Color.FromArgb((int)(Background.R+(Accent.R-Background.R)*strength),(int)(Background.G+(Accent.G-Background.G)*strength),(int)(Background.B+(Accent.B-Background.B)*strength));
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -166,14 +170,14 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         if(PaintHomeAnimation(g,e.ClipRectangle))return;
         _hits.Clear();_plot=RectangleF.Empty;RenderedCurveBounds=RectangleF.Empty;SynchronizeFanAnimation();
         using(var b=new SolidBrush(Background))g.FillRectangle(b,0,0,1672,941);
-        using(var p=new Pen(Border)) {g.DrawLine(p,0,64,1672,64);g.DrawLine(p,279,64,279,882);g.DrawLine(p,0,882,1672,882);}
-        Icon(g,"fan",24,16,36,Accent);DrawText(g,"VictusFanControl",76,17,25,null,220,true);DrawText(g,"│",288,16,26,Muted,25);DrawText(g,State.Hardware,328,18,23,Muted,1070);
+        DrawReferenceFrame(g);
+        DrawBrandV(g,new(28,15,62,35));DrawText(g,"VictusFanControl",112,17,25,null,217,true);DrawText(g,"│",329,16,26,Muted,25);DrawText(g,State.Hardware,367,18,22,Muted,840);
         Button(g,"window-minimize","−",new(1450,8,54,45));Button(g,"window-maximize","□",new(1524,8,54,45));Button(g,"window-close","×",new(1598,8,54,45));
         var navigationStep=Math.Min(76f,(882f-85)/Navigation.Count);
         for(int i=0;i<Navigation.Count;i++)
         {
             var item=Navigation[i];var selected=Page==item.Page;
-            var rect=new RectangleF(8,85+i*navigationStep,262,Math.Min(70,navigationStep-4));if(selected){Card(g,rect,true,12);using var b=new SolidBrush(Accent);g.FillRectangle(b,8,rect.Y+5,5,rect.Height-10);}
+            var rect=new RectangleF(8,85+i*navigationStep,262,Math.Min(70,navigationStep-4));if(selected)Card(g,rect,true,12);
             Icon(g,item.Icon,36,rect.Y+(rect.Height-35)/2,35,selected?Ink:Muted);
             using(var labelBrush=new SolidBrush(selected?Ink:Muted))
             using(var labelFormat=new StringFormat{Alignment=StringAlignment.Near,LineAlignment=StringAlignment.Center,
@@ -192,6 +196,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
             case ProductPage.Home: Home(g);break;
             case ProductPage.Fans: Fans(g);break;
             case ProductPage.Performance: Performance(g);break;
+            case ProductPage.Functions: Functions(g);break;
             case ProductPage.Profiles: ProfilePage(g);break;
             case ProductPage.Curves: Curves(g);break;
             case ProductPage.ExternalCurve: ExternalCurveView(g);break;
@@ -204,9 +209,9 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
             case ProductPage.ExternalCooling:
                 ExternalCooling(g);break;
         }
-        using(var b=new SolidBrush(FreshSnapshot is not null?Green:Yellow))g.FillEllipse(b,24,901,20,20);
-        DrawText(g,"VictusFanControl v"+ProductRelease.DisplayVersion+"  │  "+State.Target+"  │  "+State.FanMode+" · "+State.FanAuthority,60,901,19,Muted,1120);
-        DrawText(g,State.LifecycleBlocked?"Sesión bloqueada por interrupción":FreshSnapshot is not null?"Telemetría validada":State.Runtime=="Healthy"?"Sin datos actuales":"Telemetría: "+State.Runtime,1210,901,18,State.LifecycleBlocked?Yellow:Muted,430);
+        using(var b=new SolidBrush(FreshSnapshot is not null?Ink:Yellow))g.FillEllipse(b,24,901,20,20);
+        DrawText(g,"VictusFanControl v"+ProductRelease.DisplayVersion+"  │  "+State.Target+"  │  "+FanModeText+" · "+FanAuthorityText(State.FanAuthority),60,901,19,Muted,1120);
+        DrawText(g,State.LifecycleBlocked?"Sesión interrumpida":FreshSnapshot is not null?"Telemetría validada":State.Runtime=="Healthy"?"Sin datos actuales":"Telemetría: "+State.Runtime,1410,901,18,State.LifecycleBlocked?Yellow:Muted,235);
         var telemetryNotice=State.Snapshot?.RetainedTelemetry is {} retained ? "Lectura retrasada: "+retained+" · se conserva el nivel de ventilación." : "";
         if(Busy || !string.IsNullOrWhiteSpace(Notice) || telemetryNotice.Length>0) {DrawText(g,Busy?"Operación en curso…":telemetryNotice.Length>0?telemetryNotice:Notice,305,849,18,Yellow,1330);}
         if(KeyboardHit is { } focused&&Focused){using var p=new Pen(Ink,2){DashStyle=DashStyle.Dot};g.DrawRectangle(p,focused.Bounds.X,focused.Bounds.Y,focused.Bounds.Width,focused.Bounds.Height);}
@@ -237,16 +242,16 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
     }
     internal ProductProfiles PerformanceDraft => Profiles;
     internal bool PerformancePending => State.AppliedPerformance != PerformanceDraft.PerformanceConfiguration();
-    internal bool CanApplyPerformance => !Busy&&!State.LifecycleBlocked&&!State.PerformanceUpdating&&!State.AutomaticPreparing&&
-        State.AutomaticSourceTransition is null&&State.PerformanceSupported&&State.CanApplyPerformance&&PerformancePending&&
-        (!State.PerformanceProcessPresent||State.AppliedPerformance is not null&&ProductPerformanceUpdate.HasCurrentTelemetry(FreshSnapshot,DateTimeOffset.UtcNow));
+    internal bool CanApplyPerformance => !Busy&&!State.PerformanceLifecycleBlocked&&!State.PerformanceUpdating&&!State.AutomaticPreparing&&
+        (State.LifecycleBlocked||State.AutomaticSourceTransition is null)&&State.PerformanceSupported&&State.CanApplyPerformance&&PerformancePending&&
+        ProductPerformanceUpdate.HasIndependentTelemetry(State.Snapshot,DateTimeOffset.UtcNow,State.AppliedPerformance,PerformanceDraft.PerformanceConfiguration());
     private void Fans(Graphics g)
     {
         Tabs(g,"fan-tab-",["Control de ventiladores","Estado y telemetría","Reglas y seguridad"],FanTab);
         if(FanTab==1){TelemetryPage(g);return;}if(FanTab==2){SafetyPage(g);return;}
         Card(g,new(308,179,539,652));Card(g,new(867,179,782,652));
         DrawText(g,"Modo de control",331,198,26,null,490,true);
-        string[] modes=["Firmware","Manual","Automático"],captions=["Control del sistema (BIOS)","Nivel fijo para CPU y GPU","Curva + límites CPU y GPU"];
+        string[] modes=["Firmware","Manual","Automático"],captions=["Control del sistema (BIOS)","Nivel fijo para CPU y GPU","Curva de ventiladores internos"];
         if(State.LifecycleBlocked&&AutomaticRetryAvailable)captions[2]="Preparar un nuevo intento";
         string[] icons=["fan","profiles","curve"];
         for(int i=0;i<3;i++)
@@ -267,7 +272,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         DrawCurve(g,EditorCurveBounds,false);
         if(State.LifecycleBlocked)
         {
-            DrawText(g,"Sesión interrumpida · "+State.FanMode+" / "+State.FanAuthority,892,728,18,Yellow,737,height:25);
+            DrawText(g,"Sesión interrumpida · "+FanModeText+" / "+FanAuthorityText(State.FanAuthority),892,728,18,Yellow,737,height:25);
             Button(g,"interruption-details","Ver motivo completo",new(894,763,310,48));
             Button(g,"session-restart","Reiniciar sesión",new(1220,763,404,48),false,RestartAvailable);
         }
@@ -301,7 +306,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         if(PerformanceTab==0)
         {
             Card(g,new(320,253,807,570));DrawText(g,"Límites de CPU (Intel RAPL)",350,276,29,null,740,true);
-            Button(g,"cpu-toggle",PerformanceDraft.CpuEnabled?"✓  Aplicar límite de CPU":"○  CPU sin límite al aplicar",new(350,337,735,60),PerformanceDraft.CpuEnabled,!State.PerformanceUpdating&&!State.AutomaticPreparing&&!State.LifecycleBlocked);
+            Button(g,"cpu-toggle",PerformanceDraft.CpuEnabled?"✓  Aplicar límite de CPU":"○  CPU sin límite al aplicar",new(350,337,735,60),PerformanceDraft.CpuEnabled,!State.PerformanceUpdating&&!State.AutomaticPreparing&&!State.PerformanceLifecycleBlocked);
             DrawText(g,"Pulsa el valor numérico para escribir un valor exacto.",350,414,18,Muted,735);
             Slider(g,"pl1","PL1 · Potencia sostenida",new(350,453,735,120),Profile.CpuPl1Watts,CpuPowerProductDefaults.MinimumPl1Watts,ProductCpuPowerEditor.MaximumPl1(Profile),"W");
             Slider(g,"pl2","PL2 · Potencia turbo",new(350,637,735,120),Profile.CpuPl2Watts,CpuPowerProductDefaults.MinimumPl2Watts,CpuPowerProductDefaults.MaximumConfigurablePl2Watts,"W");
@@ -309,29 +314,30 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         else if(PerformanceTab==1)
         {
             Card(g,new(320,253,807,570));DrawText(g,"Límite GPU (NVIDIA NVML)",350,276,29,null,740,true);
-            Button(g,"gpu-toggle",PerformanceDraft.GpuEnabled?"✓  Aplicar límite de GPU":"○  GPU sin límite al aplicar",new(350,337,735,60),PerformanceDraft.GpuEnabled,!State.PerformanceUpdating&&!State.AutomaticPreparing&&!State.LifecycleBlocked);
+            Button(g,"gpu-toggle",PerformanceDraft.GpuEnabled?"✓  Aplicar límite de GPU":"○  GPU sin límite al aplicar",new(350,337,735,60),PerformanceDraft.GpuEnabled,!State.PerformanceUpdating&&!State.AutomaticPreparing&&!State.PerformanceLifecycleBlocked);
             DrawText(g,"Pulsa el valor numérico para escribir un valor exacto.",350,425,18,Muted,735);
             Slider(g,"gpu","Graphics clock máximo",new(350,470,735,120),Profile.GpuMaximumMHz,210,GpuProductPreferences.Maximum(Editing),"MHz");
             DrawText(g,"Clock mínimo: 210 MHz · límite configurado, no lectura del rango",350,635,21,Muted,735);
-            DrawText(g,"ActiveUnverified significa Set aceptado. El rango locked completo no es observable en este driver.",350,687,21,Muted,735);
+            DrawText(g,"Solicitud aceptada: el controlador no permite comprobar el rango completo aplicado.",350,687,21,Muted,735);
             DrawText(g,$"Rango configurable {GpuProductPreferences.MinimumMHz}–{GpuProductPreferences.Maximum(Editing)} MHz; el driver puede rechazar el valor.",350,768,19,Yellow,735);
         }
         else if(PerformanceTab==2)
         {
             Card(g,new(320,253,807,570));DrawText(g,"Potencia GPU · cTGP de HP",350,276,29,null,740,true);
-            Button(g,"ctgp-toggle",Profiles.CtgpEnabled?"✓  Activar cTGP con Automático":"○  cTGP desactivado",new(350,337,735,60),Profiles.CtgpEnabled,
-                !State.AutomaticPreparing&&!State.LifecycleBlocked&&State.FanMode=="Firmware");
-            DrawText(g,"Se activa con Automático y el cargador conectado.",350,430,23,null,735);
-            DrawText(g,"En batería se restaura. Volver a Firmware también libera cTGP.",350,487,22,Muted,735,height:64);
-            DrawText(g,"Selecciona esta opción antes de iniciar Automático. Guardar conserva la preferencia; no cambia la potencia.",350,570,22,Muted,735,height:90);
-            DrawText(g,"Estado: "+CtgpDisplay(),350,688,25,State.CtgpState=="Active"?Green:Muted,735);
+            var explicitFunctions=Profiles.Functions is not null;
+            Button(g,explicitFunctions?"functions-page":"ctgp-toggle",explicitFunctions?"Abrir controles de cTGP en Funciones":Profiles.CtgpEnabled?"✓  Activar cTGP con Automático":"○  cTGP desactivado",new(350,337,735,60),Profiles.CtgpEnabled,
+                explicitFunctions||!State.AutomaticPreparing&&!State.LifecycleBlocked&&State.FanMode=="Firmware");
+            DrawText(g,explicitFunctions?"El vínculo y la activación se controlan en Funciones.":"Se activa con Automático y el cargador conectado.",350,430,23,null,735);
+            DrawText(g,explicitFunctions?"cTGP requiere el cargador HP validado. En batería se restaura; su solicitud permanece en espera.":"En batería se restaura. Volver a Firmware también libera cTGP.",350,487,22,Muted,735,height:64);
+            DrawText(g,explicitFunctions?"El estado mostrado es la confirmación recibida de HP. Los vínculos en edición solo cambian al pulsar Aplicar vínculos.":"Selecciona esta opción antes de iniciar Automático. Guardar conserva la preferencia; no cambia la potencia.",350,570,22,Muted,735,height:90);
+            DrawText(g,"Estado: "+CtgpDisplay(),350,688,25,State.CtgpState=="Active"?Ink:Muted,735);
             DrawText(g,State.CtgpFailure??"HP 8C40 / F.18 · máximo validado 75 W. No es un límite de frecuencia NVML.",350,748,19,State.CtgpFailure is null?Muted:Yellow,735,height:65);
         }
         else
         {
             Card(g,new(320,253,807,570));DrawText(g,PerformanceTab==3?"Fuente real y perfil aplicado":"Autoridad independiente",350,276,29,null,740,true);
             string[] lines=PerformanceTab==3?["Fuente real: "+SourceText(),"Perfil que editas: "+ProfileName,"Perfil CPU/GPU aplicado: "+(State.AppliedPerformance is null?"Ninguno":State.AppliedPerformanceSource),"CPU: "+AppliedCpu(),"GPU: "+AppliedGpu(),"La pestaña AC/Batería solo cambia la edición."]:
-                ["Performance Guardian: "+State.GuardianState,"CPU: "+State.CpuState,"GPU: "+State.GpuState,"Fan authority: "+State.FanAuthority,"Journal y recuperación pertenecen al backend.","Fan Control y CPU/GPU no forman una transacción atómica."];
+                ["Supervisor de rendimiento: "+State.GuardianState,"CPU: "+FunctionStatusText(State.CpuState),"GPU: "+FunctionStatusText(State.GpuState),"Ventiladores: "+FanAuthorityText(State.FanAuthority),"Los registros permiten comprobar y restaurar cada sesión.","Ventiladores, CPU y GPU se confirman por separado."];
             var lineCount=PerformanceTab==4&&State.PerformanceRecovery is {Pending:true}?4:lines.Length;
             for(int i=0;i<lineCount;i++)DrawText(g,lines[i],350,359+i*64,24,i<3?Ink:Muted,735);
         }
@@ -342,10 +348,10 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
             Button(g,"recovery-run","Recuperar sesión definitiva",new(350,745,443,48),true,State.PerformanceRecovery.Actionable);
             Button(g,"recovery-details","Ver detalles",new(809,745,276,48));
         }
-        DrawText(g,"CPU: "+State.CpuState,1178,341,23,DomainColor(State.CpuState,Green),438);DrawText(g,"GPU: "+State.GpuState,1178,388,23,DomainColor(State.GpuState,Accent),438);
+        DrawText(g,"CPU: "+FunctionStatusText(State.CpuState),1178,341,23,DomainColor(State.CpuState,Ink),438);DrawText(g,"GPU: "+FunctionStatusText(State.GpuState),1178,388,23,DomainColor(State.GpuState,Ink),438);
         var appliedSource=State.AppliedPerformanceSource switch{"Ac"=>"AC","Battery"=>"Batería",_=>"—"};
         DrawText(g,"CPU ("+appliedSource+"): "+AppliedCpu(),1178,438,22,Muted,438);DrawText(g,"GPU ("+appliedSource+"): "+AppliedGpu(),1178,480,22,Muted,438);
-        DrawText(g,State.PerformanceUpdating?"Actualizando límites…":PerformancePending?"Valores editados pendientes de aplicar":"Valores coinciden con la sesión",1178,533,20,PerformancePending?Yellow:Green,438,height:52);
+        DrawText(g,State.PerformanceUpdating?"Actualizando límites…":PerformancePending?"Valores editados pendientes de aplicar":"Valores coinciden con la sesión",1178,533,20,PerformancePending?Yellow:Ink,438,height:52);
         DrawText(g,"Selecciona CPU y GPU por separado y pulsa Aplicar. El modo de ventiladores se conserva.",1178,584,19,Muted,438,height:65);
         Button(g,"save","Guardar configuración",new(1178,655,438,48),false);
         Button(g,"performance-apply",State.PerformanceProcessPresent?"Aplicar cambios":"Aplicar CPU / GPU",new(1178,714,438,48),true,CanApplyPerformance);
@@ -354,6 +360,8 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
     private string CtgpDisplay() => State.CtgpState switch
     {
         "Active" => "Activo · confirmado por HP",
+        "Waiting" => "En espera de lectura WMI",
+        "Faulted" => "Desactivado tras fallo · revisar antes de reintentar",
         "AcOnly" => "En espera de corriente AC",
         "RecoveryRequired" => "Restauración pendiente",
         "Unknown" => "Sin confirmación vigente",
@@ -367,11 +375,11 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         for(int i=0;i<2;i++){var source=(ProductPowerProfile)i;var p=Profiles.Get(source);var rect=new RectangleF(334,327+i*163,488,137);Card(g,rect,Editing==source);
             Icon(g,"plug",rect.X+23,rect.Y+30,52,source==ProductPowerProfile.Ac?Accent:Muted);DrawText(g,source==ProductPowerProfile.Ac?"AC":"Batería",rect.X+111,rect.Y+21,28,null,340,true);
             DrawText(g,$"CPU: {p.CpuPl1Watts}/{p.CpuPl2Watts} W",rect.X+111,rect.Y+65,22,Muted,340);DrawText(g,$"GPU: 210–{p.GpuMaximumMHz} MHz",rect.X+111,rect.Y+98,20,Muted,340);
-            Hit(i==0?"profile-ac":"profile-battery",rect,i==0?"Editar AC":"Editar Batería");}
+            Hit(i==0?"profile-card-ac":"profile-card-battery",rect,i==0?"Editar AC":"Editar Batería");}
         DrawText(g,"Seleccionar aquí no cambia la alimentación ni crea autoridad.",335,682,24,Muted,475);
         Card(g,new(867,235,782,591));DrawText(g,"Detalles · "+ProfileName,891,259,28,null,727,true);
         DrawText(g,"Curva única de demanda",891,338,25,null,727,true);DrawText(g,"Seis influencias independientes → mayor demanda → una curva. Temperaturas protegidas, suavizado y recuperación.",891,385,23,Muted,727);
-        DrawText(g,$"CPU PL1 / PL2: {Profile.CpuPl1Watts} / {Profile.CpuPl2Watts} W",891,480,25,Green,727);
+        DrawText(g,$"CPU PL1 / PL2: {Profile.CpuPl1Watts} / {Profile.CpuPl2Watts} W",891,480,25,Ink,727);
         DrawText(g,$"GPU máximo: {Profile.GpuMaximumMHz} MHz",891,535,25,Accent,727);
         Button(g,"edit-curve","Editar curva",new(891,617,341,67),true);Button(g,"edit-performance","Editar rendimiento",new(1250,617,371,67));
         Button(g,"save","Guardar ambos perfiles",new(891,730,424,65),true);Button(g,"discard","Descartar cambios",new(1331,730,290,65),false,Dirty);
@@ -419,9 +427,9 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         DrawText(g,"Simulación sin hardware · "+ProfileName,889,201,27,null,735,true);
         DrawText(g,"CPU de demanda: "+(Profile.Fan.Tuning.CpuTemperatureSource switch{CpuDemandTemperatureSource.CoreAverage=>"media de núcleos",CpuDemandTemperatureSource.PerformanceCoreAverage=>"media de P-Cores",CpuDemandTemperatureSource.HottestPerformanceCoresAverage=>"P-Cores más calientes",_=>"paquete/núcleo más caliente"}),889,238,18,Muted,730);
         var d=Simulation.Current;
-        Metric(g,"Demanda total",Value(d?.UnifiedDemand?.Percent,"%",1),new(890,280,230,131),Red);
+        Metric(g,"Demanda total",Value(d?.UnifiedDemand?.Percent,"%",1),new(890,280,230,131),Ink);
         Metric(g,"Objetivo EMA",Value(d?.SmoothedDemandLevel,"",1),new(1136,280,230,131),Accent);
-        Metric(g,"Nivel calculado",d?.EqualFanLevel?.ToString()??"—",new(1382,280,240,131),Green);
+        Metric(g,"Nivel calculado",d?.EqualFanLevel?.ToString()??"—",new(1382,280,240,131),Ink);
         DrawText(g,$"Tiempo virtual: {Simulation.ElapsedSeconds} s · {(SimulationRunning?"en marcha":"pausado")} · carga: {d?.ObservedLoadSeconds??0:0} s",889,426,20,Muted,730);
         var observation=d?.UnifiedDemand;
         if(observation is not null)DrawText(g,"Domina: "+VariableName(observation.DominantVariable)+(observation.ThermalProtection?" · protección térmica":""),889,453,17,observation.ThermalProtection?Yellow:Muted,730);
@@ -453,9 +461,9 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         foreach(var isReference in new[]{true,false})
         {
             var ps=isReference?reference:current;using var line=new Pen(isReference?Muted:Accent,isReference?2:3){DashStyle=isReference?DashStyle.Dash:DashStyle.Solid};
-            var visible=ps.Select(Position).ToArray();g.DrawLines(line,visible);
+            var visible=ps.Select(Position).ToArray();if(!isReference)DrawTraceGlow(g,visible,Accent);g.DrawLines(line,visible);
             if(editable&&!isReference)foreach(var point in visible){using var b=new SolidBrush(Ink);g.FillEllipse(b,point.X-6,point.Y-6,12,12);g.DrawEllipse(line,point.X-7,point.Y-7,14,14);}
-            if(editable&&!isReference&&SelectedNode>=0&&SelectedNode<ps.Count){var selected=Position(ps[SelectedNode]);using var ring=new Pen(Yellow,3);g.DrawEllipse(ring,selected.X-12,selected.Y-12,24,24);}
+            if(editable&&!isReference&&SelectedNode>=0&&SelectedNode<ps.Count){var selected=Position(ps[SelectedNode]);using var ring=new Pen(Ink,3);g.DrawEllipse(ring,selected.X-12,selected.Y-12,24,24);}
         }
         var markers=simulated??CurrentDemandMarkers();
         foreach(var marker in markers.OrderBy(m=>m.IsApplied))
@@ -464,16 +472,16 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         }
         var applied=markers.FirstOrDefault(m=>m.IsApplied);var preview=markers.FirstOrDefault(m=>!m.IsApplied);
         var cpuSpike=editable&&applied is not null&&State.AutomaticDecision?.CpuThermalDemand is {SpikeSuppressed:true};
-        DrawText(g,markerCaption??((simulated is not null?"● Simulado":applied is null?"● Solicitud: —":$"● Solicitud: {applied.Level:0}")+" · ○ Objetivo"+(preview is null?"":$" {preview.Input:0.0} %")+(preview?.Observation.ThermalProtection==true?" · Protección térmica":cpuSpike?" · Filtro CPU":"")),plot.Left,plot.Top-18,15,applied is null?Muted:Green,plot.Width);
+        DrawText(g,markerCaption??((simulated is not null?"● Simulado":applied is null?"● Solicitud: —":$"● Solicitud: {applied.Level:0}")+" · ○ Objetivo"+(preview is null?"":$" {preview.Input:0.0} %")+(preview?.Observation.ThermalProtection==true?" · Protección térmica":cpuSpike?" · Filtro CPU":"")),plot.Left,plot.Top-18,15,applied is null?Muted:Ink,plot.Width);
         DrawText(g,"Demanda (%)",plot.Left+plot.Width*.32f,plot.Bottom+46,20,Muted,300,height:26);DrawText(g,"CPU / GPU 10–54",plot.Left,plot.Top-41,19,Muted,275);
         if(editable){DrawText(g,"● Curva editable",plot.Left+275,plot.Top-41,16,Accent,170);DrawText(g,"┄ Preset inicial",plot.Left+449,plot.Top-41,16,Muted,185);}
     }
     private void TelemetryPage(Graphics g)
     {
         var s=FreshSnapshot;Card(g,new(310,157,1337,199));DrawText(g,"Temperaturas",332,174,27,null,1200,true);
-        Metric(g,"CPU (Paquete)",Value(s?.CpuTemperatureC,"°C"),new(332,216,416,135),Green,s?.CpuTemperatureC);
-        Metric(g,"CPU (Núcleo más caliente)",Value(s?.CpuCoreMaxTemperatureC,"°C"),new(766,216,416,135),Green,s?.CpuCoreMaxTemperatureC);
-        Metric(g,"GPU",Value(s?.GpuTemperatureC,"°C"),new(1200,216,424,135),Green,s?.GpuTemperatureC);
+        Metric(g,"CPU (Paquete)",Value(s?.CpuTemperatureC,"°C"),new(332,216,416,135),Ink,s?.CpuTemperatureC);
+        Metric(g,"CPU (Núcleo más caliente)",Value(s?.CpuCoreMaxTemperatureC,"°C"),new(766,216,416,135),Ink,s?.CpuCoreMaxTemperatureC);
+        Metric(g,"GPU",Value(s?.GpuTemperatureC,"°C"),new(1200,216,424,135),Ink,s?.GpuTemperatureC);
         Card(g,new(310,376,1337,207));DrawText(g,"Uso y potencia",332,394,27,null,1200,true);
         Metric(g,"CPU Uso",Value(s?.CpuLoadPercent,"%"),new(332,444,310,135),Accent,s?.CpuLoadPercent);Metric(g,"GPU Uso",Value(s?.GpuLoadPercent,"%"),new(659,444,310,135),Accent,s?.GpuLoadPercent);
         Metric(g,"CPU Potencia",Value(s?.CpuPackagePowerW,"W"),new(985,444,310,135),Yellow,s?.CpuPackagePowerW,115);Metric(g,"GPU Potencia",Value(s?.GpuPowerW,"W"),new(1311,444,313,135),Yellow,s?.GpuPowerW,140);
@@ -482,9 +490,19 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
     private void SafetyPage(Graphics g)
     {
         Card(g,new(310,157,1337,666));DrawText(g,"Reglas de seguridad",332,177,30,null,1250,true);
-        DrawText(g,"Protecciones del backend · solo lectura",332,225,23,Muted,1240);
-        string[] titles=["Respuesta térmica de demanda","SafetyGate independiente","Límites reales de ventiladores","Telemetría fresca y completa","Guardian y recuperación"];
-        string[] details=["CPU habitual: confirma subidas 2 s; ≥99 °C responde de inmediato. Sensores y protecciones conservan lecturas reales.","Inicio CPU ≤90 °C; activo ≥95 °C confirma hasta 2 s; ≥99 °C vuelve a Firmware. GPU >95 °C interrumpe en uso habitual.","Manual WMI y Automático: CPU/GPU 10–54. Nivel no equivale a porcentaje ni a RPM exactas.","Una pérdida de admisión cancela comandos y solicita liberación.","Recuperar CPU/GPU guarda respaldos y libera la sesión; no activa Automático."];
+        var policy=State.AppliedProtections??Profiles.Protections;
+        DrawText(g,State.AppliedProtections is null?"Preferencias en edición · aplicar prepara Automático":
+            AutomaticPolicyInUse?"Política de la sesión en uso · solo lectura":"Política de la última sesión · solo lectura",332,225,23,Muted,1240);
+        string[] titles=["Cesión por temperatura CPU","Cesión por temperatura GPU","Niveles nominales de ventiladores","Telemetría fresca y completa","Guardián y recuperación"];
+        string[] details=[State.AutomaticReview?"Revisión acotada: conserva la envolvente térmica y los plazos originales de la prueba.":
+            policy.CpuThermalHandoff?"Activada: CPU ≥95 °C confirma hasta 2 s; ≥99 °C solicita Firmware de inmediato.":
+            "Desactivada: continúa la curva y la respuesta térmica. Las protecciones del firmware permanecen activas.",
+            State.AutomaticReview?"Revisión acotada: conserva la envolvente térmica y las protecciones originales de la prueba.":
+            policy.GpuThermalHandoff?"Activada: GPU >95 °C solicita Firmware; el sensor conserva su lectura real.":
+            "Desactivada: continúa la curva. Las protecciones del firmware permanecen activas.",
+            "Manual y Automático: CPU/GPU 10–54. Un nivel no equivale a porcentaje ni a RPM exactas.",
+            "La validez se calcula desde cada adquisición. Esperar o reintentar no renueva un dato antiguo.",
+            "Una operación nativa incierta bloquea nuevas órdenes hasta confirmar su finalización; no se duplica la recuperación."];
         for(int i=0;i<5;i++){var r=new RectangleF(331,282+i*103,1293,87);Card(g,r);Icon(g,i==4?"profiles":"fan",r.X+24,r.Y+24,37);DrawText(g,titles[i],r.X+99,r.Y+12,23,null,1100,true);DrawText(g,details[i],r.X+99,r.Y+47,19,Muted,1100);}
     }
     private void Monitoring(Graphics g)
@@ -501,7 +519,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         string[] names=["CPU Temp","GPU Temp","CPU Uso","GPU Uso","CPU Potencia","GPU Potencia","CPU Fan","GPU Fan"];
         var now=DateTimeOffset.UtcNow;var cpuFan=CpuFanReading(now);var gpuFan=GpuFanReading(now);
         string[] vals=[Value(s?.CpuControlTemperatureC,"°C"),Value(s?.GpuTemperatureC,"°C"),Value(s?.CpuLoadPercent,"%"),Value(s?.GpuLoadPercent,"%"),Value(s?.CpuPackagePowerW,"W"),Value(s?.GpuPowerW,"W"),cpuFan is null?"Esperando":Value(cpuFan.Rpm,"RPM"),gpuFan is null?"Esperando":Value(gpuFan.Rpm,"RPM")];
-        for(int i=0;i<8;i++){Card(g,new(1288,215+i*72,342,61),false,11);DrawText(g,names[i],1304,229+i*72,19,Muted,150);DrawText(g,vals[i],1454,224+i*72,26,i%2==0?Red:Accent,167,true);}
+        for(int i=0;i<8;i++){Card(g,new(1288,215+i*72,342,61),false,11);DrawText(g,names[i],1304,229+i*72,19,Muted,150);DrawText(g,vals[i],1454,224+i*72,26,Ink,167,true);}
     }
     private void History(Graphics g,RectangleF plot,Func<TelemetrySnapshot,double?> cpu,Func<TelemetrySnapshot,double?> gpu,double max,string title)
     {
@@ -510,9 +528,9 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
         for(int i=0;i<=5;i++){float x=plot.Left+i*plot.Width/5;g.DrawLine(grid,x,plot.Top,x,plot.Bottom);DrawText(g,(-300+i*60).ToString(),x-22,plot.Bottom+12,18,Muted,55);}
         var now=DateTimeOffset.UtcNow;var cpuSeries=HistorySeries(cpu,now);var gpuSeries=HistorySeries(gpu,now);
         if(cpuSeries.Count==0&&gpuSeries.Count==0)DrawText(g,"Esperando muestras reales…",plot.Left+25,plot.Top+40,23,Muted,700);
-        void Draw(IReadOnlyList<List<(double SecondsAgo,double Value)>> series,Color color)
-        {using var pen=new Pen(color,3);foreach(var segment in series){var points=segment.Select(v=>new PointF(plot.Right-(float)(v.SecondsAgo/300)*plot.Width,plot.Bottom-(float)(Math.Clamp(v.Value,0,max)/max)*plot.Height)).ToArray();if(points.Length>1)g.DrawLines(pen,points);else if(points.Length==1){using var dot=new SolidBrush(color);g.FillEllipse(dot,points[0].X-2,points[0].Y-2,4,4);}}}
-        Draw(cpuSeries,Red);Draw(gpuSeries,Accent);DrawText(g,"● CPU      ● GPU",plot.Left+280,plot.Bottom+39,19,Muted,400);
+        void Draw(IReadOnlyList<List<(double SecondsAgo,double Value)>> series,Color color,DashStyle dash)
+        {using var pen=new Pen(color,3){DashStyle=dash};foreach(var segment in series){var points=segment.Select(v=>new PointF(plot.Right-(float)(v.SecondsAgo/300)*plot.Width,plot.Bottom-(float)(Math.Clamp(v.Value,0,max)/max)*plot.Height)).ToArray();if(points.Length>1)g.DrawLines(pen,points);else if(points.Length==1){using var dot=new SolidBrush(color);g.FillEllipse(dot,points[0].X-2,points[0].Y-2,4,4);}}}
+        Draw(cpuSeries,Ink,DashStyle.Solid);Draw(gpuSeries,Muted,DashStyle.Dash);DrawText(g,"━ CPU      ┄ GPU",plot.Left+280,plot.Bottom+39,19,Muted,400);
     }
     internal IReadOnlyList<List<(double SecondsAgo,double Value)>> HistorySeries(Func<TelemetrySnapshot,double?> select,DateTimeOffset now)
     {
@@ -529,24 +547,37 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
     private void Settings(Graphics g)
     {
         DrawText(g,"Configuración",320,88,31,null,1300,true);
-        Card(g,new(310,153,1337,233));DrawText(g,"Inicio de la aplicación",334,178,28,null,1250,true);
-        Button(g,"startup-toggle",!StartupKnown?"Consultar inicio con Windows":StartupEnabled?"✓  Iniciar con Windows":"○  Iniciar con Windows",new(334,241,590,55),StartupKnown&&StartupEnabled);
-        Button(g,"minimized-toggle",Profiles.StartMinimized?"✓  Minimizar al iniciar":"○  Minimizar al iniciar",new(956,241,665,55),Profiles.StartMinimized);
-        Button(g,"automatic-start-toggle",Profiles.ActivateAutomaticOnStart?"✓  Activar Automático al iniciar":"○  Activar Automático al iniciar",new(334,310,590,43),Profiles.ActivateAutomaticOnStart);
-        Button(g,"recovery-auto-toggle",Profiles.RecoverSessionsAutomatically?"✓  Recuperar sesión definitiva automáticamente":"○  Recuperación automática desactivada",new(956,310,665,43),Profiles.RecoverSessionsAutomatically);
-        Card(g,new(310,406,1337,210));DrawText(g,"Interfaz y perfiles",334,431,28,null,1250,true);
-        Button(g,"updates-page","Ir a Actualizaciones",new(334,543,300,40));
-        Button(g,"discard","Descartar cambios",new(846,478,310,68),false,Dirty);
-        Button(g,"save","Guardar preferencias",new(1176,478,442,68),true);DrawText(g,Dirty?"Hay cambios sin guardar":"Preferencias guardadas",334,590,16,Dirty?Yellow:Green,475);
-        Button(g,"profiles-import","Importar perfiles",new(846,555,310,40));Button(g,"profiles-export","Exportar perfiles",new(1176,555,442,40));
-        Card(g,new(310,623,1337,222));DrawText(g,"Registros y estado",334,647,28,null,1250,true);
-        DrawText(g,State.LifecycleBlocked?State.LifecycleBlockReason??"Sesión interrumpida; revisar diagnóstico.":State.Failure??State.Message,334,704,21,State.LifecycleBlocked||State.Failure is not null?Yellow:Muted,880,height:57);
-        if(State.LifecycleBlocked)Button(g,"interruption-details","Ver motivo completo",new(334,779,290,32));
-        Button(g,"session-restart","Reiniciar sesión",new(681,779,337,32),false,RestartAvailable);
-        Button(g,"open-logs","Abrir carpeta de logs",new(1240,690,379,43));
-        Button(g,"diagnostics-export","Exportar diagnóstico",new(1240,745,379,43));
-        Button(g,"session-force-recovery","Recuperar sesión definitiva",new(1240,795,379,32),false,!State.AutomaticReview && !UpdateBusy);
-        if(!State.LifecycleBlocked)DrawText(g,"Ventiladores "+State.FanAuthority+" · CPU "+State.CpuState+" · GPU "+State.GpuState,334,764,17,Muted,320,height:47);
+        Card(g,new(310,143,1337,145));DrawText(g,"Inicio de la aplicación",334,153,24,null,1250,true);
+        Button(g,"startup-toggle",!StartupKnown?"Consultar inicio con Windows":StartupEnabled?"✓  Iniciar con Windows":"○  Iniciar con Windows",new(334,182,640,39),StartupKnown&&StartupEnabled);
+        Button(g,"minimized-toggle",Profiles.StartMinimized?"✓  Minimizar al iniciar":"○  Minimizar al iniciar",new(997,182,625,39),Profiles.StartMinimized);
+        Button(g,"automatic-start-toggle",Profiles.ActivateAutomaticOnStart?"✓  Activar Automático al iniciar":"○  Activar Automático al iniciar",new(334,234,640,39),Profiles.ActivateAutomaticOnStart);
+        Button(g,"recovery-auto-toggle",Profiles.RecoverSessionsAutomatically?"✓  Recuperar sesiones automáticamente":"○  Recuperación automática desactivada",new(997,234,625,39),Profiles.RecoverSessionsAutomatically);
+        Card(g,new(310,304,1337,150));DrawText(g,"Interfaz y perfiles",334,316,24,null,1250,true);
+        Button(g,"external-settings-page","Base externa / ESP32 · configuración",new(334,352,640,37));
+        Button(g,"save","Guardar preferencias",new(1128,350,494,41),true);
+        Button(g,"updates-page","Ir a Actualizaciones",new(334,398,303,33));
+        Button(g,"discard","Descartar cambios",new(650,398,324,33),false,Dirty);
+        Button(g,"profiles-import","Importar perfiles",new(997,398,303,33));Button(g,"profiles-export","Exportar perfiles",new(1313,398,309,33));
+        DrawText(g,Dirty?"Hay cambios sin guardar":"✓  Preferencias guardadas",334,433,16,Dirty?Yellow:Muted,600,height:20);
+        Card(g,new(310,472,1337,142));DrawText(g,"Registros y estado",334,482,24,null,1250,true);
+        var summary=State.LifecycleBlocked?State.LifecycleBlockReason??"Sesión interrumpida; revisar diagnóstico.":State.Failure??
+            (State.FanMode=="Automatic"&&!State.AutomaticPreparing&&State.AutomaticSourceTransition is null?
+             "Automático · "+(State.Source=="Ac"?"AC":State.Source=="Battery"?"Batería":"fuente sin confirmar")+" · nivel "+(State.FanLevel?.ToString()??"sin confirmar"):State.Message);
+        DrawText(g,summary,334,518,20,State.LifecycleBlocked||State.Failure is not null?Yellow:Muted,450,height:45);
+        if(State.LifecycleBlocked)Button(g,"interruption-details","Ver motivo completo",new(334,574,287,28));
+        else DrawText(g,"CPU: "+FunctionStatusText(State.CpuState)+" · GPU: "+FunctionStatusText(State.GpuState),334,573,16,Muted,450,height:26);
+        Button(g,"session-restart","Reiniciar sesión",new(805,520,350,40),true,RestartAvailable);
+        Button(g,"session-force-recovery","Recuperar sesión definitiva",new(805,573,350,32),false,!State.AutomaticReview && !UpdateBusy);
+        Button(g,"open-logs","Abrir carpeta de logs",new(1250,490,372,36));
+        Button(g,"diagnostics-export","Exportar diagnóstico",new(1250,537,372,36));
+        Card(g,new(310,632,1337,208));Icon(g,"cpu",334,647,35,Ink);DrawText(g,"Base externa / ESP32",387,644,25,null,1190,true);
+        DrawText(g,"Conexión y pantalla LCD separadas del control de los ventiladores.",387,681,19,Muted,1200,height:29);
+        DrawText(g,"Estado: "+ExternalFunctionStatus,334,722,21,Muted,850,height:31);
+        DrawText(g,"Actuador: "+(!State.FunctionCoordinationExplicit?"seguimiento de los ventiladores internos":State.FunctionRequests.ExternalCooling?"encendido solicitado":"apagado solicitado"),334,762,20,Muted,850,height:30);
+        DrawText(g,"Funciones permite elegir seguimiento, salida fija o curva por temperatura.",334,804,18,Muted,850,height:30);
+        Button(g,"external-cooling","Configurar conexión",new(1260,710,362,36));
+        Button(g,"external-curve-page","Editar curva externa",new(1260,753,362,36));
+        Button(g,"functions-page","Controlar funciones",new(1260,796,362,36));
     }
     private PointF Virtual(Point point)=>new((point.X-_offsetX)/_scale,(point.Y-_offsetY)/_scale);
     protected override void OnMouseDown(MouseEventArgs e)
@@ -608,7 +639,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
             ShowCurvePoints=true;_keyboardId="node-"+index;Command?.Invoke(_keyboardId);e.Handled=true;return;
         }
         if(!Busy&&Page==ProductPage.ExternalCurve&&ExternalCurve is {Busy:false,Tuning:false} external&&e.KeyCode is Keys.Left or Keys.Right or Keys.Up or Keys.Down&&
-            (KeyboardHit is null||_keyboardId=="external-curve-node-"+external.Selected))
+            (KeyboardHit is null||_keyboardId=="external-curve-node-"+external.Selected||_keyboardId=="external-curve-plot-node-"+external.Selected))
         {
             var p=external.Draft.Points[external.Selected];external.EditNode(external.Selected,p.Input+(e.KeyCode==Keys.Right?1:e.KeyCode==Keys.Left?-1:0),p.Output+(e.KeyCode==Keys.Up?1:e.KeyCode==Keys.Down?-1:0));e.Handled=true;return;
         }

@@ -46,6 +46,11 @@ internal static class SelectableGuiPerformanceDomainsSelfTest
             bool sourceRejected=false;
             try{domains.UpdateConfiguration(both,PerformancePowerSourceKind.Unknown);}catch(InvalidOperationException){sourceRejected=true;}
             Require(sourceRejected&&gpus[^1].Updates==1,"Unknown source authorized a domain update.");
+            domains.UpdateConfiguration(domains.Configuration with{AcGpuMaximumMHz=1801},PerformancePowerSourceKind.Ac);
+            Require(gpus[^1].Updates==2,"An unchanged failed peer blocked a GPU-only update.");
+            domains.ReleaseDomains(false,true);
+            Require(domains.Configuration.CpuEnabled&&!domains.Configuration.GpuEnabled&&cpus[^1].Releases==1&&gpus[^1].Releases==1,
+                "Independent GPU release touched or depended on the failed CPU.");
             try{domains.ReleaseAsync(true,true,"TEST_EXIT",default).GetAwaiter().GetResult();}catch(AggregateException){}
             Require(gpus[^1].Releases==1,"Failed CPU cleanup suppressed independent GPU cleanup.");
             output.WriteLine("PASS selectable CPU/GPU domains: none/CPU/GPU/both, lazy hardware acquisition, independent off/on without touching the peer, source routing, fresh reacquisition, partial commits and independent failed cleanup; hardware IO=0.");
