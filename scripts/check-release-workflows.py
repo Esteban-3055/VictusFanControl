@@ -6,7 +6,7 @@ import sys
 
 def check(runs, head, branch="main"):
     waiting = []
-    for name in ("oem-shadow", "wmi-fan-experiment", "cpu-rapl", "esp32-firmware"):
+    for name in ("oem-shadow", "wmi-fan-experiment", "cpu-rapl", "esp32-firmware", "external-cooling"):
         matches = [r for r in runs if r["name"] == name and r["head_sha"] == head
                    and r["event"] == "push" and r["head_branch"] == branch]
         if not matches:
@@ -21,7 +21,7 @@ def check(runs, head, branch="main"):
     if waiting:
         print("Waiting for same-commit checks: " + ", ".join(waiting))
         return 2
-    print("Same-commit OEM, WMI, CPU/GPU and external firmware checks: PASS")
+    print("Same-commit OEM, WMI, CPU/GPU, external firmware and network checks: PASS")
     return 0
 
 

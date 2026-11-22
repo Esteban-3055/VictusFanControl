@@ -3,7 +3,8 @@ on:
   workflow_dispatch:
   push:
     branches: ['feature/**', main]
-    paths: ['Directory.Build.props', '.github/workflows/build.yml', 'firmware/**', 'tools/FirmwareInterop.Tests/**', 'src/VictusFanControl.ExternalCooling/**', '.github/workflows/esp32-firmware.yml']
+    # Preview publication requires this exact commit's firmware checks, even
+    # when a follow-up changes only Windows UI, packaging or release metadata.
   pull_request:
     paths: ['firmware/**', 'tools/FirmwareInterop.Tests/**', 'src/VictusFanControl.ExternalCooling/**', '.github/workflows/esp32-firmware.yml']
 permissions:

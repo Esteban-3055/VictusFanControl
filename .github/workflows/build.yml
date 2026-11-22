@@ -25,7 +25,7 @@ jobs:
       - name: Restore
         run: dotnet restore VictusFanControl.sln
 
-      - name: Release source and firmware admission fixtures
+      - name: Release source, firmware and network admission fixtures
         run: python scripts/test-release-workflows.py
 
       - name: Independent function coordination policy without hardware dependencies

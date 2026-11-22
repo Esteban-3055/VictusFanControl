@@ -159,7 +159,7 @@ def main():
     if args.checks_json:
         checks = json.loads(args.checks_json.read_text(encoding="utf-8"))["workflow_runs"]
         evidence = []
-        for name in ("oem-shadow", "wmi-fan-experiment", "cpu-rapl", "esp32-firmware"):
+        for name in ("oem-shadow", "wmi-fan-experiment", "cpu-rapl", "esp32-firmware", "external-cooling"):
             matches = [r for r in checks if r["name"] == name and r["head_sha"] == args.source_head
                        and r["event"] == "push" and r["head_branch"] == args.checks_branch]
             require(matches, f"Missing same-commit check: {name}")
