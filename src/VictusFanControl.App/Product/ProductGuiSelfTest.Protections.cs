@@ -49,7 +49,7 @@ internal static partial class ProductGuiSelfTest
         rejected=false;try{bounded.Observe(Sample(6),Safety(Sample(6)));}catch(InvalidOperationException){rejected=true;}
         require(rejected,"Product preferences bypassed an explicit physical review envelope.");
 
-        var ready=new ProductRuntimeState{AutomaticAuthorized=true,Runtime="Healthy",FanAuthority="Firmware",LifecycleBlocked=true,
+        var ready=new ProductRuntimeState{AutomaticAuthorized=true,Runtime="Healthy",Source="Ac",FanAuthority="Firmware",LifecycleBlocked=true,
             Snapshot=Sample(0,55,45)};
         var episode=new ProductRecoveryEpisode();var resume=new ProductAutomaticResumption(episode);resume.Observe(ready,0);
         require(!resume.TakeRequest(ready,new(),at,10000),"Never-active Firmware armed unattended Automatic.");

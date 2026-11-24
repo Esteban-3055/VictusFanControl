@@ -127,7 +127,7 @@ internal interface IProductRecoveryHandoff
 }
 
 /// <summary>Presentation adapter. Owns no raw hardware commands; uses the existing controllers and IPC.</summary>
-internal sealed class ProductRuntime : IProductRuntime, IProductRecoveryHandoff, IProductLateReadDrain, IProductFanRetry
+internal sealed partial class ProductRuntime : IProductRuntime, IProductRecoveryHandoff, IProductLateReadDrain, IProductFanRetry
 {
     private readonly ProductAutomaticReview? _automaticReview;
     private readonly ProductAutomaticReview _automaticGuard;
@@ -1462,4 +1462,5 @@ internal interface IProductFanRetry
 {
     Task RetireFanRuntimeAsync();
     Task VerifyRetainedPerformanceAsync();
+    void EnsureFanRetryInventoryClear()=>ProductSessionRestart.EnsureNoFanRecoveryRecords();
 }

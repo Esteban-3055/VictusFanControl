@@ -16,8 +16,29 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
     private readonly long _ownerStart;
     private bool _released;
     private Guid _fanSession=Guid.NewGuid();
+    private bool _fanSessionEntered,_fanDomainReleased;
     internal bool HasChild=>_child is not null;
     internal bool Fixture=>_fixture;
+    internal VictusFanControl.Recovery.ProductRecoveryRecord? RetainedFanLease(string? fixtureLease=null,string? fixtureCommon=null)
+    {
+        if(!_fixture&&(fixtureLease is not null||fixtureCommon is not null))throw new InvalidOperationException("Fixture inventory requires fixture mode.");
+        if(_child is null)return null;
+        EnsureAlive();
+        if(_fanSessionEntered&&!_fanDomainReleased||
+            File.Exists(Path.Combine(SessionDirectory,"write-intent.json"))||File.Exists(Path.Combine(SessionDirectory,"native-uncertain.signal")))
+            throw new IOException("La sesión compartida no acredita la retirada de ventiladores.");
+        var path=fixtureLease??LeasePath;
+        var bytes=VictusFanControl.Recovery.ProductRecoveryInventory.ReadBytes(path);
+        using var lease=JsonDocument.Parse(bytes);var r=lease.RootElement;
+        if(r.GetProperty("OwnerPid").GetInt32()!=_ownerPid||r.GetProperty("OwnerStartUtcTicks").GetInt64()!=_ownerStart||
+            r.GetProperty("GuardianPid").GetInt32()!=_child.Id||!r.GetProperty("DirectEcProhibited").GetBoolean()||
+            !string.Equals(Path.GetFullPath(r.GetProperty("SessionDirectory").GetString()!),Path.GetFullPath(SessionDirectory),StringComparison.OrdinalIgnoreCase))
+            throw new IOException("La sesión WMI retenida no coincide con su propietario y guardián.");
+        // The handle was validated against READY/start ticks at startup and
+        // remains open. An exited process or a changed lease cannot be reused.
+        EnsureAlive();
+        return new(path,"FanGui",VictusFanControl.Recovery.ProductRecoveryInventory.Hash(bytes));
+    }
     private readonly SemaphoreSlim _ctgpCommands = new(1, 1);
     private readonly object _heartbeatPublication = new();
     private readonly object _ctgpPublication = new();
@@ -167,6 +188,7 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
         foreach (var arg in new[] { _fixture ? "--fan-wmi-fixture-session" : "--fan-wmi-session",
             "--session-dir", SessionDirectory, "--owner-pid", _ownerPid.ToString(), "--owner-start", _ownerStart.ToString() })
             start.ArgumentList.Add(arg);
+        _fanSessionEntered=false;_fanDomainReleased=false;
         _child = Process.Start(start) ?? throw new IOException("Could not start WMI fan guardian.");
         _child.ErrorDataReceived += (_, e) => { if (e.Data is not null) AppLog.Write("WMI fan guardian: " + e.Data); };
         _child.OutputDataReceived += (_, e) => { if (e.Data is not null) AppLog.Write("WMI fan guardian: " + e.Data); };
@@ -209,6 +231,7 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
         if (level < Hp8C40TargetProfile.MinimumValidatedFanLevel || level > (_productUpperRange ? Hp8C40ProductFanTargets.MaximumLogicalLevel : Hp8C40TargetProfile.MaximumPhysicallyQualifiedFanLevel))
             throw new ArgumentOutOfRangeException(nameof(level));
         EnsureAlive();
+        _fanSessionEntered=true;_fanDomainReleased=false;
         var target = _productUpperRange ? Hp8C40ProductFanTargets.FromLogical(level) : (Cpu:level,Gpu:level);
         WmiFanExperiment.WriteJson(Path.Combine(SessionDirectory, "write-intent.json"), new
         { OwnerPid = _ownerPid, OwnerStartUtcTicks = _ownerStart,FanSession=_fanSession, Level = level, CpuLevel = target.Cpu, GpuLevel = target.Gpu, UpperRangePreview = _productUpperRange, Utc = DateTimeOffset.UtcNow });
@@ -216,7 +239,7 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
     }
     public void BeginFanSession()
     {
-        EnsureAlive();_fanSession=Guid.NewGuid();
+        EnsureAlive();_fanSession=Guid.NewGuid();_fanSessionEntered=true;_fanDomainReleased=false;
         if(!_fixture)WmiFanExperimentBoundary.BeginFanSession();
     }
     internal async Task<FanWmiReleaseEvidence> ReleaseFanDomainAsync(CancellationToken token)
@@ -251,6 +274,7 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
                         reply.Ctgp.Failure is not null||!reply.Ctgp.FreshAt(now))
                         throw new IOException("El recibo de ventiladores no acredita esta sesión compartida.");
                     if(!_fixture)WmiFanExperimentBoundary.CompleteFanRelease();
+                    _fanDomainReleased=true;
                     return new(reply.ReleaseRequestAccepted,reply.LegacyDefaultRequestAccepted,false,false,
                         Path.Combine(directory,"fan-domain-reply.json"),"FAN_DOMAIN_RELEASED"){FanDomainReleased=true};
                 }

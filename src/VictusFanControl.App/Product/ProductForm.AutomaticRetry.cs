@@ -90,7 +90,7 @@ internal sealed partial class ProductForm
             if(retiringRuntime is IProductFanRetry retained)
             {
                 await retained.VerifyRetainedPerformanceAsync();
-                if(!_isolatedRuntime)ProductSessionRestart.EnsureNoFanRecoveryRecords();
+                if(!_isolatedRuntime)retained.EnsureFanRetryInventoryClear();
             }
             else if(!_isolatedRuntime)ProductSessionRestart.EnsureNoRecoveryRecords();
             if(_closing||_exitRequested)return;

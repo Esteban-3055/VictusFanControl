@@ -5,12 +5,13 @@ using System.Diagnostics;
 
 namespace VictusFanControl.App;
 
-internal static class WmiSharedGuardianSelfTest
+internal static partial class WmiSharedGuardianSelfTest
 {
     internal static async Task<int> RunAsync()
     {
         try
         {
+            await RetainedLeaseInventoryAsync();
             var client=new WmiFanGuiGuardianClient(fixture:true);
             await client.StartAsync(default);
             try

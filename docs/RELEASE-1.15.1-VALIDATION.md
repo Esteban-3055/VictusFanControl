@@ -19,6 +19,8 @@ Correcciones de la auditoría de 1.15.0 y mejoras del editor Funciones. Las prue
 
 Las pruebas adicionales de `--independent-repairs-self-test` y `--function-rules-self-test` comprueban reparaciones anteriores, aplicación/guardado, navegación y distribución fuera de pantalla. Los supervisores conservan las barreras ante incertidumbre nativa y el cierre global al salir.
 
+`--shared-wmi-self-test` también ejecuta el inventario real sobre archivos temporales y un guardián simulado. Reproduce la confusión entre una sesión compartida retenida y una huérfana: acepta solo la identidad exacta sin autoridad de ventiladores, y rechaza control activo, identidades cambiadas, registros ajenos, incertidumbre nativa, huérfanos y guardianes terminados. El reinicio completo y Salir conservan su exigencia de retirada global.
+
 ## Límites
 
 La validación de software no demuestra el comportamiento físico de ventiladores, límites de potencia, micrófono, enlace HyperX o base ESP32. Un fallo simulado del receptor no demuestra la causa de los chasquidos originales. Las pruebas de instalación aisladas comprueban extracción, versión, integridad y publicación; la instalación real y sus ajustes se verifican por separado al entregar el paquete oficial.
