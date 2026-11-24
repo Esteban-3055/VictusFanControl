@@ -24,7 +24,7 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
     }
     internal ProductPowerProfile Editing { get; set; }
     private ProductPage _page;
-    internal ProductPage Page { get=>_page;set { if(_page==value)return;_page=value;SynchronizeFanAnimation();PageChanged?.Invoke(this,EventArgs.Empty); } }
+    internal ProductPage Page { get=>_page;set { if(_page==value)return;_page=value;CloseFunctionChooser();SynchronizeFanAnimation();PageChanged?.Invoke(this,EventArgs.Empty); } }
     internal event EventHandler? PageChanged;
     internal static IReadOnlyList<(ProductPage Page,string Name,string Icon)> Navigation { get; } = Array.AsReadOnly(new[]
     {
@@ -623,6 +623,8 @@ internal sealed partial class ProductCanvas : System.Windows.Forms.Control
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
+        if(Page==ProductPage.Functions&&e.KeyCode==Keys.Escape&&FunctionChooser!=ProductFunctionChooser.None)
+        {CloseFunctionChooser();Invalidate();e.Handled=true;e.SuppressKeyPress=true;return;}
         if(e.KeyCode==Keys.Tab)
         {
             var enabled=_hits.Where(CanInteract).ToArray();if(enabled.Length==0)return;

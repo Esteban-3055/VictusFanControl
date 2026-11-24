@@ -948,7 +948,7 @@ internal sealed class PerformanceGuardianHost
                 domains.CpuStatus,
                 domains.GpuStatus,
                 source.LastSource.ToString(),
-                source.Failure,
+                source.BlockingFailure,
                 (_domains as IGuardianConfigurableDomains)?.Configuration,
                 result.Code == PerformanceGuardianProtocol.ReleaseFailedDraining ? domains.RecoveryGpuSession : null,
                 domains.CpuSession,domains.GpuSession);

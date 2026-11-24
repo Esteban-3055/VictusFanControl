@@ -20,7 +20,12 @@ internal readonly record struct GuardianPowerSourceRuntimeSnapshot(
     PerformancePowerSourceKind LastSource,
     string? LastStatus,
     string? LastStopReason,
-    string? Failure);
+    string? Failure)
+{
+    // Preserve the historical failure in diagnostics. Only unresolved work in
+    // selected domains (or the shared source) blocks the current session.
+    internal string? BlockingFailure {get;init;}=Failure;
+}
 
 internal interface IGuardianPowerSourceRuntime :
     IDisposable
@@ -95,6 +100,8 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
     private string? _lastStatus;
     private string? _lastStopReason;
     private string? _failure;
+    private string? _cpuFailure,_gpuFailure,_sharedFailure;
+    private string? BlockingFailureLocked=>_sharedFailure??(_cpuEnabled?_cpuFailure:null)??(_gpuEnabled?_gpuFailure:null);
     private bool _disposed;
 
     internal GuardianPerformancePowerSourceRuntime(
@@ -146,7 +153,7 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
             // GUI STATUS may recover a missed Windows notification only inside
             // the explicitly enabled session. Never retry a failed transition
             // or recreate authority after Unknown, Stop or lifecycle release.
-            if(reconcile && _active && _failure is null && _coordinator is not null)
+            if(reconcile && _active && BlockingFailureLocked is null && _coordinator is not null)
             {
                 _reconciliationSignals++;
                 ProcessSourceSignalLocked();
@@ -213,6 +220,7 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
                 prime.Observation.Succeeded
                     ? null
                     : prime.Observation.Status;
+            _sharedFailure=_failure;
 
             _primed =
                 true;
@@ -227,13 +235,19 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
         lock (_sync)
         {
             var observed = _reader.Read();
-            if (!_active || _failure is not null || !observed.Succeeded ||
+            if (!_active || BlockingFailureLocked is not null || !observed.Succeeded ||
                 observed.Source is not (PerformancePowerSourceKind.Ac or PerformancePowerSourceKind.Battery) || observed.Source != _lastSource)
                 throw new InvalidOperationException("Source runtime is not ready for an update; wait for confirmed stable AC/Battery.");
-            try{update(observed.Source);}
+            var beforeCpu=_cpuEnabled;var beforeGpu=_gpuEnabled;var succeeded=false;
+            try{update(observed.Source);succeeded=true;}
             finally
             {
                 if(selection is not null){var domains=selection();_cpuEnabled=domains.Cpu;_gpuEnabled=domains.Gpu;}
+                if(succeeded)
+                {
+                    if(!beforeCpu&&_cpuEnabled)_cpuFailure=null;
+                    if(!beforeGpu&&_gpuEnabled)_gpuFailure=null;
+                }
             }
             var after = _reader.Read();
             if (!after.Succeeded || after.Source != observed.Source)
@@ -248,7 +262,12 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
         {
             // Restoration is serialized with source callbacks, but never
             // requires a new temperature or a known source to withdraw control.
-            try{release();}finally{var actual=selection();_cpuEnabled=actual.Cpu;_gpuEnabled=actual.Gpu;}
+            var succeeded=false;
+            try{release();succeeded=true;}finally
+            {
+                var actual=selection();_cpuEnabled=actual.Cpu;_gpuEnabled=actual.Gpu;
+                if(succeeded){if(!_cpuEnabled)_cpuFailure=null;if(!_gpuEnabled)_gpuFailure=null;}
+            }
         }
     }
     public void ActivateListener()
@@ -302,6 +321,7 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
 
                 _failure =
                     ex.ToString();
+                _sharedFailure=_failure;
 
                 _lastStatus =
                     "PERFORMANCE_GUARDIAN_SOURCE_LISTENER_START_FAILED";
@@ -410,8 +430,8 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
         {
             var result =
                 _coordinator.HandleNotificationSignal(
-                    _cpuEnabled,
-                    _gpuEnabled);
+                    _cpuEnabled&&_cpuFailure is null,
+                    _gpuEnabled&&_gpuFailure is null);
 
             _lastSource =
                 result.Observation.Source;
@@ -428,6 +448,13 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
             if (result.GpuAttempted)
                 _gpuDispatchAttempts++;
 
+            var cpuFailure=result.CpuException??(result.CpuAttempted&&result.CpuResult is{Succeeded:false} cr?
+                "CPU_SOURCE_TRANSITION_FAILED: "+cr.Status:null);
+            var gpuFailure=result.GpuException??(result.GpuAttempted&&result.GpuResult is{Succeeded:false} gr?
+                "GPU_SOURCE_TRANSITION_FAILED: "+gr.Status:null);
+            if(cpuFailure is not null)_cpuFailure=cpuFailure;
+            if(gpuFailure is not null)_gpuFailure=gpuFailure;
+            if(!result.Observation.Succeeded)_sharedFailure=result.Observation.Status;
             if (result.CpuException is not null ||
                 result.GpuException is not null)
             {
@@ -459,6 +486,7 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
             // but retain explicit diagnostic evidence.
             _failure =
                 ex.ToString();
+            _sharedFailure=_failure;
 
             _lastStatus =
                 "PERFORMANCE_GUARDIAN_SOURCE_SIGNAL_FAILED";
@@ -496,7 +524,7 @@ internal sealed class GuardianPerformancePowerSourceRuntime :
             LastStopReason:
                 _lastStopReason,
             Failure:
-                _failure);
+                _failure){BlockingFailure=BlockingFailureLocked};
 
     private void ThrowIfDisposed()
     {
@@ -930,6 +958,7 @@ internal static class PerformanceGuardianPowerSourceRuntimeSelfTest
             AtomicStatusCapture(output);
             MissedNotificationAndBatteryStartup(output);
             FailedStatusTransitionCannotRetry(output);
+            ReleasedFailureDoesNotBlockPeer(output);
             AcBatteryAcAndDuplicate(output);
             UnknownQueryFailureIsBounded(output);
             CpuFailureDoesNotBlockGpu(output);
@@ -989,6 +1018,30 @@ internal static class PerformanceGuardianPowerSourceRuntimeSelfTest
         Require(retained.Failure==failed.Failure&&reader.Reads==reads&&cpu.Calls==1&&gpu.Calls==1,
             "Status retried a failed transition or erased native failure evidence.");
         output.WriteLine("PASS source status partial failure: no retry, no evidence clearing, no fabricated combined success.");
+    }
+    private static void ReleasedFailureDoesNotBlockPeer(TextWriter output)
+    {
+        foreach(var failedCpu in new[]{true,false})
+        {
+            var reader=new MutableSourceReader();var cpu=new RecordingGuardianCpuSourceTransitionSink();var gpu=new RecordingGuardianGpuSourceTransitionSink();
+            var listener=new ManualListenerFactory();using var runtime=new GuardianPerformancePowerSourceRuntime(reader,cpu,gpu,listener);
+            runtime.Start(true,true);cpu.ThrowOnCall=failedCpu;gpu.ThrowOnCall=!failedCpu;
+            reader.Source=PerformancePowerSourceKind.Battery;listener.Signal();
+            var history=runtime.Snapshot.Failure;
+            Require(history is not null&&runtime.Snapshot.BlockingFailure is not null,"A selected failed domain lost its fence.");
+            var rejected=false;try{runtime.ExecuteConfigurationUpdate(_=>throw new Exception("Must not dispatch"));}catch(InvalidOperationException){rejected=true;}
+            Require(rejected,"An unresolved selected domain allowed a configuration write.");
+            runtime.ExecuteDomainRelease(()=>{},()=>failedCpu?(false,true):(true,false));
+            Require(runtime.Snapshot.Failure==history&&runtime.Snapshot.BlockingFailure is null,"Confirmed withdrawal erased history or retained an unrelated blocking failure.");
+            var updated=false;runtime.ExecuteConfigurationUpdate(_=>updated=true,()=>failedCpu?(false,true):(true,false));
+            Require(updated,"B09 healthy peer cannot update after confirmed failed-domain withdrawal.");
+            // Historical failure remains diagnostic evidence even after a new
+            // source signal. The withdrawn domain receives no further callback.
+            var cpuCalls=cpu.Calls;var gpuCalls=gpu.Calls;reader.Source=PerformancePowerSourceKind.Ac;runtime.CaptureStatus(s=>s,true);
+            Require(runtime.Snapshot.Failure==history&&(failedCpu?cpu.Calls==cpuCalls&&gpu.Calls==gpuCalls+1:
+                gpu.Calls==gpuCalls&&cpu.Calls==cpuCalls+1),"Withdrawal retried the failed peer or prevented the healthy source transition.");
+        }
+        output.WriteLine("PASS B09: confirmed CPU/GPU withdrawal unblocks healthy peer configuration and source changes; failed selection stays fenced and historical evidence retained; fake IO.");
     }
     private static void AtomicStatusCapture(TextWriter output)
     {

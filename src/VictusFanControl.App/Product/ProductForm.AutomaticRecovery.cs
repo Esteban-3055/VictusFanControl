@@ -35,7 +35,9 @@ internal sealed partial class ProductForm
             if (_runtime is null || _isolatedRuntime && RecoveryRuntimeFactory is null ||
                 !_automaticRecovery.TakeSessionRequest(_canvas.State, now)) return;
             _recoveryResumeCancelled = _automaticRecoveryResumeSuppressed;
-            _recoveryTask = ForceSessionRecoveryCoreAsync(preferences, resume);
+            if(_runtime is IProductFanRetry&&ProductAutomaticRecovery.PreserveIndependentFunctions(_canvas.State))
+                _recoveryTask=RecoverIndependentFanSessionAsync(preferences,resume);
+            else _recoveryTask = ForceSessionRecoveryCoreAsync(preferences, resume);
             return;
         }
         if (!_automaticRecovery.TakeRequest(_canvas.State, now)) return;
@@ -43,6 +45,13 @@ internal sealed partial class ProductForm
         _restarting = true; _restartLifecycleInterrupted = false; _canvas.Busy = true;
         // Reserve the operation before the first background inventory read; exit drains this same task.
         _recoveryTask = RecoverInBackgroundAsync(preferences, resume, _canvas.State.PerformanceRecovery!);
+    }
+
+    private async Task RecoverIndependentFanSessionAsync(ProductProfiles preferences,bool resume)
+    {
+        await Task.Yield(); // Reserve the recovery task before a synchronous refusal can finish.
+        try{await RetryAutomaticAsync(applyProtections:true,unattended:true,preferences:preferences,resumeAutomatic:resume);}
+        finally{_recoveryTask=null;}
     }
 
     private async Task RecoverInBackgroundAsync(ProductProfiles preferences, bool resume, PerformanceRecoveryPreview expected)

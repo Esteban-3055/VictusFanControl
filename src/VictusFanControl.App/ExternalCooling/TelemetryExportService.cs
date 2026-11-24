@@ -58,7 +58,7 @@ internal sealed class TelemetryExportService(Func<ProductRuntimeState> state, IP
         var ready=s.Runtime=="Healthy" && !s.LifecycleBlocked && !s.AutomaticPreparing &&
             s.AutomaticSourceTransition is null && !s.PerformanceUpdating && s.PerformanceRecovery?.Pending!=true;
         var accepted=ready && control && s.FanAuthority=="Custom" && s.FanLevel is >=0 &&
-            s.CommandedCpuLevel is >=0 && s.CommandedGpuLevel is >=0;
+            s.CommandedCpuLevel is >=0 && s.CommandedGpuLevel is >=0&&!s.MaintenanceActive;
         double? demand=null; DateTimeOffset? decisionAt=null;
         if (s.FanMode=="Automatic")
         {

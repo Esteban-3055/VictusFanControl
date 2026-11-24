@@ -16,6 +16,10 @@ internal sealed class ProductWmiLifetime(WmiFanGuiGuardianClient client,IPerform
     private bool _closing,_ctgpWanted,_ctgpEligible,_ctgpFaulted;
     private volatile bool _systemBlocked;
     private int _ctgpPendingCommands;
+    private long _ctgpRequestGeneration;
+    private bool _ctgpDispatchAttempted;
+    private bool NoPendingNativeEvidence=>!Client.HasChild&&!_ctgpDispatchAttempted&&
+        !new[]{"native-uncertain.signal","native-inflight.json","write-intent.json"}.Any(name=>File.Exists(Path.Combine(Client.SessionDirectory,name)));
     internal WmiFanGuiGuardianClient Client {get;}=client;
     internal bool CtgpWanted=>Volatile.Read(ref _ctgpWanted);
     internal bool CtgpEligible=>Volatile.Read(ref _ctgpEligible);
@@ -38,24 +42,34 @@ internal sealed class ProductWmiLifetime(WmiFanGuiGuardianClient client,IPerform
         }
         finally{_startup.Release();}
     }
-    internal async Task SetCtgpAsync(bool wanted,bool eligible,CancellationToken token)
+    internal Task SetCtgpAsync(bool wanted,bool eligible,CancellationToken token)=>
+        ApplyCtgpAsync(wanted,eligible,Interlocked.Increment(ref _ctgpRequestGeneration),changeIntent:true,token);
+    private async Task ApplyCtgpAsync(bool wanted,bool eligible,long generation,bool changeIntent,CancellationToken token)
     {
         Interlocked.Increment(ref _ctgpPendingCommands);var entered=false;
         try
         {
             await _commands.WaitAsync(token).ConfigureAwait(false);entered=true;
+            // A queued retry must not become a new user request. An explicit
+            // selection invalidates earlier work before waiting for this queue.
+            if(generation!=Volatile.Read(ref _ctgpRequestGeneration))return;
+            if(!changeIntent&&(!_ctgpWanted||!_ctgpEligible||_ctgpFaulted||_systemBlocked))return;
             eligible&=!_systemBlocked;
-            _ctgpWanted=wanted;_ctgpEligible=eligible;
+            if(changeIntent){_ctgpWanted=wanted;_ctgpEligible=eligible;}
             if(_ctgpFaulted&&wanted&&eligible)throw new IOException(Failure??"cTGP requiere recuperación antes de reactivarse.");
             if(!Client.HasChild&&(!wanted||!eligible))return;
             await StartAsync(token).ConfigureAwait(false);
             // Startup may have awaited while the UI received a power fence.
             // Never let a queued pre-suspend request acquire policy afterwards.
+            if(generation!=Volatile.Read(ref _ctgpRequestGeneration))return;
             eligible&=!_systemBlocked;_ctgpEligible=eligible;
+            _ctgpDispatchAttempted=true;
             await Client.SetCtgpAsync(wanted&&eligible,token).ConfigureAwait(false);
-            Failure=null;if(!wanted)_ctgpFaulted=false;
+            Failure=null;if(!wanted){_ctgpFaulted=false;_ctgpDispatchAttempted=false;}
         }
         catch(CtgpActivationDeferredException){Failure=null;}
+        catch(OperationCanceledException) when(entered&&NoPendingNativeEvidence)
+        { _ctgpEligible=false;Failure=null;throw; }
         catch(Exception error)
         {
             if(entered){_ctgpFaulted=true;Failure=error.Message;}throw;
@@ -74,8 +88,9 @@ internal sealed class ProductWmiLifetime(WmiFanGuiGuardianClient client,IPerform
                     Client.EnsureAlive();Client.Heartbeat();
                     var status=Client.Ctgp;
                     if(status?.RequiresManualRecovery==true){_ctgpFaulted=true;Failure=status.Failure;}
+                    var generation=Volatile.Read(ref _ctgpRequestGeneration);
                     if(!_ctgpFaulted&&_ctgpWanted&&_ctgpEligible&&status is{State:"AcOnly" or "Waiting"}&&source.Read().Source==PerformancePowerSourceKind.Ac)
-                        await SetCtgpAsync(true,true,_stop.Token).ConfigureAwait(false);
+                        await ApplyCtgpAsync(true,true,generation,changeIntent:false,_stop.Token).ConfigureAwait(false);
                 }
                 catch(OperationCanceledException)when(_stop.IsCancellationRequested){return;}
                 catch(Exception error){Failure=error.Message;if(_ctgpWanted)_ctgpFaulted=true;}

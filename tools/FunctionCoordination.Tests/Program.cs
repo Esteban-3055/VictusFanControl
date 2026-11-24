@@ -20,7 +20,7 @@ var manual = ProductFunctionCoordination.EnterFanMode(legacy, empty, ProductFunc
 Require(manual == new ProductFunctionFlags(ExternalCooling: true), "Manual fan control activated CPU/GPU/cTGP or lost external following.");
 
 var disabledCpuGpu = automatic with { CpuLimits = false, GpuClocks = false };
-foreach (var reason in new[] { ProductFunctionEntryReason.AutomaticRecovery, ProductFunctionEntryReason.SystemResume })
+foreach (var reason in new[] { ProductFunctionEntryReason.AutomaticRecovery, ProductFunctionEntryReason.SystemResume, ProductFunctionEntryReason.Maintenance })
     Require(ProductFunctionCoordination.EnterFanMode(legacy, disabledCpuGpu, ProductFunctionFanMode.Firmware, ProductFunctionFanMode.Automatic, reason) == disabledCpuGpu,
         "Recovery re-enabled user-disabled CPU/GPU functions.");
 Require(ProductFunctionCoordination.EnterFanMode(legacy, disabledCpuGpu, ProductFunctionFanMode.Automatic, ProductFunctionFanMode.Automatic, ProductFunctionEntryReason.User) == disabledCpuGpu,

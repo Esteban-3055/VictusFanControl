@@ -15,6 +15,7 @@ internal sealed class ProductStartupAutomatic
     internal bool Cancelled { get; private set; }
     internal IReadOnlyList<ProductAutomaticAdmissionIssue> Issues { get; private set; } = [];
     internal string Phase => _resumption ? "resumption" : _manualRetry ? "manual-retry" : "startup";
+    internal ProductFunctionEntryReason EntryReason=>_resumption||_manualRetry?ProductFunctionEntryReason.AutomaticRecovery:ProductFunctionEntryReason.ApplicationStartup;
     private readonly bool _manualRetry, _resumption;
     private readonly ProductProtectionSettings _protections;
     private string _status="Esperando sensores para Automático al iniciar…";
@@ -40,8 +41,10 @@ internal sealed class ProductStartupAutomatic
         { Pause("Automático al iniciar en espera: "+state.PerformanceRecovery.Detail); return false; }
         if(state.Target=="Unsupported")
         { Cancel("Automático al iniciar bloqueado: equipo no autorizado."); return false; }
-        if(state.FanMode!="Firmware"||state.FanAuthority!="Firmware"||state.AutomaticPreparing||state.PerformanceProcessPresent)
+        if(state.FanMode!="Firmware"||state.FanAuthority!="Firmware"||state.AutomaticPreparing)
         { Cancel($"Automático al iniciar cancelado por otra operación: modo {state.FanMode}, autoridad {state.FanAuthority}, preparación {state.AutomaticPreparing}, proceso CPU/GPU {state.PerformanceProcessPresent}."); return false; }
+        if(state.PerformanceProcessPresent&&!state.PerformanceSessionConfirmed)
+        {Pause("Automático espera la confirmación del supervisor CPU/GPU conservado; sus controles siguen disponibles.");return false;}
         var s=state.Snapshot;
         Issues=ProductAutomaticAdmission.StartupIssues(state,_protections,now);
         // A timer rechecking an already counted acquisition is not a new bad

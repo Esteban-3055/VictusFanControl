@@ -120,9 +120,10 @@ internal sealed partial class ProductForm
                 try
                 {
                     settings=settings with{Curve=_externalCoolingSettings.Curve};
-                    await Task.Run(()=>_externalCoolingStore.Save(settings,key,remove));
-                    _externalCoolingLoadNotice=null;_externalCoolingSettings=settings;
-                    if(!_closing)await _externalCooling.ConfigureAsync(settings,connect);
+                    await ExternalSettingsApply.PersistAndConfigureAsync(async()=>
+                    {await Task.Run(()=>_externalCoolingStore.Save(settings,key,remove));
+                        _externalCoolingLoadNotice=null;_externalCoolingSettings=settings;},
+                        ()=>_closing?Task.CompletedTask:_externalCooling.ConfigureAsync(settings,connect));
                 }
                 finally{_externalSettingsGate.Release();}
             },ExternalCoolingError);

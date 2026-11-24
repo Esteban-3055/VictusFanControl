@@ -89,6 +89,7 @@ internal sealed partial class ProductForm : Form
         }
         _draft=ProductProfilesStore.Copy(fixtureProfiles??new ProductProfiles());
         _saved=ProductProfilesStore.Copy(_draft);
+        _canvas.SavedFunctionRules=()=>_saved.FunctionPolicies();
         _hasSavedBaseline=fixtureProfiles is not null;
         if(restartState is not null)
         {
@@ -167,8 +168,9 @@ internal sealed partial class ProductForm : Form
             _startupResourcesAcquired=true;
             if(_runtime is null)
             {
-                var startupProfiles=Draft;
+                var startupProfiles=ProductSessionRestart.RuntimeProfiles(Draft,_saved,_restartOpening);
                 _runtime=await (runtimeFactory?.Invoke()??Task.Run<IProductRuntime>(()=>new ProductRuntime(_modules,startupProfiles,_automaticReview)));
+                ProductSessionRestart.PrepareRuntime(_runtime,_restartOpening);
             }
             // A close during construction waits for this task, then disposes the returned service without starting it.
             if(_closing||_restarting||IsDisposed)return;
@@ -271,8 +273,7 @@ internal sealed partial class ProductForm : Form
                 var owner=_runtime;
                 try
                 {
-                    await owner.SelectFanModeAsync(AdaptiveFanProductionMode.Automatic,profiles,request.Phase=="resumption"?
-                        ProductFunctionEntryReason.AutomaticRecovery:ProductFunctionEntryReason.ApplicationStartup);
+                    await owner.SelectFanModeAsync(AdaptiveFanProductionMode.Automatic,profiles,request.EntryReason);
                     RememberConfirmedAutomaticActivation(owner,profiles);_recoveryEpisode.Finish();
                     if(request.Phase!="resumption")_recoveryEpisode.CompleteUserActivation();
                 }

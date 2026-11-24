@@ -77,6 +77,12 @@ internal static class Program
         {Environment.ExitCode=ProductRuntimePerformanceSelfTest.RunLifetimeChecksAsync().GetAwaiter().GetResult();return;}
         if(args.SequenceEqual(new[]{"--independent-runtime-self-test"}))
         {Environment.ExitCode=ProductRuntimePerformanceSelfTest.RunIndependentChecksAsync().GetAwaiter().GetResult();return;}
+        if(args.SequenceEqual(new[]{"--independent-repairs-self-test"}))
+        {Environment.ExitCode=ProductRuntimePerformanceSelfTest.RunRepairChecksAsync().GetAwaiter().GetResult();return;}
+        if(args.SequenceEqual(new[]{"--function-rules-self-test"}))
+        {Environment.ExitCode=ProductFunctionRuleEditingSelfTest.RunAsync().GetAwaiter().GetResult();return;}
+        if(args.SequenceEqual(new[]{"--functions-ui-preview"}))
+        {ApplicationConfiguration.Initialize();ProductFunctionsInteractivePreview.Run();return;}
         if(args.SequenceEqual(new[]{"--shared-wmi-self-test"}))
         {Environment.ExitCode=WmiSharedGuardianSelfTest.RunAsync().GetAwaiter().GetResult();return;}
         if(args.SequenceEqual(new[]{"--reference-interface-self-test"}))

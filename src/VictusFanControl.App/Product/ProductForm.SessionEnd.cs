@@ -125,7 +125,7 @@ internal sealed partial class ProductForm
         await ObserveCoolingPreparationAsync(cooling);
         // A prior failed release remains evidence, but cannot skip this release.
         try{await previous;}catch(Exception error){AppLog.Write("Earlier cooling release unresolved: "+error);}
-        try{await runtime.ReleaseForLifecycleAsync("Apagado cancelado; retirar refrigeración temporal.");}
+        try{await runtime.ReleaseForLifecycleAsync("Apagado cancelado; retirar refrigeración temporal.");await runtime.CompleteMaintenanceAsync();}
         catch(Exception error){AppLog.Write("Cancelled shutdown cooling release unresolved: "+error);throw;}
     }
     private void ClearSessionEndReason()

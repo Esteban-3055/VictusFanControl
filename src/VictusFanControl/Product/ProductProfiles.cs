@@ -265,7 +265,8 @@ public static class ProductProfilesStore
                     using var original=new MemoryStream(bytes,writable:false);
                     using var reader=new StreamReader(original,System.Text.Encoding.UTF8,detectEncodingFromByteOrderMarks:true);
                     using var document=JsonDocument.Parse(reader.ReadToEnd());
-                    var migrateFunctions=profiles.Functions is not null&&!document.RootElement.TryGetProperty("functions",out _);
+                    var migrateFunctions=document.RootElement.ValueKind==JsonValueKind.Object&&
+                        profiles.Functions is not null&&!document.RootElement.TryGetProperty("functions",out _);
                     if(document.RootElement.ValueKind==JsonValueKind.Object&&document.RootElement.TryGetProperty("schemaVersion",out var schema)&&
                         schema.ValueKind==JsonValueKind.Number&&schema.TryGetInt32(out var version)&&(version==1||!document.RootElement.TryGetProperty("defaultCurveRevision",out _)))
                     {

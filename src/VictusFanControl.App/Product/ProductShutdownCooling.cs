@@ -49,7 +49,7 @@ internal sealed class ProductShutdownCooling
         // production coordinator and at the HP native setter, including late work.
         using var admission=new FanDispatchAdmissionScope(EnsureDispatchAllowed);
         Attempted=true;
-        await runtime.SelectFanModeAsync(AdaptiveFanProductionMode.Manual,new ProductProfiles());
+        await runtime.SelectFanModeAsync(AdaptiveFanProductionMode.Manual,new ProductProfiles(),ProductFunctionEntryReason.Maintenance);
         EnsureDispatchAllowed();
         await runtime.ApplyManualAsync(Level);
         EnsureDispatchAllowed();

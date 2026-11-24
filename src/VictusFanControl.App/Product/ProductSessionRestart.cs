@@ -27,6 +27,9 @@ internal sealed record ProductRestartRequest(string StatePath,string Modules,Pro
 internal static class ProductSessionRestart
 {
     internal const string StateFileName = "restart-state.json";
+    internal static ProductProfiles RuntimeProfiles(ProductProfiles draft,ProductProfiles saved,bool restartOpening)=>ProductProfilesStore.Freeze(restartOpening?saved:draft);
+    internal static void PrepareRuntime(IProductRuntime runtime,bool restartOpening)
+    {if(restartOpening&&runtime is ProductRuntime concrete)concrete.SuppressApplicationStartup();}
     internal static ProductRestartState Capture(ProductProfiles draft,ProductProfiles saved,bool baseline,bool dirty,ProductPage page,ProductPowerProfile editing) => new()
     {
         PreviousSessionId=AppLog.SessionId,ApplicationMvid=typeof(ProductSessionRestart).Assembly.ManifestModule.ModuleVersionId,

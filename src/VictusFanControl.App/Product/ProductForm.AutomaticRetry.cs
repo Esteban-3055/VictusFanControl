@@ -42,7 +42,7 @@ internal sealed partial class ProductForm
         _runtimeMailbox?.Dispose();_runtimeMailbox=null;
         _runtimeChanged=null;
     }
-    internal Task RetryAutomaticAsync(bool applyProtections=false, bool unattended=false, ProductProfiles? preferences=null)
+    internal Task RetryAutomaticAsync(bool applyProtections=false, bool unattended=false, ProductProfiles? preferences=null,bool resumeAutomatic=true)
     {
         if(_canvas.State.SharedWmiRecoveryPending)
         {
@@ -57,9 +57,18 @@ internal sealed partial class ProductForm
         if(_automaticRetryTask is not null)return _automaticRetryTask;
         if(_closing||_restarting||IsDisposed||_canvas.Busy||_systemSuspended||(!applyProtections&&!_canvas.State.LifecycleBlocked)||!_canvas.AutomaticRetryAvailable||
             !_canvas.State.AutomaticAuthorized||_displayOff||_automaticReview is not null)return Task.CompletedTask;
-        return _automaticRetryTask=RetryAutomaticCoreAsync(unattended,preferences);
+        if(ProductAutomaticRecovery.PreserveIndependentFunctions(_canvas.State)&&
+            _canvas.State.PerformanceProcessPresent&&!_canvas.State.PerformanceSessionConfirmed)
+        {
+            // No native work started. A delayed STATUS is not an uncertain
+            // release and must not permanently consume the recovery episode.
+            _automaticRecovery.DeferSessionPreparation();
+            _canvas.Notice="Automático espera la confirmación CPU/GPU. Se conservan los controles independientes; revisa o apaga el dominio que requiera recuperación.";
+            _canvas.Invalidate();return Task.CompletedTask;
+        }
+        return _automaticRetryTask=RetryAutomaticCoreAsync(unattended,preferences,resumeAutomatic);
     }
-    private async Task RetryAutomaticCoreAsync(bool unattended,ProductProfiles? requestedPreferences)
+    private async Task RetryAutomaticCoreAsync(bool unattended,ProductProfiles? requestedPreferences,bool resumeAutomatic)
     {
         _restarting=true;_restartLifecycleInterrupted=false;_canvas.Busy=true;_canvas.RestartAvailable=false;
         var retryReason = unattended ? "Reanudación automática" : "Reintento manual de Automático";
@@ -98,7 +107,7 @@ internal sealed partial class ProductForm
                 next=await (_retryRuntimeFactory?.Invoke(preferences)??Task.Run<IProductRuntime>(()=>new ProductRuntime(_modules,preferences,releasedRuntime:releasedRuntime,
                     preservePerformanceFromReleasedRuntime:releasedRuntime is not null)));
             }
-            catch(Exception preparationError) when(releasedRuntime is not null&&!preferences.FunctionPolicies().StopAutomaticOnPerformanceFailure&&
+            catch(Exception preparationError) when(releasedRuntime is not null&&ProductAutomaticRecovery.PreserveIndependentFunctions(before)&&
                 !_closing&&!_exitRequested&&!_displayOff&&!_restartLifecycleInterrupted)
             {
                 // The old fan runtime has already drained and its retained owner
@@ -115,9 +124,10 @@ internal sealed partial class ProductForm
                 throw new IOException("Reintento cancelado durante la preparación. El nuevo controlador quedó liberado.");
             }
             // Same form/log session. Frozen active preferences are used for unattended reentry; the draft stays untouched.
-            _startupPreferences=preferences;_startupAutomatic=new(Environment.TickCount64,manualRetry:!unattended,protections:preferences.Protections,resumption:unattended);
+            _startupPreferences=preferences;_startupAutomatic=resumeAutomatic?
+                new(Environment.TickCount64,manualRetry:!unattended,protections:preferences.Protections,resumption:unattended):null;
             if(_requirePowerNotifications)RegisterPowerNotifications();
-            _recoveryEpisode.CarryPreparation();
+            if(resumeAutomatic)_recoveryEpisode.CarryPreparation();else _automaticRecovery.SessionOpened();
             AttachRuntime(next);UpdateState(next.State);next.Start();_presentationTimer.Start();
             _canvas.RestartAvailable=true;
             AppLog.Write("PRODUCT AUTOMATIC RETRY (unattended="+unattended+"): previous release completed; fresh runtime in Firmware; waiting for three fresh observations; diagnostic="+diagnostic);
@@ -126,8 +136,11 @@ internal sealed partial class ProductForm
         {
             DetachRuntime();
             // If construction/start failed, release any new instance before leaving it unusable.
-            try{await ShutdownRuntimeAsync();}catch(Exception release){AppLog.Write("Automatic retry cleanup unresolved: "+release);}
-            _recoveryEpisode.Finish(ownerConfirmed:_runtimeShutdown is {IsCompletedSuccessfully:true});
+            var keepIndependentOwner=false;
+            try{keepIndependentOwner=await ProductAutomaticRecovery.CleanupFailedFanPreparationAsync(before,_runtimeShutdownPreservesPerformance,
+                ReferenceEquals(_shutdownRuntimeOwner,retiringRuntime),_closing||_exitRequested,_restartLifecycleInterrupted,()=>ShutdownRuntimeAsync());}
+            catch(Exception release){AppLog.Write("Automatic retry cleanup unresolved: "+release);}
+            _recoveryEpisode.Finish(ownerConfirmed:!keepIndependentOwner&&_runtimeShutdown is {IsCompletedSuccessfully:true});
             var failedState=_runtime?.State??before;
             var pending = _isolatedRuntime ? failedState.PerformanceRecovery : await Task.Run(() => PerformanceRecoveryPreview.Read());
             if (!unattended || pending?.Pending != true) _automaticResumption.Cancel();
@@ -136,7 +149,8 @@ internal sealed partial class ProductForm
             _canvas.State=failedState with{LifecycleBlocked=true,Runtime="Failed",Failure="No se pudo preparar Automático: "+ex.Message,PerformanceRecovery=pending,CanApplyPerformance=false,AutomaticPreparing=false};
             _canvas.Notice=_canvas.State.Failure!+(lateReadPending
                 ?" Puedes reintentar cuando termine la lectura WMI."
-                :" Conserva los registros de recuperación y usa Salir desde la bandeja.");
+                :keepIndependentOwner?" Se conserva el supervisor independiente sin transferir su autoridad. Conserva los registros; Salir realiza el cierre global.":" Conserva los registros de recuperación y usa Salir desde la bandeja.");
+            if(keepIndependentOwner)_canvas.State=_canvas.State with{CpuState="Recovering",GpuState="Recovering",CanReleasePerformance=false};
             UpdateTray(_canvas.State);
             AppLog.Write("PRODUCT AUTOMATIC RETRY BLOCKED (unattended="+unattended+"): "+ex);
         }

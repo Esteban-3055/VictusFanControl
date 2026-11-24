@@ -30,9 +30,9 @@ internal static partial class ProductGuiSelfTest
         require(!gate.Observe(State(0),at,0)&&!gate.Observe(State(0),at,1000),"Startup counted a repeated sample.");
         require(!gate.Observe(State(1),at.AddSeconds(1),1000)&&gate.Observe(State(2),at.AddSeconds(2),2000),"Three fresh startup acquisitions did not admit.");
         require(!gate.Observe(State(3),at.AddSeconds(3),3000),"Startup activation repeated.");
-        foreach(var blocked in new[]{State(0) with{Target="Unsupported"},State(0) with{PerformanceProcessPresent=true},State(0) with{FanMode="Manual"}})
+        foreach(var blocked in new[]{State(0) with{Target="Unsupported"},State(0) with{FanMode="Manual"}})
         {gate=new(0);require(!gate.Observe(blocked,at,0)&&gate.Finished&&!gate.Observe(State(2),at.AddSeconds(2),2000),"Startup retried a blocking failure.");}
-        foreach(var transient in new[]{State(0) with{LifecycleBlocked=true},State(0) with{PerformanceRecovery=new(true,"fixture unavailable"){ReadStatus=RecoveryInventoryStatus.Unavailable}}})
+        foreach(var transient in new[]{State(0) with{LifecycleBlocked=true},State(0) with{PerformanceProcessPresent=true},State(0) with{PerformanceRecovery=new(true,"fixture unavailable"){ReadStatus=RecoveryInventoryStatus.Unavailable}}})
         {
             gate=new(0);require(!gate.Observe(transient,at,0)&&!gate.Finished&&!gate.Cancelled,"Transient startup failure lost Automatic intent.");
             require(!gate.Observe(State(0),at,0)&&!gate.Observe(State(1),at.AddSeconds(1),1000)&&gate.Observe(State(2),at.AddSeconds(2),2000),"Startup did not resume after transient unavailability.");

@@ -5,7 +5,7 @@ public enum ProductExternalOutputMode { FollowInternalFans, Fixed, TemperatureCu
 public enum ProductFunctionBinding { Independent, StartWithAutomatic, FollowAutomatic, FollowInternalFans, StartWithInternalFans }
 public enum ProductFunctionFanMode { Firmware, Manual, Automatic }
 public enum ProductFunctionPower { Unknown, Ac, Battery }
-public enum ProductFunctionEntryReason { User, ApplicationStartup, AutomaticRecovery, SystemResume }
+public enum ProductFunctionEntryReason { User, ApplicationStartup, AutomaticRecovery, SystemResume, Maintenance }
 public enum ProductFunctionWait { None, Off, ApplicationClosing, SystemSuspended, PowerSource, Ac,
     Automatic, InternalFans, SharedWmi, OwnController }
 
@@ -107,6 +107,23 @@ public sealed record ProductFunctionPlan(ProductFunction Function, bool Requeste
 /// <summary>Pure policy used by the product coordinator. No IO, clocks, sensor reads or hardware effects.</summary>
 public static class ProductFunctionCoordination
 {
+    public static ProductFunctionFlags LinkedStarts(ProductFunctionPolicies policies,ProductFunctionFanMode previous,
+        ProductFunctionFanMode next,ProductFunctionEntryReason reason)
+    {
+        policies.Validate();
+        if(!Enum.IsDefined(previous)||!Enum.IsDefined(next)||!Enum.IsDefined(reason))throw new ArgumentOutOfRangeException(nameof(reason));
+        var selected=new ProductFunctionFlags();
+        if(previous==next||reason is not(ProductFunctionEntryReason.User or ProductFunctionEntryReason.ApplicationStartup))return selected;
+        foreach(var function in Enum.GetValues<ProductFunction>())
+        {
+            var p=policies.Get(function);
+            var linked=p.Binding switch
+            {ProductFunctionBinding.StartWithAutomatic or ProductFunctionBinding.FollowAutomatic=>next==ProductFunctionFanMode.Automatic,
+             ProductFunctionBinding.StartWithInternalFans or ProductFunctionBinding.FollowInternalFans=>next!=ProductFunctionFanMode.Firmware,_=>false};
+            selected=selected.With(function,linked&&p.SelectedForLinkedStart);
+        }
+        return selected;
+    }
     public static ProductFunctionFlags ApplicationStart(ProductFunctionPolicies policies)
     {
         policies.Validate();
@@ -124,7 +141,7 @@ public static class ProductFunctionCoordination
             throw new ArgumentOutOfRangeException(nameof(reason));
         // Repainting an existing mode and resuming an interrupted session must
         // never undo an independent disable that the user already requested.
-        if (previous == next || reason is ProductFunctionEntryReason.AutomaticRecovery or ProductFunctionEntryReason.SystemResume)
+        if (previous == next || reason is ProductFunctionEntryReason.AutomaticRecovery or ProductFunctionEntryReason.SystemResume or ProductFunctionEntryReason.Maintenance)
             return requested;
         foreach (var function in Enum.GetValues<ProductFunction>())
         {

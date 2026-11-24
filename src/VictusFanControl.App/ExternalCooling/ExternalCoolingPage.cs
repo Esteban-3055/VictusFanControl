@@ -103,11 +103,12 @@ internal sealed class ExternalCoolingPage : IDisposable
             case "external-copy":try{_copy(Message);Notice="Mensaje copiado.";}catch(System.Runtime.InteropServices.ExternalException){Notice="No se pudo copiar. Vuelve a intentarlo.";}break;
             case "external-save":case "external-connection":
                 Busy=true;Layout(_selected);_canvas.Invalidate();
+                ExternalCoolingSettings? candidate=null;
                 try
                 {
                     if(id=="external-connection"&&Active){await _manager.DisconnectAsync();Notice="Conexión detenida.";break;}
                     if(!int.TryParse(Port.Text,NumberStyles.None,CultureInfo.InvariantCulture,out var port))throw new ArgumentException();
-                    var settings=_saved with{Mode=Mode,Host=Host.Text.Trim(),Port=port,AutoReconnect=Reconnect,UseSimulator=Simulator};settings.Validate();
+                    var settings=_saved with{Mode=Mode,Host=Host.Text.Trim(),Port=port,AutoReconnect=Reconnect,UseSimulator=Simulator};settings.Validate();candidate=settings;
                     var key=string.IsNullOrWhiteSpace(Key.Text)?null:Key.Text;
                     if(key is not null){var raw=ExternalCoolingProtocol.ParsePairingKey(key);CryptographicOperations.ZeroMemory(raw);}
                     var connect=id=="external-connection";
@@ -116,6 +117,8 @@ internal sealed class ExternalCoolingPage : IDisposable
                     if(_disposed)return;
                     _saved=settings with{Curve=CurrentCurve?.Invoke()??settings.Curve};Restore();Notice=connect?"Preferencias guardadas; conexión solicitada.":"Preferencias guardadas. Pulsa Conectar para iniciar la comunicación.";
                 }
+                catch(ExternalConnectionAfterSaveException error)when(candidate is not null)
+                {if(!_disposed){_saved=candidate with{Curve=CurrentCurve?.Invoke()??candidate.Curve};Restore();Notice=error.Message;}}
                 catch(Exception error) when(error is IOException or UnauthorizedAccessException)
                 {if(!_disposed)Notice="No se pudieron escribir los ajustes de la base externa. "+error.Message;}
                 catch(Exception){if(!_disposed)Notice="No se pudo completar. Revisa host, puerto y clave Base64 de 32 bytes.";}

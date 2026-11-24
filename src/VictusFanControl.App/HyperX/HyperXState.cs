@@ -93,12 +93,18 @@ internal sealed class HyperXNotificationPolicy
     {
         if(s.ReceiverGeneration<receiverGeneration)return Array.Empty<HyperXNotice>();
         cfg.Validate();var output=new List<HyperXNotice>();
-        if(previousSettings!=cfg){low=critical=full=false;previousSettings=cfg;}
+        if(previousSettings is{} previous)
+        {
+            if(previous.LowEnabled!=cfg.LowEnabled||previous.LowPercent!=cfg.LowPercent||previous.FullChargeMillivolts!=cfg.FullChargeMillivolts)low=false;
+            if(previous.CriticalEnabled!=cfg.CriticalEnabled||previous.CriticalPercent!=cfg.CriticalPercent||previous.FullChargeMillivolts!=cfg.FullChargeMillivolts)critical=false;
+            if(previous.FullEnabled!=cfg.FullEnabled||previous.FullPercent!=cfg.FullPercent||previous.FullChargeMillivolts!=cfg.FullChargeMillivolts)full=false;
+        }
+        previousSettings=cfg;
         if(s.Fresh(now)&&s.Percent is{} p)
         {
             if(p>=Math.Min(100,cfg.LowPercent+5))low=false;
             if(cfg.CriticalPercent<100&&p>=Math.Min(100,cfg.CriticalPercent+5))critical=false;
-            if(p<cfg.FullPercent-5)full=false;
+            if(p<=cfg.FullPercent-5)full=false;
             if(cfg.CriticalEnabled&&p<=cfg.CriticalPercent)
             {
                 if(!critical)output.Add(new("HyperX: batería crítica",$"Carga estimada: {p} %. Conecta el cable de carga."));

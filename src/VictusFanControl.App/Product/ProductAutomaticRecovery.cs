@@ -3,6 +3,19 @@ namespace VictusFanControl.App;
 /// <summary>One recovery per exact inventory with a shared, stability-qualified episode budget.</summary>
 internal sealed class ProductAutomaticRecovery
 {
+    internal static bool PreserveIndependentFunctions(ProductRuntimeState state)=>state.PerformanceRecovery?.Pending!=true&&
+        (!state.FunctionPolicies.StopAutomaticOnPerformanceFailure||state.FunctionCoordinationExplicit&&
+            Enum.GetValues<VictusFanControl.Product.ProductFunction>().Any(f=>state.FunctionRequests.Get(f)&&
+                state.FunctionPolicies.Get(f).Binding is not(VictusFanControl.Product.ProductFunctionBinding.FollowAutomatic or VictusFanControl.Product.ProductFunctionBinding.FollowInternalFans)));
+    internal static bool KeepOwnerAfterFanPreparationFailure(ProductRuntimeState before,bool fanOnly,bool sameOwner,bool exiting,bool lifecycleInterrupted)=>
+        PreserveIndependentFunctions(before)&&fanOnly&&sameOwner&&!exiting&&!lifecycleInterrupted;
+    internal static async Task<bool> CleanupFailedFanPreparationAsync(ProductRuntimeState before,bool fanOnly,bool sameOwner,bool exiting,
+        bool lifecycleInterrupted,Func<Task> globalShutdown)
+    {
+        var keep=KeepOwnerAfterFanPreparationFailure(before,fanOnly,sameOwner,exiting,lifecycleInterrupted);
+        if(!keep)await globalShutdown().ConfigureAwait(false);
+        return keep;
+    }
     private readonly ProductRecoveryEpisode _episode;
     internal ProductAutomaticRecovery(ProductRecoveryEpisode? episode=null)=>_episode=episode??new();
     private string? _candidate;
@@ -17,6 +30,8 @@ internal sealed class ProductAutomaticRecovery
     private int _readDeferralCount;
     private long? _sessionSince;
     private bool _sessionRequested;
+    internal void DeferSessionPreparation()
+    { _sessionRequested=false;_sessionSince=null;_episode.DeferRead(); }
     // Failed release stays latched. Only a successfully opened replacement or
     // a fully qualified healthy Automatic interval permits a new session episode.
     internal void SessionOpened() { _sessionRequested = false; _sessionSince = null; _episode.ConfirmOwnerReleased();_episode.Finish(); }

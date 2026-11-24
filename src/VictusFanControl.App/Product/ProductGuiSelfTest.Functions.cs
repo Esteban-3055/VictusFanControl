@@ -17,7 +17,8 @@ internal static partial class ProductGuiSelfTest
         }
         var navigation=ProductCanvas.Navigation.Select(n=>n.Page).ToList();
         require(navigation.IndexOf(ProductPage.Functions)==navigation.IndexOf(ProductPage.Performance)+1,"Functions is not immediately below Performance.");
-        require(form.Canvas.Hits.Count(h=>h.Id.StartsWith("function-",StringComparison.Ordinal))==20,"Function actions, linkage or startup controls are absent.");
+        require(form.Canvas.Hits.Any(h=>h.Id=="function-0-rule")&&form.Canvas.Hits.Any(h=>h.Id=="function-3-select")&&
+            form.Canvas.Hits.All(h=>h.Id!="function-0-linked"),"Function summary/detail or advanced separation is missing.");
         form.HandleCommand("functions-independent");
         require(runtime.Commands==0&&form.Draft.Functions is{StopAutomaticOnPerformanceFailure:false,StopAutomaticOnCtgpFailure:false,
             ExternalOutputMode:ProductExternalOutputMode.TemperatureCurve},"Independent preset dispatched hardware or retained failure coupling.");

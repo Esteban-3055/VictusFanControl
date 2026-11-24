@@ -34,7 +34,7 @@ internal sealed class ProductAutomaticResumption
             !state.LifecycleBlocked||state.FanAuthority!="Firmware"||state.Runtime!="Healthy"||
             state.AutomaticPreparing||state.PerformanceUpdating||!state.AutomaticAuthorized)return false;
         var s=state.Snapshot;
-        if(s is null||!s.IsComplete||!s.IsFanTelemetryFreshAt(utc,3000)||s.RetainedTelemetry is not null||utc<s.Timestamp||utc-s.Timestamp>=TimeSpan.FromSeconds(3)||
+        if(state.Source is not("Ac" or "Battery")||s is null||!s.IsComplete||!s.HasFreshControlSensorsAt(utc)||!s.IsFanTelemetryFreshAt(utc,3000)||s.RetainedTelemetry is not null||utc<s.Timestamp||utc-s.Timestamp>=TimeSpan.FromSeconds(3)||
             s.CpuControlTemperatureC is not (>=0 and <=90)||s.GpuTemperatureC is not (>=0 and <=95))return false;
         if(!_episode.TryReserve(now))return false;
         _interruptedAt=now;return true;
