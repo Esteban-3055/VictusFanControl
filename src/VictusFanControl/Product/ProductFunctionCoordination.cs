@@ -23,6 +23,7 @@ public sealed record ProductFunctionPolicies
 {
     public bool StopAutomaticOnPerformanceFailure {get;init;}=true;
     public bool StopAutomaticOnCtgpFailure {get;init;}=true;
+    public bool ContinueLinkedFunctionsDuringFanRecovery {get;init;}=true;
     public ProductExternalOutputMode ExternalOutputMode {get;init;}
     public int ExternalFixedOutput {get;init;}=130;
     public ProductFunctionPolicy CpuLimits { get; init; } = new(ProductFunctionBinding.StartWithAutomatic, true);
@@ -32,7 +33,7 @@ public sealed record ProductFunctionPolicies
     public static ProductFunctionPolicies Legacy(ProductFunctionFlags selected)
     {
         ArgumentNullException.ThrowIfNull(selected);
-        return new() { CpuLimits = new(ProductFunctionBinding.StartWithAutomatic, selected.CpuLimits),
+        return new() { ContinueLinkedFunctionsDuringFanRecovery=false,CpuLimits = new(ProductFunctionBinding.StartWithAutomatic, selected.CpuLimits),
             GpuClocks = new(ProductFunctionBinding.StartWithAutomatic, selected.GpuClocks),
             Ctgp = new(ProductFunctionBinding.FollowAutomatic, selected.Ctgp),
             ExternalCooling = new(ProductFunctionBinding.FollowInternalFans, selected.ExternalCooling) };
@@ -58,7 +59,7 @@ public sealed record ProductFunctionPolicies
     public ProductFunctionPolicies Independent()
     {
         Validate();
-        var result = this with{StopAutomaticOnPerformanceFailure=false,StopAutomaticOnCtgpFailure=false,ExternalOutputMode=ProductExternalOutputMode.TemperatureCurve};
+        var result = this with{ContinueLinkedFunctionsDuringFanRecovery=true,StopAutomaticOnPerformanceFailure=false,StopAutomaticOnCtgpFailure=false,ExternalOutputMode=ProductExternalOutputMode.TemperatureCurve};
         foreach (var function in Enum.GetValues<ProductFunction>())
         {
             var policy=Get(function);
@@ -72,7 +73,7 @@ public sealed record ProductFunctionPolicies
     public ProductFunctionPolicies Unlinked()
     {
         Validate();
-        var result=this with{StopAutomaticOnPerformanceFailure=false,StopAutomaticOnCtgpFailure=false,ExternalOutputMode=ProductExternalOutputMode.TemperatureCurve};
+        var result=this with{ContinueLinkedFunctionsDuringFanRecovery=true,StopAutomaticOnPerformanceFailure=false,StopAutomaticOnCtgpFailure=false,ExternalOutputMode=ProductExternalOutputMode.TemperatureCurve};
         foreach(var function in Enum.GetValues<ProductFunction>())
             result=result.With(function,Get(function) with { Binding=ProductFunctionBinding.Independent, PreserveUnselectedOnLinkedStart=true });
         return result;
@@ -98,7 +99,8 @@ public sealed record ProductFunctionFlags(bool CpuLimits = false, bool GpuClocks
 
 /// <summary>Readiness means permission to acquire a controller, not proof it is already active.</summary>
 public sealed record ProductFunctionContext(ProductFunctionFanMode FanMode, ProductFunctionPower Power,
-    ProductFunctionFlags OwnPrerequisitesReady, bool SharedWmiReady, bool Suspended = false, bool Closing = false);
+    ProductFunctionFlags OwnPrerequisitesReady, bool SharedWmiReady, bool Suspended = false, bool Closing = false,
+    ProductFunctionFanMode? RequestedFanMode=null);
 public sealed record ProductFunctionPlan(ProductFunction Function, bool Requested, ProductFunctionWait WaitingFor)
 {
     public bool MayRequestActivation => Requested && WaitingFor == ProductFunctionWait.None;
@@ -163,6 +165,8 @@ public static class ProductFunctionCoordination
         policies.Validate(); ArgumentNullException.ThrowIfNull(requested); ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(context.OwnPrerequisitesReady);
         if (!Enum.IsDefined(context.FanMode) || !Enum.IsDefined(context.Power)) throw new ArgumentOutOfRangeException(nameof(context));
+        if(context.RequestedFanMode is{} requestedMode&&!Enum.IsDefined(requestedMode))throw new ArgumentOutOfRangeException(nameof(context));
+        var mode=policies.ContinueLinkedFunctionsDuringFanRecovery?context.RequestedFanMode??context.FanMode:context.FanMode;
         ProductFunctionWait Wait(ProductFunction function)
         {
             if (!requested.Get(function)) return ProductFunctionWait.Off;
@@ -171,8 +175,8 @@ public static class ProductFunctionCoordination
             if (function != ProductFunction.ExternalCooling && context.Power == ProductFunctionPower.Unknown) return ProductFunctionWait.PowerSource;
             if (function == ProductFunction.Ctgp && context.Power != ProductFunctionPower.Ac) return ProductFunctionWait.Ac;
             var binding = policies.Get(function).Binding;
-            if (binding == ProductFunctionBinding.FollowAutomatic && context.FanMode != ProductFunctionFanMode.Automatic) return ProductFunctionWait.Automatic;
-            if (binding == ProductFunctionBinding.FollowInternalFans && context.FanMode == ProductFunctionFanMode.Firmware) return ProductFunctionWait.InternalFans;
+            if (binding == ProductFunctionBinding.FollowAutomatic && mode != ProductFunctionFanMode.Automatic) return ProductFunctionWait.Automatic;
+            if (binding == ProductFunctionBinding.FollowInternalFans && mode == ProductFunctionFanMode.Firmware) return ProductFunctionWait.InternalFans;
             if (function == ProductFunction.Ctgp && !context.SharedWmiReady) return ProductFunctionWait.SharedWmi;
             return context.OwnPrerequisitesReady.Get(function) ? ProductFunctionWait.None : ProductFunctionWait.OwnController;
         }

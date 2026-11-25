@@ -26,6 +26,7 @@ internal static partial class ProductRuntimePerformanceSelfTest
         internal bool RefuseLaunch;
         internal bool RejectRetainedJournals;
         internal string? Report;
+        internal string? FixtureEntryOverride;
         private static PerformanceRecoveryPreview Inventory()=>new(false,"Isolated repair inventory.");
         internal RepairFixture(ProductProfiles p,bool wmi=false)
         {
@@ -34,7 +35,7 @@ internal static partial class ProductRuntimePerformanceSelfTest
                 Require(start.ArgumentList[0]=="--gui-session","Unexpected helper entry.");
                 Launches++;
                 if(RefuseLaunch)throw new IOException("Fixture launch refused before child creation.");
-                start.ArgumentList[0]="--gui-fixture-session";
+                start.ArgumentList[0]=FixtureEntryOverride??"--gui-fixture-session";
                 Report=start.ArgumentList[start.ArgumentList.IndexOf("--report")+1];return Process.Start(start);
             },Inventory);
             if(wmi){Raw=new(fixture:true);Shared=new(Raw,Source);}
@@ -177,7 +178,7 @@ internal static partial class ProductRuntimePerformanceSelfTest
         recovery.DeferSessionPreparation();
         Require(!episode.Uncertain&&episode.Attempts==0&&!recovery.TakeSessionRequest(degraded,10001)&&recovery.TakeSessionRequest(degraded,20001),
             "Waiting for retained status consumed an attempt or latched native uncertainty before doing work.");
-        Require(!ProductAutomaticRecovery.PreserveIndependentFunctions(degraded with{FunctionPolicies=new(),FunctionCoordinationExplicit=false}),"Legacy coupled recovery policy changed.");
+        Require(!ProductAutomaticRecovery.PreserveIndependentFunctions(degraded with{FunctionPolicies=ProductFunctionPolicies.Legacy(new()),FunctionCoordinationExplicit=false}),"Explicit legacy coupled recovery policy changed.");
         await f.ReplaceFans(p);
         Require(f.Client.LastStatus!.CpuSession==id&&f.Client.LimitsActive&&f.Launches==1,"B04 fan recovery released independent CPU ownership.");
         QualifyStartup(f.Runtime.State,false);
@@ -188,6 +189,7 @@ internal static partial class ProductRuntimePerformanceSelfTest
         var p=new ProductProfiles{CpuEnabled=false,GpuEnabled=false};await using var legacy=new RepairFixture(p);
         var projectionSample=Sample();
         ProductRuntimeState Projection()=>legacy.Runtime.State with{Runtime="Healthy",FanMode="Manual",FanAuthority="Custom",ManualAuthorized=true,
+            RequestedFanMode=ProductFunctionFanMode.Manual,
             ManualAppliedLevel=30,FanLevel=30,CommandedCpuLevel=30,CommandedGpuLevel=30,Snapshot=projectionSample};
         var export=new TelemetryExportService(Projection,new MatrixMemory());
         Require(export.Capture(DateTimeOffset.UtcNow).SolicitudValida,"Legacy fixture has no fan evidence.");

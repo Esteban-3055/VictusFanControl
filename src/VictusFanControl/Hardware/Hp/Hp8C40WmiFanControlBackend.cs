@@ -150,9 +150,12 @@ internal sealed class Hp8C40WmiFanControlBackend : IFanControlBackend, IFanContr
             return;
         if(_sharedGuardian)
         {
-            if(_reentryBlocked)throw new IOException("La liberación WMI compartida requiere recuperación antes de reintentar.");
             _releaseInProgress=true;
-            try{ReleaseEvidence=await _guardian.ReleaseAsync(token).ConfigureAwait(false);CompleteRelease();}
+            try
+            {
+                ReleaseEvidence=await (_reentryBlocked?_guardian.ConfirmCompletedReleaseAsync(token):_guardian.ReleaseAsync(token)).ConfigureAwait(false);
+                CompleteRelease();
+            }
             catch{_releaseInProgress=false;_reentryBlocked=true;throw;}
             return;
         }

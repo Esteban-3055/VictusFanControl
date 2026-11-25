@@ -65,6 +65,8 @@ internal sealed record ProductRuntimeState
     internal ProductFunctionFlags FunctionFaults {get;init;}=new();
     internal ProductFunctionPolicies FunctionPolicies {get;init;}=new();
     internal bool FunctionCoordinationExplicit {get;init;}
+    internal ProductFunctionFanMode? RequestedFanMode {get;init;}
+    internal IReadOnlyList<ProductFunctionRetryState>? FunctionRetries {get;init;}
     internal bool MaintenanceActive {get;init;}
     internal bool SharedWmiRecoveryPending {get;init;}
     internal string GuardianState { get; init; } = "Sin sesión";
@@ -159,6 +161,7 @@ internal sealed partial class ProductRuntime : IProductRuntime, IProductRecovery
     private ProductFunctionPolicies _functionPolicies;
     private ProductFunctionFlags _functionRequests;
     private ProductFunctionFlags _functionFaults=new();
+    private ProductFunctionFanMode _functionFanMode;
     private bool _functionCoordinationExplicit;
     private ProductProfiles _latestFunctionProfiles;
     private bool _maintenanceActive;
@@ -249,6 +252,9 @@ internal sealed partial class ProductRuntime : IProductRuntime, IProductRecovery
         _latestFunctionProfiles=retainedOwner?._latestFunctionProfiles??ProductProfilesStore.Freeze(profiles);
         _functionRequests=releasedRuntime?._functionRequests??ProductFunctionCoordination.ApplicationStart(_functionPolicies);
         _functionFaults=retainedOwner?._functionFaults??new();
+        _functionFanMode=retainedOwner?._functionFanMode??ProductFunctionFanMode.Firmware;
+        if(retainedOwner is not null){_functionRetries=retainedOwner._functionRetries;FunctionRecoveryClock=retainedOwner.FunctionRecoveryClock;}
+        if(automaticReview.HasValue)_functionPolicies=_functionPolicies with{ContinueLinkedFunctionsDuringFanRecovery=false,StopAutomaticOnPerformanceFailure=true,StopAutomaticOnCtgpFailure=true};
         if(retainedOwner is not null&&retainedOwner._target!=_target)throw new IOException("La identidad cambió antes de transferir los controles.");
         if (automaticReview.HasValue)
         {
@@ -328,7 +334,8 @@ internal sealed partial class ProductRuntime : IProductRuntime, IProductRecovery
         _performanceLifetime.Changed+=PerformanceChanged;
         if(_wmiLifetime is not null)
         {
-            _wmiLifetime.KeepCtgpAfterFanRelease=_functionPolicies.Ctgp.Binding is not(ProductFunctionBinding.FollowAutomatic or ProductFunctionBinding.FollowInternalFans);
+            UpdateWmiBinding();
+            _wmiLifetime.CanRestartAfterFailure=()=>!_closing&&!_maintenanceActive&&!_performanceLifecycleBlocked&&_fans.Authority==FanAuthority.Firmware;
             _wmiLifetime.Changed+=WmiChanged;
         }
     }
@@ -557,6 +564,8 @@ internal sealed partial class ProductRuntime : IProductRuntime, IProductRecovery
     {
         profiles.Validate();
         if(reason==ProductFunctionEntryReason.Maintenance)_maintenanceActive=true;
+        if(mode==AdaptiveFanProductionMode.Firmware&&reason is ProductFunctionEntryReason.User or ProductFunctionEntryReason.ApplicationStartup)
+            _functionFanMode=ProductFunctionFanMode.Firmware;
         if(!_functionCoordinationExplicit&&profiles.Functions is null)_functionPolicies=profiles.FunctionPolicies();
         var linked=ProductFunctionCoordination.LinkedStarts(_functionPolicies,(ProductFunctionFanMode)_controller.Mode,(ProductFunctionFanMode)mode,reason);
         var requests=UpdateFunctionRequests(current=>ProductFunctionCoordination.EnterFanMode(_functionPolicies,current,
@@ -583,7 +592,10 @@ internal sealed partial class ProductRuntime : IProductRuntime, IProductRecovery
             return FanCommandAsync(async()=>{await SetFanModeAsync(mode);if(!_maintenanceActive)await ReconcileCtgpAsync();});
         return CommandAsync(()=>FanCommandAsync(async()=>
         {_functionFaults=_functionFaults with{CpuLimits=_functionFaults.CpuLimits&&!linked.CpuLimits,GpuClocks=_functionFaults.GpuClocks&&!linked.GpuClocks};
-            await SetFanModeAsync(mode);if(!_maintenanceActive)await ReconcileCtgpAsync();}));
+            if(linked.CpuLimits)Retry(ProductFunction.CpuLimits).Cancel();if(linked.GpuClocks)Retry(ProductFunction.GpuClocks).Cancel();
+            await SetFanModeAsync(mode);
+            if(reason is ProductFunctionEntryReason.User or ProductFunctionEntryReason.ApplicationStartup)_functionFanMode=(ProductFunctionFanMode)mode;
+            if(!_maintenanceActive)await ReconcileCtgpAsync();}));
     }
     internal Task SetExperimentalStageAsync(VictusFanControl.PlatformThermalReplay.ExperimentStage stage) =>
         throw new NotSupportedException("La prueba física TZ01/DTT3 se ha retirado del producto.");
@@ -605,6 +617,7 @@ internal sealed partial class ProductRuntime : IProductRuntime, IProductRecovery
         return CommandAsync(async () =>
         {
             if(linked is not null)_functionFaults=_functionFaults with{CpuLimits=_functionFaults.CpuLimits&&!linked.CpuLimits,GpuClocks=_functionFaults.GpuClocks&&!linked.GpuClocks};
+            if(linked?.CpuLimits==true)Retry(ProductFunction.CpuLimits).Cancel();if(linked?.GpuClocks==true)Retry(ProductFunction.GpuClocks).Cancel();
             try
             {
                 await _automaticActivation.RunAsync(ticket,
@@ -654,6 +667,7 @@ internal sealed partial class ProductRuntime : IProductRuntime, IProductRecovery
                         _activeAutomaticTicket = ticket;
                         _automaticProfiles = ProductProfilesStore.Copy(ticket.Profiles); _sourceTransition.Reset();
                         await SetFanModeAsync(AdaptiveFanProductionMode.Automatic);
+                        _functionFanMode=ProductFunctionFanMode.Automatic;
                         try { await ReconcileAutomaticCtgpAsync(); }
                         catch { await SetFanModeAsync(AdaptiveFanProductionMode.Firmware);throw; }
                         if (!_automaticActivation.IsCurrent(ticket))
@@ -881,9 +895,12 @@ internal sealed partial class ProductRuntime : IProductRuntime, IProductRecovery
         if(!PerformancePhaseReady(_performance.AppliedConfiguration,profiles.PerformanceConfiguration()))
         {Publish("Solicitud conservada; esperando validación posterior a la reanudación.");return;}
         _functionFaults=_functionFaults with{CpuLimits=false,GpuClocks=false};
-        try{await ApplyPerformanceConfigurationAsync(profiles.PerformanceConfiguration() with
-            {CpuEnabled=profiles.CpuEnabled&&FollowsCurrentMode(ProductFunction.CpuLimits),GpuEnabled=profiles.GpuEnabled&&FollowsCurrentMode(ProductFunction.GpuClocks)});}
-        catch{_functionFaults=_functionFaults with{CpuLimits=profiles.CpuEnabled,GpuClocks=profiles.GpuEnabled};throw;}
+        Retry(ProductFunction.CpuLimits).Cancel();Retry(ProductFunction.GpuClocks).Cancel();
+        var before=_performance.AppliedConfiguration;
+        var requested=profiles.PerformanceConfiguration() with
+            {CpuEnabled=profiles.CpuEnabled&&FollowsCurrentMode(ProductFunction.CpuLimits),GpuEnabled=profiles.GpuEnabled&&FollowsCurrentMode(ProductFunction.GpuClocks)};
+        try{await ApplyPerformanceConfigurationAsync(requested);}
+        catch(Exception error){RecordRequestedPerformanceFailures(before,requested,error);throw;}
         finally{Publish();}
     });
     private async Task ApplyPerformanceConfigurationAsync(PerformanceGuiSessionConfiguration configuration)
@@ -1004,6 +1021,7 @@ internal sealed partial class ProductRuntime : IProductRuntime, IProductRecovery
     public Task ReleasePerformanceAsync()=>CommandAsync(async()=>
     {
         UpdateFunctionRequests(current=>current with{CpuLimits=false,GpuClocks=false});
+        Retry(ProductFunction.CpuLimits).Cancel();Retry(ProductFunction.GpuClocks).Cancel();
         if(!_performance.HasProcess){Publish("Solicitudes CPU/GPU canceladas; no había un controlador activo.");return;}
         await ReleasePerformanceDomainsAsync(true,true);
         Publish("Límites CPU/GPU desactivados. Se conserva el modo de ventiladores.");
@@ -1013,6 +1031,7 @@ internal sealed partial class ProductRuntime : IProductRuntime, IProductRecovery
         var function=cpu?ProductFunction.CpuLimits:ProductFunction.GpuClocks;
         if(enabled)profiles.Validate();
         UpdateFunctionRequests(current=>current.With(function,enabled));_functionFaults=_functionFaults.With(function,false);
+        Retry(function).Cancel();
         if(!enabled){await ReleasePerformanceDomainsAsync(cpu,!cpu);return;}
         var requestedValues=profiles.PerformanceConfiguration();
         var pendingValues=_latestFunctionProfiles.PerformanceConfiguration();
@@ -1031,7 +1050,7 @@ internal sealed partial class ProductRuntime : IProductRuntime, IProductRecovery
         if(!PerformancePhaseReady(_performance.AppliedConfiguration,next)||_powerSource.Read().Source is not(PerformancePowerSourceKind.Ac or PerformancePowerSourceKind.Battery)||
             !ProductPerformanceUpdate.HasIndependentTelemetry(_snapshot,DateTimeOffset.UtcNow,_performance.AppliedConfiguration,next))
         {Publish("Solicitud conservada; esperando la fuente y los sensores propios de la función.");return;}
-        try{await ApplyPerformanceConfigurationAsync(next);}catch{_functionFaults=_functionFaults.With(function,true);throw;}
+        try{await ApplyPerformanceConfigurationAsync(next);}catch(Exception error){RecordFunctionFailure(function,error);throw;}
         if(cpu?_performance.LastStatus?.CpuState!="Active":_performance.LastStatus?.GpuState!="ActiveUnverified")
             throw new InvalidOperationException("El dominio solicitado no confirmó actividad; libera o recupera su sesión antes de reactivarlo.");
     });
@@ -1054,6 +1073,9 @@ internal sealed partial class ProductRuntime : IProductRuntime, IProductRecovery
         }
         catch(Exception error)
         {
+            foreach(var function in new[]{ProductFunction.CpuLimits,ProductFunction.GpuClocks})
+                if(function==ProductFunction.CpuLimits?cpu:gpu)
+                {RecordFunctionFailure(function,error);Retry(function).WaitForConfirmation("La retirada de esta función requiere confirmación: "+error.Message);}
             await FanCommandAsync(()=>InterruptForPerformanceFailureAsync(error));
             throw;
         }
@@ -1071,11 +1093,13 @@ internal sealed partial class ProductRuntime : IProductRuntime, IProductRecovery
         Publish("Cambio incompleto; revisa la confirmación de cada dominio. Los registros se conservan.",error.Message);
     }
     private void UpdateWmiBinding()
-    {if(_wmiLifetime is not null)_wmiLifetime.KeepCtgpAfterFanRelease=_functionPolicies.Ctgp.Binding is not(ProductFunctionBinding.FollowAutomatic or ProductFunctionBinding.FollowInternalFans);}
+    {if(_wmiLifetime is not null)_wmiLifetime.KeepCtgpAfterFanRelease=_functionPolicies.ContinueLinkedFunctionsDuringFanRecovery||_functionPolicies.Ctgp.Binding is not(ProductFunctionBinding.FollowAutomatic or ProductFunctionBinding.FollowInternalFans);}
+    private ProductFunctionFanMode FunctionFanMode=>_functionPolicies.ContinueLinkedFunctionsDuringFanRecovery?_functionFanMode:
+        _lifecycleBlocked?ProductFunctionFanMode.Firmware:(ProductFunctionFanMode)_controller.Mode;
     private bool FollowsCurrentMode(ProductFunction function)=>_functionPolicies.Get(function).Binding switch
     {
-        ProductFunctionBinding.FollowAutomatic=>_controller.Mode==AdaptiveFanProductionMode.Automatic&&!_lifecycleBlocked,
-        ProductFunctionBinding.FollowInternalFans=>_controller.Mode!=AdaptiveFanProductionMode.Firmware&&!_lifecycleBlocked,
+        ProductFunctionBinding.FollowAutomatic=>FunctionFanMode==ProductFunctionFanMode.Automatic,
+        ProductFunctionBinding.FollowInternalFans=>FunctionFanMode!=ProductFunctionFanMode.Firmware,
         _=>true
     };
     public Task ConfigureFunctionsAsync(ProductFunctionPolicies policies)=>CommandAsync(async()=>
@@ -1106,7 +1130,7 @@ internal sealed partial class ProductRuntime : IProductRuntime, IProductRecovery
         UpdateFunctionRequests(current=>current with{Ctgp=enabled});
         if(!enabled&&_wmiLifetime is not null)await _wmiLifetime.SetCtgpAsync(false,false,_lifetime.Token);
         await ReconcileCtgpAsync();
-        if(!enabled&&_fanGuardian?.Ctgp is{Active:false,Managed:false,Failure:null})_ctgpFaulted=false;
+        if(!enabled&&(_fanGuardian?.Ctgp is{Active:false,Managed:false,Failure:null}||_fanGuardian?.HasCompletedRelease==true))_ctgpFaulted=false;
         Publish();
     });
     private async Task ReconcileCtgpAsync()
@@ -1125,7 +1149,8 @@ internal sealed partial class ProductRuntime : IProductRuntime, IProductRecovery
     {
         try{await ReconcileCtgpAsync();}
         catch(Exception error)when(!_functionPolicies.StopAutomaticOnCtgpFailure&&!SharedWmiUncertain)
-        { _ctgpFaulted=true;Publish("cTGP requiere revisión; se conserva Automático y los controles independientes.",error.Message); }
+        { _ctgpFaulted=CaptureCtgpFault(_ctgpFaulted,_fanGuardian?.Ctgp,_wmi?.ReleaseEvidence)||_wmiLifetime?.CtgpFaulted==true;
+            Publish("cTGP requiere revisión; se conserva Automático y los controles independientes.",error.Message); }
     }
     private async Task ReconcileFunctionsAsync()
     {
@@ -1145,6 +1170,12 @@ internal sealed partial class ProductRuntime : IProductRuntime, IProductRecovery
                     var function=cpu?ProductFunction.CpuLimits:ProductFunction.GpuClocks;
                     var wanted=_functionRequests.Get(function);var eligible=FollowsCurrentMode(function);
                     var applied=cpu?_performance.AppliedConfiguration?.CpuEnabled==true:_performance.AppliedConfiguration?.GpuEnabled==true;
+                    ObservePerformanceFunctionFailure(function,applied);
+                    Retry(function).ObserveHealthy(FunctionRecoveryClock(),wanted&&applied&&!_functionFaults.Get(function)&&_performance.LastStatusFresh&&
+                        (cpu?_performance.LastStatus?.CpuState=="Active":_performance.LastStatus?.GpuState=="ActiveUnverified"));
+                    if(wanted&&eligible&&_functionFaults.Get(function)&&!_performanceLifecycleBlocked)
+                    {await TryRecoverPerformanceFunctionAsync(cpu);continue;}
+                    if((!wanted||!eligible)&&Retry(function).State.NeedsConfirmation)continue;
                     if(applied&&(!wanted||!eligible))
                     {
                         await ReleasePerformanceDomainsAsync(cpu,!cpu,clearRequest:false);
@@ -1159,7 +1190,8 @@ internal sealed partial class ProductRuntime : IProductRuntime, IProductRecovery
                         if(PerformancePhaseReady(_performance.AppliedConfiguration,candidate)&&(!_performance.HasProcess||_performance.SessionAvailable)&&_powerSource.Read().Source is PerformancePowerSourceKind.Ac or PerformancePowerSourceKind.Battery&&
                             ProductPerformanceUpdate.HasIndependentTelemetry(_snapshot,DateTimeOffset.UtcNow,_performance.AppliedConfiguration,candidate))
                         {
-                            try{await ApplyPerformanceConfigurationAsync(candidate);}catch{_functionFaults=_functionFaults.With(function,true);throw;}
+                            try{await ApplyPerformanceConfigurationAsync(candidate);Retry(function).Succeeded(FunctionRecoveryClock());}
+                            catch(Exception error){RecordFunctionFailure(function,error);Publish("Una función espera recuperación; las demás continúan.",error.Message);}
                         }
                     }
                 }
@@ -1321,7 +1353,7 @@ internal sealed partial class ProductRuntime : IProductRuntime, IProductRecovery
                 PerformanceUpdating = _performanceUpdating,
                 PlatformRetention = null,
                 CpuState = p?.CpuState ?? (_performance.HasProcess || recovery?.Pending==true ? "Recovering" : "Disabled"), GpuState = p?.GpuState ?? (_performance.HasProcess || recovery?.Pending==true ? "Recovering" : "Disabled"),
-                CtgpState = _wmiLifetime is null&&_functionRequests.Ctgp?"Unsupported":CtgpPresentationState(_ctgpFaulted,_wmi?.ReleaseEvidence?.GuardianLeaseRetired==true,_controller.Mode,_ctgpRequested,source,ctgp,
+                CtgpState = _wmiLifetime?.RecoveryState.Pending==true?"Recovering":_wmiLifetime is null&&_functionRequests.Ctgp?"Unsupported":CtgpPresentationState(_ctgpFaulted,_wmi?.ReleaseEvidence?.GuardianLeaseRetired==true,_controller.Mode,_ctgpRequested,source,ctgp,
                     _wmiLifetime?.KeepCtgpAfterFanRelease==true||_functionPolicies.Ctgp.Binding==ProductFunctionBinding.FollowInternalFans&&_controller.Mode==AdaptiveFanProductionMode.Manual),
                 CtgpFailure = ctgp?.Failure ?? (_ctgpFaulted ? _wmi?.ReleaseEvidence?.SupervisionCtgp?.Failure : null),
                 CtgpObservation = ctgp, FanGuardianSessionDirectory = _fanGuardian?.SessionDirectory,
@@ -1329,6 +1361,8 @@ internal sealed partial class ProductRuntime : IProductRuntime, IProductRecovery
                 CtgpFaulted = _ctgpFaulted,
                 CtgpIndependent=!_functionPolicies.StopAutomaticOnCtgpFailure,
                 FunctionRequests=_functionRequests,FunctionFaults=_functionFaults,FunctionPolicies=_functionPolicies,FunctionCoordinationExplicit=_functionCoordinationExplicit,
+                RequestedFanMode=_functionFanMode,
+                FunctionRetries=Array.AsReadOnly(_functionRetries.Select((r,i)=>i==(int)ProductFunction.Ctgp&&_wmiLifetime is not null?_wmiLifetime.RecoveryState:r.State).ToArray()),
                 MaintenanceActive=_maintenanceActive,
                 SharedWmiRecoveryPending=_fanGuardian is not null&&File.Exists(Path.Combine(_fanGuardian.SessionDirectory,"native-uncertain.signal")),
                 CpuStatus = p?.CpuStatus, GpuStatus = p?.GpuStatus, AppliedPerformanceSource = p?.PowerSource ?? "Unknown", AppliedPerformance = _performance.AppliedConfiguration ?? (p is { CpuState: "Active" } or { GpuState: "ActiveUnverified" } ? _requestedPerformance : null),

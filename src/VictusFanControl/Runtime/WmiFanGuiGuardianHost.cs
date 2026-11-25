@@ -190,7 +190,7 @@ internal static class WmiFanGuiGuardianHost
                         {ctgp.DeferActivation(ex);PublishCtgp();}
                         catch (Exception ex)
                         {
-                            ctgp.Fail(ex); PublishCtgp();
+                            ctgp.Fail(ex,"Apply"); PublishCtgp();
                             // A refused qualification has not acquired cTGP. Only
                             // owned or uncertain native work closes the shared resource.
                             if(ctgp.NeedsRestore||File.Exists(Path.Combine(directory,"native-inflight.json"))||
@@ -237,7 +237,7 @@ internal static class WmiFanGuiGuardianHost
                             !ctgp.Status.FreshAt(DateTimeOffset.UtcNow) || clock.Elapsed - lastCtgpConfirmation >= CtgpStatus.ConfirmationLifetime)
                         {
                             var expired = new CtgpObservationUnavailableException(ex);
-                            ctgp.Fail(expired); PublishCtgp();
+                            ctgp.Fail(expired,"Observe"); PublishCtgp();
                             reason = "CTGP_OBSERVATION_UNAVAILABLE";
                             throw expired;
                         }
@@ -246,7 +246,7 @@ internal static class WmiFanGuiGuardianHost
                         observationDeferred = true;
                         PublishCtgp();
                     }
-                    catch (Exception ex) { ctgp.Fail(ex); PublishCtgp(); throw; }
+                    catch (Exception ex) { ctgp.Fail(ex,"Observe"); PublishCtgp(); throw; }
                     // Slow successful work consumes the interval. Do not append a
                     // second full idle interval to an already old observation.
                     nextCtgpObservation = observationDeferred ? clock.Elapsed + TimeSpan.FromMilliseconds(250) :
@@ -279,7 +279,7 @@ internal static class WmiFanGuiGuardianHost
                         mutexName: fixture ? WmiFanExperimentBoundary.FixtureNativeMutexName(directory) : null);
                     Exception? ctgpFailure = null;
                     try { ctgp.Restore(); }
-                    catch (Exception ex) { ctgp.Fail(ex); ctgpFailure = ex; }
+                    catch (Exception ex) { ctgp.Fail(ex,"Restore"); ctgpFailure = ex; }
                     if (File.Exists(Path.Combine(directory, "write-intent.json")))
                     {
                         var recovery = new WmiFanSession(r =>

@@ -206,7 +206,7 @@ internal sealed class PerformanceGuardianClient
     }
     internal bool StillOwns(PerformanceRetainedSession receipt)
     {
-        if(receipt.GuardianPid==0)return !HasProcess&&receipt.Configuration is null;
+        if(receipt.GuardianPid==0)return !HasProcess&&receipt==new PerformanceRetainedSession(0,0,0,0,Guid.Empty,null,null,null);
         try
         {
             return receipt.OwnerPid==_ownerPid&&receipt.OwnerStart==_ownerStart&&receipt.Nonce==_nonce&&

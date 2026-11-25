@@ -62,7 +62,7 @@ internal static partial class ProductRuntimePerformanceSelfTest
         },Inventory);
         var worker=new TelemetryWorker("fixture://modules",_=>ValueTask.FromResult(Sample()));
         worker.StateMachine.Transition(SystemState.Healthy,"Isolated fresh acquisitions.");
-        var backend=new Backend();var original=new ProductProfiles();
+        var backend=new Backend();var original=new ProductProfiles{Functions=ProductFunctionPolicies.Legacy(new(true,true,false,false))};
         var runtime=new ProductRuntime("fixture://modules",original,dependencies:new(Hardware(),backend,worker,client,new Source(),Inventory));
         try
         {

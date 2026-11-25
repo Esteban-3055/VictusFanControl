@@ -4,7 +4,8 @@ namespace VictusFanControl.App;
 internal sealed class ProductAutomaticRecovery
 {
     internal static bool PreserveIndependentFunctions(ProductRuntimeState state)=>state.PerformanceRecovery?.Pending!=true&&
-        (!state.FunctionPolicies.StopAutomaticOnPerformanceFailure||state.FunctionCoordinationExplicit&&
+        (!state.FunctionPolicies.StopAutomaticOnPerformanceFailure||state.FunctionPolicies.ContinueLinkedFunctionsDuringFanRecovery&&
+            state.FunctionRequests!=new VictusFanControl.Product.ProductFunctionFlags()||state.FunctionCoordinationExplicit&&
             Enum.GetValues<VictusFanControl.Product.ProductFunction>().Any(f=>state.FunctionRequests.Get(f)&&
                 state.FunctionPolicies.Get(f).Binding is not(VictusFanControl.Product.ProductFunctionBinding.FollowAutomatic or VictusFanControl.Product.ProductFunctionBinding.FollowInternalFans)));
     internal static bool KeepOwnerAfterFanPreparationFailure(ProductRuntimeState before,bool fanOnly,bool sameOwner,bool exiting,bool lifecycleInterrupted)=>

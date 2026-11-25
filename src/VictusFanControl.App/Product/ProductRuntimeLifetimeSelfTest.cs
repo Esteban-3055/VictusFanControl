@@ -28,6 +28,9 @@ internal static partial class ProductRuntimePerformanceSelfTest
         internal PerformanceRetainedJournals Journals()=>new(AlterJournal?Guid.NewGuid():Client.LastStatus?.CpuSession,Client.LastStatus?.GpuSession);
         internal ProductRuntime Create(ProductProfiles profiles,ProductRuntime? previous=null,Backend? backend=null)
         {
+            // This suite deliberately acquires an owner even with an empty
+            // selection to test its lifetime. Default fault isolation is tested separately.
+            profiles=profiles with{Functions=ProductFunctionPolicies.Legacy(new(profiles.CpuEnabled,profiles.GpuEnabled,profiles.CtgpEnabled,false))};
             var worker=new TelemetryWorker("fixture://lifetime",_=>ValueTask.FromResult(Sample()));
             worker.StateMachine.Transition(SystemState.Healthy,"Fresh lifetime fixture.");
             return new("fixture://lifetime",profiles,dependencies:new(Hardware(),backend??Backend,worker,Client,new Source(),Inventory,Journals),

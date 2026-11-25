@@ -79,6 +79,8 @@ internal static class Program
         {Environment.ExitCode=ProductRuntimePerformanceSelfTest.RunIndependentChecksAsync().GetAwaiter().GetResult();return;}
         if(args.SequenceEqual(new[]{"--independent-repairs-self-test"}))
         {Environment.ExitCode=ProductRuntimePerformanceSelfTest.RunRepairChecksAsync().GetAwaiter().GetResult();return;}
+        if(args.SequenceEqual(new[]{"--local-recovery-self-test"}))
+        {Environment.ExitCode=ProductRuntimePerformanceSelfTest.RunLocalRecoveryChecksAsync().GetAwaiter().GetResult();return;}
         if(args.SequenceEqual(new[]{"--function-rules-self-test"}))
         {Environment.ExitCode=ProductFunctionRuleEditingSelfTest.RunAsync().GetAwaiter().GetResult();return;}
         if(args.SequenceEqual(new[]{"--functions-ui-preview"}))

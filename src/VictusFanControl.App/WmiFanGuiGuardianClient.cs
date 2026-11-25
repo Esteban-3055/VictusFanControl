@@ -17,7 +17,13 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
     private bool _released;
     private Guid _fanSession=Guid.NewGuid();
     private bool _fanSessionEntered,_fanDomainReleased;
+    private FanWmiReleaseEvidence? _completedRelease;
+    private readonly object _releaseCompletionSync=new();
     internal bool HasChild=>_child is not null;
+    internal bool ChildExited=>_child?.HasExited==true;
+    internal bool HasCompletedRelease=>_child is null&&_completedRelease?.GuardianLeaseRetired==true;
+    internal FanWmiReleaseEvidence? CompletedRelease=>HasCompletedRelease?_completedRelease:null;
+    internal bool RearmFixtureAfterCompletion {get;set;}
     internal bool Fixture=>_fixture;
     internal VictusFanControl.Recovery.ProductRecoveryRecord? RetainedFanLease(string? fixtureLease=null,string? fixtureCommon=null)
     {
@@ -188,7 +194,7 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
         foreach (var arg in new[] { _fixture ? "--fan-wmi-fixture-session" : "--fan-wmi-session",
             "--session-dir", SessionDirectory, "--owner-pid", _ownerPid.ToString(), "--owner-start", _ownerStart.ToString() })
             start.ArgumentList.Add(arg);
-        _fanSessionEntered=false;_fanDomainReleased=false;
+        _fanSessionEntered=false;_fanDomainReleased=false;_completedRelease=null;
         _child = Process.Start(start) ?? throw new IOException("Could not start WMI fan guardian.");
         _child.ErrorDataReceived += (_, e) => { if (e.Data is not null) AppLog.Write("WMI fan guardian: " + e.Data); };
         _child.OutputDataReceived += (_, e) => { if (e.Data is not null) AppLog.Write("WMI fan guardian: " + e.Data); };
@@ -247,6 +253,8 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
         await _ctgpCommands.WaitAsync(token).ConfigureAwait(false);
         try
         {
+            if(ChildExited||_child is null&&_completedRelease is not null)
+                return await ConfirmCompletedReleaseAsync(token).ConfigureAwait(false);
             EnsureAlive();
             var directory=SessionDirectory;var hadIntent=File.Exists(Path.Combine(directory,"write-intent.json"));
             if(!_fixture)
@@ -292,32 +300,61 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
 
     public async Task<FanWmiReleaseEvidence> ReleaseAsync(CancellationToken token)
     {
-        _released = true;
-        var releasedDirectory = SessionDirectory;
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
+        deadline.CancelAfter(TimeSpan.FromSeconds(20));
+        Process releasedChild;Task completion;string releasedDirectory;
+        lock(_releaseCompletionSync)
+        {
+        token.ThrowIfCancellationRequested();
+        if(_child is null&&_completedRelease is not null)return ReadCompletedRelease();
+        _released=true;
+        releasedDirectory = SessionDirectory;
+        if(_child is null)
+            return new(false,false,!File.Exists(LeasePath),false,Path.Combine(releasedDirectory,"guardian-report.json"),"NO_SESSION");
+        releasedChild=_child;
+        // Register before another completion observer can dispose this handle.
+        completion=releasedChild.WaitForExitAsync(deadline.Token);
+        }
         var releasedReportPath = Path.Combine(releasedDirectory, "guardian-report.json");
         var releasedLeasePath = _fixture
             ? Path.Combine(releasedDirectory, "fixture-lease.json")
             : WmiFanGuiGuardianHost.LeasePath;
 
-        if (_child is null)
-            return new(false, false, !File.Exists(releasedLeasePath), false, releasedReportPath, "NO_SESSION");
-
         if (_fixture) WmiFanGuiGuardianHost.RequestStop(releasedDirectory, "CLIENT_RELEASE");
         else await Task.Run(() => WmiFanExperimentBoundary.PrepareGuiReleaseStop(releasedDirectory, TimeSpan.FromSeconds(10))).ConfigureAwait(false);
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token);
-        deadline.CancelAfter(TimeSpan.FromSeconds(20));
-        await _child.WaitForExitAsync(deadline.Token).ConfigureAwait(false);
-        return CompleteRelease(releasedDirectory, releasedReportPath, releasedLeasePath);
+        await completion.ConfigureAwait(false);
+        lock(_releaseCompletionSync)
+        {
+            if(_child is null&&_completedRelease is{} cached&&string.Equals(cached.ReportPath,releasedReportPath,StringComparison.OrdinalIgnoreCase))
+                return ReadCompletedRelease();
+            if(!ReferenceEquals(_child,releasedChild))throw new IOException("La sesión WMI cambió durante la confirmación del cierre.");
+            return CompleteRelease(releasedDirectory, releasedReportPath, releasedLeasePath);
+        }
+    }
+
+    private FanWmiReleaseEvidence ReadCompletedRelease()
+    {
+        var completed=_completedRelease??throw new IOException("No hay cierre WMI confirmado.");
+        var old=Path.GetDirectoryName(completed.ReportPath)!;
+        if(new[]{old,SessionDirectory}.Distinct(StringComparer.OrdinalIgnoreCase).Any(directory=>
+            File.Exists(Path.Combine(directory,"native-inflight.json"))||File.Exists(Path.Combine(directory,"native-uncertain.signal"))))
+            throw new IOException("La evidencia nativa cambió después del cierre; se conserva el bloqueo.");
+        return completed;
     }
 
     public Task<FanWmiReleaseEvidence> ConfirmCompletedReleaseAsync(CancellationToken token)
     {
+        lock(_releaseCompletionSync)
+        {
         token.ThrowIfCancellationRequested();
+        if(_child is null&&_completedRelease is not null)
+            return Task.FromResult(ReadCompletedRelease());
         // Keep the actual Process handle: PID absence or a report alone cannot
         // establish completion. This path never signals stop or dispatches WMI.
         if (_child is null || !_child.HasExited)
             throw new IOException("WMI guardian completion is not confirmed; release remains blocked.");
         return Task.FromResult(CompleteRelease(SessionDirectory, ReportPath, LeasePath));
+        }
     }
 
     private FanWmiReleaseEvidence CompleteRelease(string releasedDirectory, string releasedReportPath, string releasedLeasePath)
@@ -389,10 +426,16 @@ internal sealed class WmiFanGuiGuardianClient : IWmiFanGuiGuardian
         else
         {
             lock (_ctgpPublication) { _lastCtgpStatus = null; _ctgpReadFailure = null; }
+            if(RearmFixtureAfterCompletion)
+            {
+                SessionDirectory=Path.Combine(Path.GetTempPath(),"Victus-FanWmi-fixture-"+Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(SessionDirectory);_clock.Restart();_released=false;
+            }
         }
 
         _child.Dispose();
         _child = null;
+        _completedRelease=evidence;
 
         return evidence;
     }

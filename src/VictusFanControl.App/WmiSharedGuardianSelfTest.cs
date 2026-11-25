@@ -12,6 +12,7 @@ internal static partial class WmiSharedGuardianSelfTest
         try
         {
             await RetainedLeaseInventoryAsync();
+            await SharedCompletionAfterExitAsync();
             var client=new WmiFanGuiGuardianClient(fixture:true);
             await client.StartAsync(default);
             try

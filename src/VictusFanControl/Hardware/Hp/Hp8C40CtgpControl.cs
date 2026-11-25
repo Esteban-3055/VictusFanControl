@@ -15,6 +15,11 @@ internal sealed class CtgpObservationDeferredException(WmiNativeSlotBusyExceptio
 internal sealed class CtgpObservationUnavailableException(CtgpObservationDeferredException inner)
     : TimeoutException("cTGP: venció la confirmación mientras esperaba acceso WMI.", inner);
 internal sealed class CtgpActivationDeferredException(string reason) : IOException(reason);
+internal sealed class CtgpObservationReadException(Exception inner)
+    : IOException("cTGP: falló la consulta de política HP ("+inner.GetType().Name+", 0x"+unchecked((uint)inner.HResult).ToString("X8")+"). "+inner.Message,inner);
+internal sealed class CtgpExternalPolicyChangedException()
+    : InvalidOperationException("Otra política cambió cTGP; se libera sin reactivarlo.");
+internal sealed record CtgpFailureDiagnostic(string ExceptionType,int HResult,string Operation,string Detail,string? InnerType);
 internal static class CtgpPublication
 {
     internal static T? TryRead<T>(string path) where T : class
@@ -33,8 +38,9 @@ internal sealed record CtgpStatus(string State, bool Active, bool Managed, strin
 {
     public string? WaitingReason { get; init; }
     public string? FailureKind { get; init; }
+    public CtgpFailureDiagnostic? Diagnostic {get;init;}
     internal bool AllowsAutomaticRetry => State == "RecoveryRequired" && !Active && Managed && Failure is not null &&
-        FailureKind == "ObservationAdmissionTimeout";
+        FailureKind is "ObservationAdmissionTimeout" or "ObservationReadFailure";
     internal bool RequiresManualRecovery => Failure is not null && !AllowsAutomaticRetry;
     internal static readonly TimeSpan ConfirmationLifetime = TimeSpan.FromSeconds(5);
     internal bool FreshAt(DateTimeOffset now) => now >= Utc && now - Utc <= ConfirmationLifetime;
@@ -94,10 +100,11 @@ internal sealed class Hp8C40CtgpControl
             Status = Status with { WaitingReason = ex.Message };
             throw new CtgpObservationDeferredException(ex);
         }
+        catch(Exception error){throw new CtgpObservationReadException(error);}
         if (!policy.SequenceEqual(new byte[] { 1, 1, 1, 0 }))
         {
             _externallyLost = true;
-            throw new InvalidOperationException("Otra política cambió cTGP; se libera sin reactivarlo.");
+            throw new CtgpExternalPolicyChangedException();
         }
         SetStatus("Active", true);
     }
@@ -113,8 +120,15 @@ internal sealed class Hp8C40CtgpControl
         SetStatus("Restored", false);
     }
 
-    internal void Fail(Exception error) => Status = new("RecoveryRequired", false, _owned, error.Message, DateTimeOffset.UtcNow)
-    { FailureKind = error is CtgpObservationUnavailableException ? "ObservationAdmissionTimeout" : null };
+    internal void Fail(Exception error,string operation="Unknown")
+    {
+        var original=error is CtgpObservationReadException&&error.InnerException is{} inner?inner:error;
+        var message=string.IsNullOrWhiteSpace(error.Message)?original.GetType().Name+" (0x"+unchecked((uint)original.HResult).ToString("X8")+")":error.Message;
+        var detail=error.ToString();if(detail.Length>12000)detail=detail[..12000];
+        Status=new("RecoveryRequired",false,_owned,message,DateTimeOffset.UtcNow)
+        {FailureKind=error switch{CtgpObservationUnavailableException=>"ObservationAdmissionTimeout",CtgpObservationReadException=>"ObservationReadFailure",CtgpExternalPolicyChangedException=>"ExternalPolicyChanged",_=>null},
+            Diagnostic=new(original.GetType().FullName??original.GetType().Name,original.HResult,operation,detail,original.InnerException?.GetType().FullName)};
+    }
     internal void DeferActivation(WmiNativeSlotBusyException error)
     {
         if(_owned)throw new InvalidOperationException("Una política adquirida no puede pasar a espera de activación.");

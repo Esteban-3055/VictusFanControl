@@ -99,7 +99,8 @@ public sealed record ProductProfiles
     public bool CtgpEnabled { get; init; }
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]
     public ProductFunctionPolicies? Functions {get;init;}
-    public ProductFunctionPolicies FunctionPolicies()=>Functions??ProductFunctionPolicies.Legacy(new(CpuEnabled,GpuEnabled,CtgpEnabled,false));
+    public ProductFunctionPolicies FunctionPolicies()=>Functions??ProductFunctionPolicies.Legacy(new(CpuEnabled,GpuEnabled,CtgpEnabled,false)) with
+        {ContinueLinkedFunctionsDuringFanRecovery=true,StopAutomaticOnPerformanceFailure=false,StopAutomaticOnCtgpFailure=false};
     public bool StartMinimized { get; init; }
     public bool ActivateAutomaticOnStart { get; init; }
     public bool RecoverSessionsAutomatically { get; init; } = true;

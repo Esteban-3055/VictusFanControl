@@ -56,7 +56,8 @@ internal sealed class TelemetryExportService(Func<ProductRuntimeState> state, IP
             NonNegative(sample.CpuPackagePowerW) && NonNegative(sample.GpuPowerW) &&
             sample.CpuCoreTemperatures.All(c=>ExportTelemetry.Range(c.TemperatureC,-20,130).HasValue);
         var ready=s.Runtime=="Healthy" && !s.LifecycleBlocked && !s.AutomaticPreparing &&
-            s.AutomaticSourceTransition is null && !s.PerformanceUpdating && s.PerformanceRecovery?.Pending!=true;
+            s.AutomaticSourceTransition is null && (!s.FunctionPolicies.StopAutomaticOnPerformanceFailure||
+                !s.PerformanceUpdating&&s.PerformanceRecovery?.Pending!=true);
         var accepted=ready && control && s.FanAuthority=="Custom" && s.FanLevel is >=0 &&
             s.CommandedCpuLevel is >=0 && s.CommandedGpuLevel is >=0&&!s.MaintenanceActive;
         double? demand=null; DateTimeOffset? decisionAt=null;
@@ -81,9 +82,11 @@ internal sealed class TelemetryExportService(Func<ProductRuntimeState> state, IP
         if(s.FunctionCoordinationExplicit)
         {
             var binding=s.FunctionPolicies.ExternalCooling.Binding;
+            var selected=s.FunctionPolicies.ContinueLinkedFunctionsDuringFanRecovery&&s.RequestedFanMode is{} requested?requested:
+                s.LifecycleBlocked?ProductFunctionFanMode.Firmware:s.FanMode=="Automatic"?ProductFunctionFanMode.Automatic:s.FanMode=="Manual"?ProductFunctionFanMode.Manual:ProductFunctionFanMode.Firmware;
             var enabled=s.FunctionRequests.ExternalCooling&&!s.PerformanceLifecycleBlocked&&
-                (binding!=ProductFunctionBinding.FollowAutomatic||s.FanMode=="Automatic"&&!s.LifecycleBlocked)&&
-                (binding!=ProductFunctionBinding.FollowInternalFans||s.FanMode is "Automatic" or "Manual"&&!s.LifecycleBlocked);
+                (binding!=ProductFunctionBinding.FollowAutomatic||selected==ProductFunctionFanMode.Automatic)&&
+                (binding!=ProductFunctionBinding.FollowInternalFans||selected!=ProductFunctionFanMode.Firmware);
             if(!enabled||s.FunctionPolicies.ExternalOutputMode!=ProductExternalOutputMode.FollowInternalFans)accepted=false;
             if(enabled&&s.FunctionPolicies.ExternalOutputMode==ProductExternalOutputMode.Fixed)
                 independent=new("Fixed",s.FunctionPolicies.ExternalFixedOutput,null,null);

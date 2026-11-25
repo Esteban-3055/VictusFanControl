@@ -36,7 +36,7 @@ static class AcceptanceRunner
                 }
                 Console.WriteLine($"PASS {name}: {count} corrected outcomes.");
             }
-            Console.WriteLine($"PASS {cases} lifecycle outcomes plus 1812 profile mutations; fixture IPC only, no desktop or physical IO.");
+            Console.WriteLine($"PASS {cases} lifecycle outcomes plus 1816 profile mutations; fixture IPC only, no desktop or physical IO.");
             return 0;
         }
         catch(Exception e){Console.Error.WriteLine(e);return 1;}
@@ -48,7 +48,8 @@ static class AcceptanceRunner
         else if(name.StartsWith("E02")||name.StartsWith("H02"))ok=B(d,"Active")&&Same(d,"Expected","Actual");
         else if(name.StartsWith("E03"))ok=B(d,"FixtureLaunchRefused")&&B(d,"FaultBefore")&&B(d,"FaultAfter")&&N(d,"LaunchAttempts")==1&&!B(d,"Active");
         else if(name.StartsWith("E04"))ok=!B(d,"Fault")&&B(d,"AnyPerformanceChild")&&d.GetProperty("Requested").EnumerateObject().Any(x=>x.Value.GetBoolean());
-        else if(name.StartsWith("E05"))ok=N(d,"Cases")==1812&&N(d,"OriginalFilesAltered")==0&&d.GetProperty("UnexpectedErrors").GetArrayLength()==0;
+        // The additional recovery policy boolean contributes four JSON mutations.
+        else if(name.StartsWith("E05"))ok=N(d,"Cases")==1816&&N(d,"OriginalFilesAltered")==0&&d.GetProperty("UnexpectedErrors").GetArrayLength()==0;
         else if(name.StartsWith("F04"))ok=!B(d,"Active")&&B(d,"SamePreBoundarySnapshot")&&N(d,"PostResumeAcquisitions")==0;
         else if(name.StartsWith("F01"))ok=Null(d,"EarlyError")&&!B(d,"Fault")&&B(d,"ActiveAfterHealthy");
         else if(name.StartsWith("F02")){var b=d.GetProperty("BeforeLaterPowerNotification");ok=!B(b,"Maintenance")&&!B(b,"PerformanceBlocked")&&Null(b,"RequestFailure")&&!B(d,"MaintenanceAfterLaterResume")&&B(d,"CpuActiveAfterReconcile");}

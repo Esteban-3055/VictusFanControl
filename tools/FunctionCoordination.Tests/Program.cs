@@ -87,3 +87,14 @@ try { ProductFunctionCoordination.Plan(legacy with { Ctgp = new((ProductFunction
 catch (ArgumentOutOfRangeException) { rejected = true; }
 Require(rejected, "Unknown persisted coordination policy was accepted.");
 Console.WriteLine($"PASS function coordination policy: legacy stop semantics, Manual following, independent activation, AC-only cTGP, per-function failures, explicit startup, user disable through recovery and {cases} eligibility combinations. Pure linked source; no hardware/runtime/registry references. Runtime integration pending.");
+var following=legacy with{ContinueLinkedFunctionsDuringFanRecovery=true};
+var faultedFans=ac with{FanMode=ProductFunctionFanMode.Firmware,RequestedFanMode=ProductFunctionFanMode.Automatic};
+Require(Ready(ProductFunctionCoordination.Plan(following,all,faultedFans),ProductFunction.Ctgp)&&
+    Ready(ProductFunctionCoordination.Plan(following,all,faultedFans),ProductFunction.ExternalCooling),"A fan fault cancelled healthy logical followers.");
+Require(!Ready(ProductFunctionCoordination.Plan(following,all,faultedFans with{RequestedFanMode=ProductFunctionFanMode.Firmware}),ProductFunction.Ctgp),
+    "User Firmware did not withdraw a follower.");
+Require(!Ready(ProductFunctionCoordination.Plan(following,all,faultedFans with{Suspended=true}),ProductFunction.Ctgp)&&
+    !Ready(ProductFunctionCoordination.Plan(following,all,faultedFans with{SharedWmiReady=false}),ProductFunction.Ctgp),"Logical selection bypassed system/shared-resource prerequisites.");
+Require(!Ready(ProductFunctionCoordination.Plan(following with{ContinueLinkedFunctionsDuringFanRecovery=false},all,faultedFans),ProductFunction.Ctgp),
+    "Explicit legacy failure coupling changed.");
+Console.WriteLine("PASS requested mode survives a fan-only fault; user stop, system suspend, shared-resource fences and explicit legacy behavior retain priority.");

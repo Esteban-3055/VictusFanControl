@@ -88,14 +88,20 @@ internal sealed partial class ProductCanvas
     };
     internal static string FunctionWaitText(ProductRuntimeState s,ProductFunction f,string observed)
     {
+        if(s.FunctionRequests.Get(f)&&s.FunctionRetries is{} retries&&retries.Count>(int)f&&retries[(int)f] is{Pending:true} retry)
+            return s.PerformanceLifecycleBlocked?"En espera del sistema":retry.NeedsConfirmation?"Esperando confirmación de esta función":retry.Running?"Recuperando esta función…":retry.Attempts>=3?"Reintentos agotados; revisar esta función":
+                retry.RetryAtTick<=Environment.TickCount64?"Esperando condiciones de esta función":
+                "Reintento en "+Math.Max(0,((retry.RetryAtTick??Environment.TickCount64)-Environment.TickCount64+999)/1000)+" s";
         // A failed or active observation must never be hidden by a waiting label.
         if(!s.FunctionRequests.Get(f)||observed is not("Disabled" or "Unknown" or "Waiting" or "AcOnly"))return FunctionStatusText(observed);
         if(s.FunctionFaults.Get(f))return "Requiere revisión";
         if(s.PerformanceLifecycleBlocked)return "En espera del sistema";
         if(f==ProductFunction.Ctgp&&s.Source!="Ac")return s.Source=="Battery"?"En espera del cargador":"Fuente sin confirmar";
         var binding=s.FunctionPolicies.Get(f).Binding;
-        if(binding==ProductFunctionBinding.FollowAutomatic&&(s.FanMode!="Automatic"||s.LifecycleBlocked))return "En espera de Automático";
-        if(binding==ProductFunctionBinding.FollowInternalFans&&(s.FanMode=="Firmware"||s.LifecycleBlocked))return "En espera de ventiladores";
+        var selected=s.FunctionPolicies.ContinueLinkedFunctionsDuringFanRecovery&&s.RequestedFanMode is{} mode?mode:
+            s.LifecycleBlocked?ProductFunctionFanMode.Firmware:s.FanMode=="Automatic"?ProductFunctionFanMode.Automatic:s.FanMode=="Manual"?ProductFunctionFanMode.Manual:ProductFunctionFanMode.Firmware;
+        if(binding==ProductFunctionBinding.FollowAutomatic&&selected!=ProductFunctionFanMode.Automatic)return "En espera de Automático";
+        if(binding==ProductFunctionBinding.FollowInternalFans&&selected==ProductFunctionFanMode.Firmware)return "En espera de ventiladores";
         return "Esperando sensores o controlador";
     }
     private void Functions(Graphics g)

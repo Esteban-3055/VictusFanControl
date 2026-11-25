@@ -6,5 +6,6 @@
   <ItemGroup>
     <!-- Link the actual pure production policy without importing any hardware assembly. -->
     <Compile Include="../../src/VictusFanControl/Product/ProductFunctionCoordination.cs" Link="ProductFunctionCoordination.cs" />
+    <Compile Include="../../src/VictusFanControl/Product/ProductFunctionRetry.cs" Link="ProductFunctionRetry.cs" />
   </ItemGroup>
 </Project>
